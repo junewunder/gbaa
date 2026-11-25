@@ -18,6 +18,11 @@
 //! blank, not a comment) per distinct `// file:line` note in it; the
 //! median over the functions with a note, and under the table the
 //! [`WORST`] by name (an `x_<key>` entry named by its one-line wrapper).
+//! And results against the map's prototypes ([`results`],
+//! native/lift-returns-read): of the functions with a `proto` that print
+//! under its name, how many give back what C does (none for `void`, one
+//! value otherwise), and how many give back several registers or the
+//! four-register form.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -73,6 +78,114 @@ impl FnLines {
 /// How many worst functions the summary keeps.
 pub const WORST: usize = 20;
 
+/// The printed functions' results against the map's prototypes.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Results {
+    /// Functions with a prototype printed under its name.
+    pub found: u64,
+    /// Of those, `void` ones, and those printed giving back nothing.
+    pub void: u64,
+    pub void_agree: u64,
+    /// Those returning one value (a 64-bit one is two registers: left
+    /// out), and those printed giving back one register.
+    pub one: u64,
+    pub one_agree: u64,
+    /// Printed giving back two or three registers, and all four (the
+    /// four-register form).
+    pub several: u64,
+    pub four: u64,
+}
+
+/// How many of r0-r3 a printed signature's return type gives back: `()` or
+/// `!` none, `u32` one, a tuple its length, `[u32; 4]` four; a `Result`'s
+/// `Ok` type.
+fn returned(ty: &str) -> Option<u64> {
+    let t = ty.trim();
+    let t = t
+        .strip_prefix("Result<")
+        .and_then(|t| t.strip_suffix(", Exit>"))
+        .unwrap_or(t);
+    match t {
+        "()" | "!" => Some(0),
+        "u32" => Some(1),
+        "[u32; 4]" => Some(4),
+        _ if t.starts_with('(') && t.ends_with(')') => Some(t.split(',').count() as u64),
+        _ => None,
+    }
+}
+
+/// The results of each function of the map that has a `proto`, as
+/// printed under its name in `files`, scored against the prototype.
+pub fn results<'a>(map: &str, files: impl IntoIterator<Item = &'a str>) -> Result<Results, String> {
+    let t: toml::Table = map.parse().map_err(|e| format!("{e}"))?;
+    // Each prototype's return type, by function name; a name given twice
+    // is left out.
+    let mut protos: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for row in t
+        .get("functions")
+        .and_then(|v| v.as_table())
+        .into_iter()
+        .flat_map(|f| f.values())
+    {
+        let (Some(name), Some(proto)) = (
+            row.get("name").and_then(|v| v.as_str()),
+            row.get("proto").and_then(|v| v.as_str()),
+        ) else {
+            continue;
+        };
+        let Some(head) = proto.split_once('(').map(|(h, _)| h) else {
+            continue;
+        };
+        let ret = head
+            .trim_end()
+            .strip_suffix(name)
+            .map(|r| r.trim().to_string());
+        protos
+            .entry(name.to_string())
+            .and_modify(|v| *v = None)
+            .or_insert(ret);
+    }
+    let mut seen: BTreeMap<&str, u64> = BTreeMap::new();
+    for t in files {
+        for l in t.lines() {
+            let Some(n) = fn_start(l) else { continue };
+            if !protos.contains_key(n) || seen.contains_key(n) {
+                continue;
+            }
+            let Some(ty) = l
+                .split_once(") -> ")
+                .map(|(_, r)| r.trim_end().trim_end_matches('{'))
+                .map(|r| r.split(" { ").next().unwrap_or(r))
+            else {
+                continue;
+            };
+            if let Some(k) = returned(ty) {
+                seen.insert(n, k);
+            }
+        }
+    }
+    let mut r = Results::default();
+    for (n, k) in seen {
+        let Some(Some(ret)) = protos.get(n) else {
+            continue;
+        };
+        r.found += 1;
+        match k {
+            2 | 3 => r.several += 1,
+            4 => r.four += 1,
+            _ => {}
+        }
+        if ret == "void" {
+            r.void += 1;
+            r.void_agree += u64::from(k == 0);
+        } else if !ret.contains("64") {
+            r.one += 1;
+            r.one_agree += u64::from(k == 1);
+        }
+    }
+    Ok(r)
+}
+
 /// One game's score, as `summary.toml` keeps it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Score {
@@ -93,6 +206,10 @@ pub struct Score {
     pub median: f64,
     /// The [`WORST`] highest, worst first.
     pub worst: Vec<FnLines>,
+    /// Results against the prototypes (missing from a summary written
+    /// before they were scored).
+    #[serde(default)]
+    pub results: Results,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -297,7 +414,7 @@ fn pct(n: u64, of: u64) -> String {
 /// brackets. Then each game's note and its worst functions.
 pub fn table(now: &Summary, against: Option<&Summary>) -> String {
     type Row = (&'static str, fn(&Score, Option<&Score>) -> String);
-    let rows: [Row; 11] = [
+    let rows: [Row; 13] = [
         ("functions named / map's functions", |s, w| {
             format!(
                 "{} / {}{}",
@@ -375,6 +492,27 @@ pub fn table(now: &Summary, against: Option<&Summary>) -> String {
                 with(a, w.map(|w| get(w, "fn_words_proven"))),
                 a + b,
                 pct(a, a + b)
+            )
+        }),
+        ("results void, one / prototypes", |s, w| {
+            let r = &s.results;
+            let w = w.map(|w| &w.results);
+            format!(
+                "{} of {}, {} of {} / {}{}",
+                with(r.void_agree, w.map(|w| w.void_agree)),
+                r.void,
+                with(r.one_agree, w.map(|w| w.one_agree)),
+                r.one,
+                r.found,
+                pct(r.void_agree + r.one_agree, r.void + r.one)
+            )
+        }),
+        ("results: several registers, four", |s, w| {
+            let w = w.map(|w| &w.results);
+            format!(
+                "{}, {}",
+                with(s.results.several, w.map(|w| w.several)),
+                with(s.results.four, w.map(|w| w.four))
             )
         }),
         ("lines per source line (median)", |s, w| {

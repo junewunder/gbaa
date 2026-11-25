@@ -111,7 +111,12 @@
 //!   pointer reaches it ([`jump_literals`]; unit
 //!   `native/ram-copy-jump-only`), and a jumper that hands on a register
 //!   it reads as it came takes it from its callers in turn
-//!   ([`Passing::foreign`], unit `native/ram-jump-passes-regs`). A context save
+//!   ([`Passing::foreign`], unit `native/ram-jump-passes-regs`). So does
+//!   a call into another context's function, direct (a constant call into
+//!   a RAM copy) or at a `[[takes]]` site (Minish Cap's IWRAM entity loop
+//!   calling its ROM NPC updater): the contexts' summaries run to a
+//!   fixpoint with each other's takers (unit
+//!   `native/lift-takes-across-copies`). A context save
 //!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - A function's blocks are printed from the structuring plan
 //!   ([`crate::plan`], as the mod view's structured codegen has it; unit
@@ -245,6 +250,7 @@ pub mod switch;
 pub mod text_statics;
 pub mod unread;
 pub mod value_names;
+pub mod writes;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
@@ -1415,10 +1421,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     });
     // And what each jump into another context's function passes it: the
     // jumper takes what the target takes (`Passing::foreign`), and its
-    // callers in turn. A context whose jumps' targets take more than its
-    // summaries saw is summarized again, until none does (each pass only
-    // adds takers: a few at most).
-    passing.foreign = foreign_takes(&codes);
+    // callers in turn; and a named indirect call into another context's
+    // likewise (unit `native/lift-takes-across-copies`). A context whose
+    // jumps' or named calls' targets take more than its summaries saw is
+    // summarized again, until none does (each pass only adds takers: a
+    // few at most).
+    passing.foreign = foreign_takes(&codes, &passing.sites);
     let jumps_take = codes.iter().any(|c| {
         c.sums.by_entry.values().any(|s| {
             s.foreign
@@ -1432,7 +1440,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     for _ in 0..8 {
-        let now = foreign_takes(&codes);
+        let now = foreign_takes(&codes, &passing.sites);
         let changed: BTreeSet<u32> = now
             .iter()
             .filter(|&(k, t)| passing.foreign.get(k) != Some(t))
@@ -1447,42 +1455,76 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 .sums
                 .by_entry
                 .values()
-                .any(|s| s.foreign.keys().any(|k| changed.contains(k)));
+                .any(|s| reaches_changed(s, &passing.sites, &changed));
             if jumps {
                 c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
             }
         }
     }
-    let shapes = shapes_of(&codes, &all, holes);
+    // The functions a pointer can reach, `FNS`'s (unit
+    // `native/lift-one-entry`): with a settled flow, those whose key the
+    // code makes as a constant or reads from ROM (its closed world: no
+    // other value is a function's address), and every ROM word that holds
+    // one, the program's entry, the IWRAM copies' functions, the holes
+    // file's `[[takes]]` and any key a stand-in's text names. Without one
+    // (skipped, unsettled, or `--copies`), every function.
+    let reach: BTreeSet<u32> = match &taken {
+        Some(taken) if holes.copies <= 1 => {
+            let mut r = taken.clone();
+            r.insert(key(0x0800_0000, false));
+            r.extend(
+                rom.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&w| u32::from_le_bytes(w))
+                    .filter(|w| all.contains(w)),
+            );
+            r.extend(all.iter().filter(|&&k| k >> 24 != 0x08));
+            r.extend(holes.takes.keys());
+            for (code, _) in holes.standins.values() {
+                r.extend(all.iter().filter(|k| code.contains(&format!("{k:#010x}"))));
+            }
+            r
+        }
+        _ => all.clone(),
+    };
+    // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
+    let jumps = longjmp::find(&codes);
+    let shapes = shapes_of(&codes, &all, holes, &reach, &jumps);
     // The summaries' shapes alone, to score them against the prototypes
     // (native/lift-signature-holes; `--no-prototype-shapes` prints them).
     let sum_shapes = (!holes.protos.is_empty()).then(|| {
         let mut h = holes.clone();
         h.protos.clear();
         h.plant_proto = None;
-        shapes_of(&codes, &all, &h)
+        shapes_of(&codes, &all, &h, &reach, &jumps)
     });
     // A checked function's shape as if it weren't replaced: what its
     // callers would read, which the check compares (`--fn-check`).
     let check_shapes = (!holes.fn_check.is_empty()).then(|| {
         let mut h = holes.clone();
         h.standins.retain(|k, _| !holes.fn_check.contains_key(k));
-        shapes_of(&codes, &all, &h).shaped
+        shapes_of(&codes, &all, &h, &reach, &jumps).shaped
     });
     let args = call_fn_args(&sets, &codes, &shapes.shaped);
     // The functions that take r4-r11 from their callers, over all
     // contexts; a stand-in that calls one by its plain entry would run
     // into its stop.
-    let takers: BTreeSet<u32> = codes
+    let passed_by: BTreeMap<u32, u8> = codes
         .iter()
         .flat_map(|c| c.sums.by_entry.iter())
         .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
-        .map(|(&k, _)| k)
+        .map(|(&k, s)| (k, s.passed()))
         .collect();
+    let takers: BTreeSet<u32> = passed_by.keys().copied().collect();
     let lr_ret = lr_entries(&codes, &all, holes);
-    // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
-    let jumps = longjmp::find(&codes);
     let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
+    // What RAM each function may store to (native/lift-for-ram-bounds).
+    let ram_writes = writes::ram_writes(
+        codes.iter().map(|c| (&c.ctx, &c.funcs[..], &c.frames)),
+        holes,
+        psr_fns.wrappers.iter().copied(),
+    );
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -1517,6 +1559,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     all: &all,
                     sums: &c.sums,
                     takers: &takers,
+                    passed_by: &passed_by,
                     jumps: &jumps,
                     shapes: &shapes.shaped,
                     me: shapes
@@ -1572,6 +1615,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     inl: Vec::new(),
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
+                    ram_writes: &ram_writes,
                     load_values: BTreeMap::new(),
                     arg_sums: BTreeMap::new(),
                     printed: BTreeSet::new(),
@@ -1734,33 +1778,6 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         };
     }
     fns.sort_unstable();
-    // The functions a pointer can reach, `FNS`'s (unit
-    // `native/lift-one-entry`): with a settled flow, those whose key the
-    // code makes as a constant or reads from ROM (its closed world: no
-    // other value is a function's address), and every ROM word that holds
-    // one, the program's entry, the IWRAM copies' functions, the holes
-    // file's `[[takes]]` and any key a stand-in's text names. Without one
-    // (skipped, unsettled, or `--copies`), every function.
-    let reach: BTreeSet<u32> = match &taken {
-        Some(taken) if holes.copies <= 1 => {
-            let mut r = taken.clone();
-            r.insert(entry);
-            r.extend(
-                rom.as_chunks::<4>()
-                    .0
-                    .iter()
-                    .map(|&w| u32::from_le_bytes(w))
-                    .filter(|w| all.contains(w)),
-            );
-            r.extend(all.iter().filter(|&&k| k >> 24 != 0x08));
-            r.extend(holes.takes.keys());
-            for (code, _) in holes.standins.values() {
-                r.extend(all.iter().filter(|k| code.contains(&format!("{k:#010x}"))));
-            }
-            r
-        }
-        _ => all.clone(),
-    };
     let entries_extra = one_entry(&mut out, &soft.entries, &reach, &holes.fn_names);
     // Functions that can't exit return no `Result` (unit
     // `native/lift-no-exit-result`); a stand-in's and a checked
@@ -2576,6 +2593,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let text = || files.files.iter().map(|(_, t)| t.as_str());
     m.push("unread_lets", text().map(unread::unread_lets).sum());
     m.push("adc_sums", text().map(unread::adc_sums).sum());
+    // Results (native/lift-returns-read): shaped functions giving back
+    // more than one register, and the calls assigning such a tuple
+    // (both barred; C gives back one value or none), the calls in the
+    // function modules ([`modules::is_module`]), not the prelude's.
+    m.push(
+        "results_several",
+        n(shapes
+            .shaped
+            .values()
+            .filter(|sh| sh.results.count_ones() > 1)
+            .count()),
+    );
+    m.push(
+        "tuple_calls",
+        files
+            .files
+            .iter()
+            .filter(|(p, _)| modules::is_module(p))
+            .map(|(_, t)| unread::tuple_calls(t))
+            .sum(),
+    );
     m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
@@ -3835,12 +3873,22 @@ fn exact_sp(
 
 /// What each function of every context takes of r4-r11 from its callers
 /// ([`Summary::takes`]) where another context jumps into it
-/// ([`Summary::foreign`]): [`Passing::foreign`].
-fn foreign_takes(codes: &[Code]) -> BTreeMap<u32, u8> {
+/// ([`Summary::foreign`]), calls it directly ([`Summary::callees`]: a
+/// constant call into a RAM copy) or reaches it by a named indirect call
+/// (`sites`, [`Passing::sites`]; unit `native/lift-takes-across-copies`):
+/// [`Passing::foreign`].
+fn foreign_takes(codes: &[Code], sites: &BTreeMap<u32, BTreeSet<u32>>) -> BTreeMap<u32, u8> {
     let mut out = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
         for s in c.sums.by_entry.values() {
-            for &k in s.foreign.keys() {
+            let named = s
+                .indirect_sites
+                .iter()
+                .filter_map(|at| sites.get(at))
+                .flatten()
+                .chain(&s.callees)
+                .filter(|&&k| c.sums.get(k).is_none());
+            for &k in s.foreign.keys().chain(named) {
                 let t = codes
                     .iter()
                     .enumerate()
@@ -3853,6 +3901,25 @@ fn foreign_takes(codes: &[Code]) -> BTreeMap<u32, u8> {
         }
     }
     out
+}
+
+/// Whether `s` jumps into, calls, or calls through a named site
+/// ([`Passing::sites`]), one of `changed`: another context's functions
+/// whose [`Passing::foreign`] changed.
+fn reaches_changed(
+    s: &Summary,
+    sites: &BTreeMap<u32, BTreeSet<u32>>,
+    changed: &BTreeSet<u32>,
+) -> bool {
+    s.foreign
+        .keys()
+        .chain(&s.callees)
+        .any(|k| changed.contains(k))
+        || s.indirect_sites
+            .iter()
+            .filter_map(|at| sites.get(at))
+            .flatten()
+            .any(|k| changed.contains(k))
 }
 
 /// Whether a store may run the IRQ handlers in the native build: one that
@@ -4398,6 +4465,9 @@ struct FnPrinter<'a, 'b> {
     sums: &'a Summaries,
     /// Every context's functions that take r4-r11 from their callers.
     takers: &'a BTreeSet<u32>,
+    /// What each of them takes ([`Summary::passed`]): a call into
+    /// another context's passes it so ([`FnPrinter::passed`]).
+    passed_by: &'a BTreeMap<u32, u8>,
     /// The program's context saves and restores ([`longjmp`]).
     jumps: &'a longjmp::Jumps,
     /// Every shaped function's parameters and results.
@@ -4461,6 +4531,9 @@ struct FnPrinter<'a, 'b> {
     edges: Option<Vec<plan::Edge>>,
     /// The function's stack frame.
     frame: Option<&'a Frame>,
+    /// What RAM each function and block may store to, and the IRQ
+    /// handlers ([`writes`]).
+    ram_writes: &'a writes::RamWrites,
     /// Its slots printed as Rust locals ([`Frame::locals`]).
     locals: Vec<Local>,
     /// The block being printed.
@@ -5641,13 +5714,17 @@ impl FnPrinter<'_, '_> {
             let x = xs[b].iter().find(|x| x.index == i)?;
             match x.plan {
                 Plan::Call { target, ret } if plain(target) && index.contains_key(&ret) => {
-                    Some(live::low(self.shape(target).map_or(0xf, |c| c.results)))
+                    Some(live::low(
+                        self.shape(target)
+                            .map_or(0xf, |c| c.results | self.clobbers(target)),
+                    ))
                 }
                 Plan::Dynamic { ret: None, .. } if !self.reads_target(x) => Some(0),
                 _ => None,
             }
         };
-        // What an exit sets as printed: such a call's results, and a BIOS
+        // What an exit sets as printed: such a call's results (and what
+        // its callee clobbers unread: [`FnPrinter::clobbers`]), and a BIOS
         // call's ([`swi_writes`]).
         let kills = |b: usize, i: usize| {
             let Some(x) = xs[b].iter().find(|x| x.index == i) else {
@@ -6236,8 +6313,10 @@ impl FnPrinter<'_, '_> {
     /// the latch is reached from without passing the start), by the latch
     /// before its jump back, and by no call there (r0-r3 by any, r4-r11 by
     /// one that gives them back); the bound's register written nowhere in
-    /// a round. The binding shadows the counter, so: the latch reads it
-    /// nowhere after its step, and its exits after the step go where it
+    /// a round, or the bound loaded from RAM each round, which no store
+    /// that may run in a round reaches ([`FnPrinter::loaded_bound`];
+    /// unit `native/lift-for-ram-bounds`). The binding shadows the
+    /// counter, so: the latch reads it nowhere after its step, and its exits after the step go where it
     /// isn't live; no edge out of what is printed inside goes where it is.
     /// What is printed inside but runs once the loop is done may write it:
     /// the binding is `mut`. A pointer call in a round (whose writes
@@ -6516,6 +6595,16 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
             };
+            let range = match &proven.load {
+                None => proven.range,
+                Some((li, a)) => match self.loaded_bound(latch, *li, a, &round) {
+                    Ok(t) => proven.range.replace(bounds::BOUND, &t),
+                    Err(w) => {
+                        why += &format!("r{r}: {w}; ");
+                        continue;
+                    }
+                },
+            };
             let top = match by {
                 Some(bounds::Test::Top(..)) => out_to,
                 _ => None,
@@ -6526,7 +6615,7 @@ impl FnPrinter<'_, '_> {
                 first: proven.start.unwrap_or(0),
                 last: 0,
                 step: proven.by,
-                text: Some(proven.range),
+                text: Some(range),
                 start: proven.start,
                 ptrs: Vec::new(),
             };
@@ -6538,6 +6627,94 @@ impl FnPrinter<'_, '_> {
         } else {
             format!("{top_why}{why}")
         })
+    }
+
+    /// A `for`'s bound loaded each round by the latch's inst `li` from
+    /// `a` (over the registers at the loop's start; [`bounds::Proven`]),
+    /// printed for the range's end where nothing that may run in a round
+    /// (`round`'s blocks, the functions they call, the IRQ handlers;
+    /// [`writes`]) stores to its bytes: a global's in RAM, kept off them;
+    /// one through a pointer, with nothing in RAM stored to, but for the
+    /// callees' own frames, the BIOS's words at IWRAM's top and, if none
+    /// of its slots escape, this function's frame.
+    fn loaded_bound(
+        &self,
+        latch: &[Inst],
+        li: usize,
+        a: &bounds::Sym,
+        round: &[u32],
+    ) -> Result<String, &'static str> {
+        let Op::Load { width, .. } = latch[li].op else {
+            return Err("bound not a load");
+        };
+        let n = bytes(width);
+        let mut w = self.ram_writes.irq.clone();
+        for k in round {
+            match self.ram_writes.by_block.get(&(self.f.entry, *k)) {
+                Some(b) => w.join(b),
+                None => w = writes::Writes::any(),
+            }
+            for x in exits(self.ctx, &self.f.blocks[k]) {
+                match x.plan {
+                    Plan::Call { target, .. } => w.join(&self.ram_writes.call(target)),
+                    Plan::Static(t) | Plan::Rekey(t) if !self.f.blocks.contains_key(&t) => {
+                        w.join(&self.ram_writes.call(t))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let (f, m) = match width {
+            Width::Byte => ("ld8", ""),
+            Width::Half => ("ld16", " & !1"),
+            Width::Word => ("ld32", " & !3"),
+        };
+        if let Some(addr) = a.as_const() {
+            let lo = addr & !(n - 1);
+            if !matches!(lo >> 24, 0x02 | 0x03) {
+                return Err("bound loaded from outside RAM");
+            }
+            if w.hits(lo, lo + n) {
+                return Err("bound's bytes may be stored to in a round");
+            }
+            return Ok(
+                match globals::ram_at(lo).and_then(|o| self.globals.place(o, n)) {
+                    Some(p) if p.bit.is_none() => globals::load(&p, n),
+                    _ => format!("{f}(g, {lo:#x})"),
+                },
+            );
+        }
+        // The BIOS's words at IWRAM's top (the IRQ flags a handler
+        // acknowledges, its vector) hold no object a pointer reaches.
+        let bios = |&(lo, hi): &(u32, u32)| lo >= 0x0300_7ff0 && hi <= 0x0300_8000;
+        if w.any || !w.ranges.iter().all(bios) {
+            return Err("RAM may be stored to in a round, the bound through a pointer");
+        }
+        if w.stack && self.frame.is_none_or(|fr| fr.escaping() > 0) {
+            return Err("the frame stored to in a round, the bound through a pointer");
+        }
+        // Not I/O, whose registers change by themselves.
+        let at = latch[..li]
+            .iter()
+            .rev()
+            .find_map(|i| match i.op {
+                Op::Insn(a) => Some(a),
+                _ => None,
+            })
+            .unwrap_or(0);
+        if self.ctx.disc.rec.accesses.get(&at).is_some_and(|x| {
+            x.hull.is_some_and(|(lo, hi)| {
+                !(matches!(lo >> 24, 0x02 | 0x03) && matches!(hi >> 24, 0x02 | 0x03))
+            })
+        }) {
+            return Err("bound may be loaded from outside RAM");
+        }
+        let q = a.base.ok_or("bound's address unknown")?;
+        let base = match a.add {
+            0 => format!("r{q}"),
+            k => format!("r{q}.wrapping_add({k:#x})"),
+        };
+        Ok(format!("{f}(g, {base}{m})"))
     }
 
     /// Where loop start `h` (latch `l`, the round `round`, its plan's
@@ -7701,10 +7878,22 @@ impl FnPrinter<'_, '_> {
                     let mem = match self.holes.open_bus.contains_key(&at) {
                         true => {
                             self.soft.open_bus_printed.insert(at);
-                            format!(
-                                "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
-                                self.val(addr)
-                            )
+                            // A typed field's access prints from its base
+                            // pointer, so the address value may have no
+                            // `let`: the field's address by name instead.
+                            let named = mem
+                                .strip_prefix("g.get(")
+                                .and_then(|e| e.strip_suffix(')'))
+                                .filter(|_| matches!(refs[i], Some(r) if r.named));
+                            match named {
+                                Some(p) => format!(
+                                    "{{ let a: u32 = {p}.addr(); if a >> 28 != 0 {{ 0 }} else {{ g.get({p}) }} }}"
+                                ),
+                                None => format!(
+                                    "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
+                                    self.val(addr)
+                                ),
+                            }
                         }
                         false => mem,
                     };
@@ -9000,14 +9189,17 @@ impl FnPrinter<'_, '_> {
     }
 
     /// What `k` takes of r4-r11 from its callers (bit `n - 4` for rN,
-    /// [`Summary::passed`]): 0 for a stand-in, or a function of another
-    /// context (its summary isn't this one's, so this caller's reads of
-    /// what it passes went unseen; the plain entry stops the program).
+    /// [`Summary::passed`]), another context's function's too (the
+    /// summaries ran with it, [`Passing::foreign`]; unit
+    /// `native/lift-takes-across-copies`): 0 for a stand-in.
     fn passed(&self, k: u32) -> u8 {
         if self.holes.standins.contains_key(&k) {
             return 0;
         }
-        self.sums.get(k).map_or(0, Summary::passed)
+        match self.sums.get(k) {
+            Some(s) => s.passed(),
+            None => self.passed_by.get(&k).copied().unwrap_or(0),
+        }
     }
 
     /// Whether a direct call passes `k` r12 ([`Summary::ip`]): false for
@@ -9089,6 +9281,16 @@ impl FnPrinter<'_, '_> {
             return None;
         }
         self.shapes.get(&k).copied()
+    }
+
+    /// The registers of r0-r3 a shaped callee may change but doesn't give
+    /// back (native/lift-returns-read): no caller reads them after it, so
+    /// the caller's copy is dead across the call.
+    fn clobbers(&self, k: u32) -> u8 {
+        match (self.shape(k), self.sums.get(k)) {
+            (Some(c), Some(s)) if s.returns => shape::changed(s) & !c.results,
+            _ => 0,
+        }
     }
 
     /// A plain call of `k` with this function's registers: what it
@@ -10139,13 +10341,29 @@ fn proto_agreement(alone: &BTreeMap<u32, Shape>, holes: &Holes) -> String {
 }
 
 /// Every function's shape ([`shape::shapes`]), over all code contexts.
-fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
+fn shapes_of(
+    codes: &[Code],
+    all: &BTreeSet<u32>,
+    holes: &Holes,
+    reach: &BTreeSet<u32>,
+    jumps: &longjmp::Jumps,
+) -> Shapes {
     let mut nodes = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
         let edges = |f: &Func| {
-            shape::edges(&c.ctx, f, all, |at, thumb, target| {
+            let mut e = shape::edges(&c.ctx, f, all, |at, thumb, target| {
                 dyn_targets(&c.ctx, holes, at, thumb, target).unwrap_or_default()
-            })
+            });
+            // A jump after a context restore in its block goes back into
+            // the save's caller by unwinding (`longjmp`), which takes all
+            // four from it: no function's return.
+            e.by_value.retain(|at| {
+                !f.blocks.values().any(|b| {
+                    b.insns.iter().any(|(a, _)| a == at)
+                        && b.insns.iter().any(|(a, _)| jumps.restores.contains_key(a))
+                })
+            });
+            e
         };
         let proto = |k: u32| {
             let &(params, results) = holes.protos.get(&k)?;
@@ -10160,6 +10378,7 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
             &c.sums,
             edges,
             |k| holes.standins.contains_key(&k),
+            |k| reach.contains(&k),
             proto,
         ));
     }
@@ -11417,6 +11636,65 @@ mod tests {
             !hs.iter().any(|h| h.contains("another code context's")),
             "{hs:?}"
         );
+    }
+
+    /// A ROM whose reset sets r4 (`set`) and calls 0x08000010, which
+    /// jumps into an IWRAM copy at 0x03000000: `push {lr}; ldr r1, =K;
+    /// mov lr, pc; bx r1; pop {pc}`, K = 0x08000030 the ROM's `ldr r0,
+    /// [r4]; bx lr`, which reads r4 as it came. `takes`: whether the
+    /// holes file names the copy's call (at 0x0300000c) as reaching K.
+    /// The holes, and the copy's text.
+    fn copy_calls_rom_taker(set: u32, takes: bool) -> (Vec<String>, String) {
+        let mut words = vec![0xE1A0_0000u32; 0x48];
+        words[0] = set;
+        words[1] = 0xEB00_0001; // bl 0x08000010
+        words[2] = 0xEAFF_FFFE; // b .
+        words[4] = 0xE59F_3008; // ldr r3, [pc, #8]: the word at 0x20
+        words[6] = 0xE12F_FF13; // bx r3
+        words[8] = 0x0300_0000;
+        words[12] = 0xE594_0000; // 0x08000030: ldr r0, [r4]
+        words[13] = 0xE12F_FF1E; // bx lr
+        words[0x40] = 0xE52D_E004; // 0x03000000: push {lr}
+        words[0x41] = 0xE59F_1008; // ldr r1, [pc, #8]: the word at 0x03000014
+        words[0x42] = 0xE1A0_E00F; // mov lr, pc
+        words[0x43] = 0xE12F_FF11; // bx r1
+        words[0x44] = 0xE49D_F004; // pop {pc}
+        words[0x45] = 0x0800_0030;
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut file = String::from(
+            "[[copy]]\nsrc = 0x08000100\ndst = 0x03000000\nlen = 0x18\nroots = [0x03000000]\nwhy = \"t\"\n\
+             [[roots]]\nkeys = [0x08000030]\nwhy = \"t\"\n",
+        );
+        if takes {
+            file.push_str("[[takes]]\nentry = 0x08000030\nsites = [0x0300000c]\nwhy = \"t\"\n");
+        }
+        let l = lift(&rom, "t", &Holes::parse(&file).unwrap());
+        let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+        let copy = text
+            .find("pub fn x_03000000(")
+            .or_else(|| text.find("pub fn f_03000000("))
+            .map(|i| &text[i..])
+            .map(|t| t[..t.find("\n}\n").unwrap()].to_string())
+            .expect("the copy");
+        (l.holes.iter().map(|h| h.to_string()).collect(), copy)
+    }
+
+    /// A `[[takes]]` site in one code context, an IWRAM copy, reaching a
+    /// taker in another, the ROM, passes its registers: the copy takes
+    /// them in turn from its jumper, which takes them from the reset,
+    /// which sets them (native/lift-takes-across-copies).
+    #[test]
+    fn a_takes_site_passes_into_another_context() {
+        const SET_R4: u32 = 0xE3A0_4402; // mov r4, #0x02000000
+        let (hs, copy) = copy_calls_rom_taker(SET_R4, true);
+        assert_eq!(hs, Vec::<String>::new());
+        assert!(
+            copy.contains("x_08000030(g, Regs { r: [r0, r1, r2, r3, r4,"),
+            "{copy}"
+        );
+        // Unnamed, the pointer call zeroes r4: a hole.
+        let (hs, _) = copy_calls_rom_taker(SET_R4, false);
+        assert!(!hs.is_empty(), "{hs:?}");
     }
 
     #[test]
