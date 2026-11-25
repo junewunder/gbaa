@@ -5690,8 +5690,9 @@
     },
     {
       "id": "native/imperium-stops-302",
-      "title": "Imperium's lift runs 600 frames: past frame 302",
-      "detail": "Split from {unit:native/imperium-first-stops}, which got Imperium's lift from frame 1 to 302 of 600 (its roots, a summary rule for conditional r12 reads, the takes rule for r12, librfu's spin edge). It stopped at frame 302: no-function 0x080033fd, an m4a MPlay jump-table entry (table at 0x086de574..0x086de600), from f_080008fd under the IRQ dispatcher f_03004694. That branch's mods/imperium/holes.toml gives all 26 keys of the table as [[roots]], unverified: lift again (just lift ROM out/lift-imperium --name imperium under just long start --mem 4G, about 30 min) and fix the stops after, each a rule where general, the holes file where the game's own. Done when: 600 of 600 frames with no stop, or a stop too big for 3 hours filed as its own unit; just check passes.",
+      "title": "Imperium's lift runs 600 frames: past frame 436",
+      "detail": "Split from Imperium's lift runs 600 frames: its first stops ({unit:native/imperium-first-stops}), which got Imperium's lift from frame 1 to 436 of 600 (its roots, m4a's jump table among them; a summary rule for conditional r12 reads, the takes rule for r12, librfu's spin edge). It stops at frame 436 in IntrMain (f_03004694, pc 0x0300476c): pointer 0 outside its global 0x03004ec4, because m4a's decoder cleared IntrMain's literal at 0x030047e8: the mixer's self-patched IWRAM code run as its unpatched nops ({unit:native/lift-patched-iwram-loops}). After that: lift again (just lift ROM out/lift-imperium --name imperium under just long start --mem 4G, about 30 min) and fix the stops after, each a rule where general, the holes file where the game's own. Done when: 600 of 600 frames with no stop, or a stop too big for 3 hours filed as its own unit; just check passes.",
+      "needs": ["native/lift-patched-iwram-loops"],
       "uses": ["heavy"],
       "minMinutes": 90
     },
