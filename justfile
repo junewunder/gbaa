@@ -1025,7 +1025,7 @@ lift-metrics *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
     {{cap}} MemoryMax=4G target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} --metrics-only "$@"
 
-# The lift scored against pret (native/lift-pret-score; crates/pret-score; docs/tools/commands.md): for each game of crates/pret-score/games.toml (Emerald, Metroid), its lift as it is in out/lift-<name> (lift it first) beside what the pret names map it was lifted with offers, one table: functions named, lines against the decomp's C lines, line notes, locals, value names, named fields, texts, loops, fn words proven, the median lines per source line per function and the worst 20. Writes OUT/summary.toml. ARGS: --out DIR (default out/pret-score/<git short hash>[-dirty]), --against DIR2 (changes in brackets), --from DIR (print DIR's summary), --only NAME. About 15 s.
+# The lift scored against pret (native/lift-pret-score; crates/pret-score; docs/tools/commands.md): for each game of crates/pret-score/games.toml (Emerald, Metroid), its lift as it is in out/lift-<name> (lift it first) beside what the pret names map it was lifted with offers, one table: functions named, lines against the decomp's C lines, line notes, locals, value names, named fields, texts, loops, fn words proven, results against the map's prototypes (void / one value), the median lines per source line per function and the worst 20. Writes OUT/summary.toml. ARGS: --out DIR (default out/pret-score/<git short hash>[-dirty]), --against DIR2 (changes in brackets), --from DIR (print DIR's summary), --only NAME. About 15 s.
 [positional-arguments]
 pret-score *args:
     {{lock}} cargo build -q --release -p pret-score

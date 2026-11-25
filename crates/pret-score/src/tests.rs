@@ -135,7 +135,56 @@ fn score(lines: u64, median: f64) -> Score {
             lines: 9,
             source_lines: 1,
         }],
+        results: Results {
+            found: 3,
+            void: 2,
+            void_agree: 1,
+            one: 1,
+            one_agree: 1,
+            several: 1,
+            four: 0,
+        },
     }
+}
+
+#[test]
+fn results_are_scored_against_the_prototypes() {
+    let map = r#"
+[functions]
+0x08000101 = { name = "Draw", proto = "void Draw(u8 x)" }
+0x08000201 = { name = "Get", proto = "u16 *Get(void)" }
+0x08000301 = { name = "Mix", proto = "void Mix(void)" }
+0x08000401 = { name = "Big", proto = "u64 Big(void)" }
+0x08000501 = { name = "Lone" }
+0x08000601 = { name = "Four", proto = "s32 Four(void)" }
+"#;
+    let lift = "\
+pub fn Draw(g: &mut Game, sp: u32, a0: u32) -> Result<(), Exit> { x_08000101(g, Regs::call(sp, [a0, 0, 0, 0])) }
+pub fn x_08000101(g: &mut Game, s: Regs) -> Result<(), Exit> {
+}
+pub fn Get(g: &mut Game, r13: u32) -> u32 {
+}
+pub fn Mix(g: &mut Game, r13: u32) -> (u32, u32) {
+}
+pub fn Big(g: &mut Game, r13: u32) -> (u32, u32) {
+}
+pub fn Lone(g: &mut Game, r13: u32) -> u32 {
+}
+pub fn Four(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> { x_08000601(g, Regs::call(sp, a)) }
+";
+    let r = results(map, [lift]).unwrap();
+    assert_eq!(
+        r,
+        Results {
+            found: 5,
+            void: 2,
+            void_agree: 1,
+            one: 2,
+            one_agree: 1,
+            several: 2,
+            four: 1,
+        }
+    );
 }
 
 #[test]
@@ -160,6 +209,10 @@ fn the_table_against_another_run() {
     assert!(t.contains("2.00 of 2 fns (-0.50)"), "{t}");
     assert!(
         t.contains("built and run                      not run"),
+        "{t}"
+    );
+    assert!(
+        t.contains("results void, one / prototypes     1 (0) of 2, 1 (0) of 1 / 3 (66.7%)"),
         "{t}"
     );
     assert!(t.contains("g: a note"), "{t}");

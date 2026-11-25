@@ -1454,21 +1454,50 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             }
         }
     }
-    let shapes = shapes_of(&codes, &all, holes);
+    // The functions a pointer can reach, `FNS`'s (unit
+    // `native/lift-one-entry`): with a settled flow, those whose key the
+    // code makes as a constant or reads from ROM (its closed world: no
+    // other value is a function's address), and every ROM word that holds
+    // one, the program's entry, the IWRAM copies' functions, the holes
+    // file's `[[takes]]` and any key a stand-in's text names. Without one
+    // (skipped, unsettled, or `--copies`), every function.
+    let reach: BTreeSet<u32> = match &taken {
+        Some(taken) if holes.copies <= 1 => {
+            let mut r = taken.clone();
+            r.insert(key(0x0800_0000, false));
+            r.extend(
+                rom.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&w| u32::from_le_bytes(w))
+                    .filter(|w| all.contains(w)),
+            );
+            r.extend(all.iter().filter(|&&k| k >> 24 != 0x08));
+            r.extend(holes.takes.keys());
+            for (code, _) in holes.standins.values() {
+                r.extend(all.iter().filter(|k| code.contains(&format!("{k:#010x}"))));
+            }
+            r
+        }
+        _ => all.clone(),
+    };
+    // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
+    let jumps = longjmp::find(&codes);
+    let shapes = shapes_of(&codes, &all, holes, &reach, &jumps);
     // The summaries' shapes alone, to score them against the prototypes
     // (native/lift-signature-holes; `--no-prototype-shapes` prints them).
     let sum_shapes = (!holes.protos.is_empty()).then(|| {
         let mut h = holes.clone();
         h.protos.clear();
         h.plant_proto = None;
-        shapes_of(&codes, &all, &h)
+        shapes_of(&codes, &all, &h, &reach, &jumps)
     });
     // A checked function's shape as if it weren't replaced: what its
     // callers would read, which the check compares (`--fn-check`).
     let check_shapes = (!holes.fn_check.is_empty()).then(|| {
         let mut h = holes.clone();
         h.standins.retain(|k, _| !holes.fn_check.contains_key(k));
-        shapes_of(&codes, &all, &h).shaped
+        shapes_of(&codes, &all, &h, &reach, &jumps).shaped
     });
     let args = call_fn_args(&sets, &codes, &shapes.shaped);
     // The functions that take r4-r11 from their callers, over all
@@ -1481,8 +1510,6 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .map(|(&k, _)| k)
         .collect();
     let lr_ret = lr_entries(&codes, &all, holes);
-    // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
-    let jumps = longjmp::find(&codes);
     let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
     // What RAM each function may store to (native/lift-for-ram-bounds).
     let ram_writes = writes::ram_writes(
@@ -1742,33 +1769,6 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         };
     }
     fns.sort_unstable();
-    // The functions a pointer can reach, `FNS`'s (unit
-    // `native/lift-one-entry`): with a settled flow, those whose key the
-    // code makes as a constant or reads from ROM (its closed world: no
-    // other value is a function's address), and every ROM word that holds
-    // one, the program's entry, the IWRAM copies' functions, the holes
-    // file's `[[takes]]` and any key a stand-in's text names. Without one
-    // (skipped, unsettled, or `--copies`), every function.
-    let reach: BTreeSet<u32> = match &taken {
-        Some(taken) if holes.copies <= 1 => {
-            let mut r = taken.clone();
-            r.insert(entry);
-            r.extend(
-                rom.as_chunks::<4>()
-                    .0
-                    .iter()
-                    .map(|&w| u32::from_le_bytes(w))
-                    .filter(|w| all.contains(w)),
-            );
-            r.extend(all.iter().filter(|&&k| k >> 24 != 0x08));
-            r.extend(holes.takes.keys());
-            for (code, _) in holes.standins.values() {
-                r.extend(all.iter().filter(|k| code.contains(&format!("{k:#010x}"))));
-            }
-            r
-        }
-        _ => all.clone(),
-    };
     let entries_extra = one_entry(&mut out, &soft.entries, &reach, &holes.fn_names);
     // Functions that can't exit return no `Result` (unit
     // `native/lift-no-exit-result`); a stand-in's and a checked
@@ -2584,6 +2584,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let text = || files.files.iter().map(|(_, t)| t.as_str());
     m.push("unread_lets", text().map(unread::unread_lets).sum());
     m.push("adc_sums", text().map(unread::adc_sums).sum());
+    // Results (native/lift-returns-read): shaped functions giving back
+    // more than one register, and the calls assigning such a tuple
+    // (both barred; C gives back one value or none), the calls in the
+    // function modules ([`modules::is_module`]), not the prelude's.
+    m.push(
+        "results_several",
+        n(shapes
+            .shaped
+            .values()
+            .filter(|sh| sh.results.count_ones() > 1)
+            .count()),
+    );
+    m.push(
+        "tuple_calls",
+        files
+            .files
+            .iter()
+            .filter(|(p, _)| modules::is_module(p))
+            .map(|(_, t)| unread::tuple_calls(t))
+            .sum(),
+    );
     m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
@@ -5652,13 +5673,17 @@ impl FnPrinter<'_, '_> {
             let x = xs[b].iter().find(|x| x.index == i)?;
             match x.plan {
                 Plan::Call { target, ret } if plain(target) && index.contains_key(&ret) => {
-                    Some(live::low(self.shape(target).map_or(0xf, |c| c.results)))
+                    Some(live::low(
+                        self.shape(target)
+                            .map_or(0xf, |c| c.results | self.clobbers(target)),
+                    ))
                 }
                 Plan::Dynamic { ret: None, .. } if !self.reads_target(x) => Some(0),
                 _ => None,
             }
         };
-        // What an exit sets as printed: such a call's results, and a BIOS
+        // What an exit sets as printed: such a call's results (and what
+        // its callee clobbers unread: [`FnPrinter::clobbers`]), and a BIOS
         // call's ([`swi_writes`]).
         let kills = |b: usize, i: usize| {
             let Some(x) = xs[b].iter().find(|x| x.index == i) else {
@@ -7812,10 +7837,22 @@ impl FnPrinter<'_, '_> {
                     let mem = match self.holes.open_bus.contains_key(&at) {
                         true => {
                             self.soft.open_bus_printed.insert(at);
-                            format!(
-                                "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
-                                self.val(addr)
-                            )
+                            // A typed field's access prints from its base
+                            // pointer, so the address value may have no
+                            // `let`: the field's address by name instead.
+                            let named = mem
+                                .strip_prefix("g.get(")
+                                .and_then(|e| e.strip_suffix(')'))
+                                .filter(|_| matches!(refs[i], Some(r) if r.named));
+                            match named {
+                                Some(p) => format!(
+                                    "{{ let a: u32 = {p}.addr(); if a >> 28 != 0 {{ 0 }} else {{ g.get({p}) }} }}"
+                                ),
+                                None => format!(
+                                    "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
+                                    self.val(addr)
+                                ),
+                            }
                         }
                         false => mem,
                     };
@@ -9202,6 +9239,16 @@ impl FnPrinter<'_, '_> {
         self.shapes.get(&k).copied()
     }
 
+    /// The registers of r0-r3 a shaped callee may change but doesn't give
+    /// back (native/lift-returns-read): no caller reads them after it, so
+    /// the caller's copy is dead across the call.
+    fn clobbers(&self, k: u32) -> u8 {
+        match (self.shape(k), self.sums.get(k)) {
+            (Some(c), Some(s)) if s.returns => shape::changed(s) & !c.results,
+            _ => 0,
+        }
+    }
+
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
@@ -10250,13 +10297,29 @@ fn proto_agreement(alone: &BTreeMap<u32, Shape>, holes: &Holes) -> String {
 }
 
 /// Every function's shape ([`shape::shapes`]), over all code contexts.
-fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
+fn shapes_of(
+    codes: &[Code],
+    all: &BTreeSet<u32>,
+    holes: &Holes,
+    reach: &BTreeSet<u32>,
+    jumps: &longjmp::Jumps,
+) -> Shapes {
     let mut nodes = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
         let edges = |f: &Func| {
-            shape::edges(&c.ctx, f, all, |at, thumb, target| {
+            let mut e = shape::edges(&c.ctx, f, all, |at, thumb, target| {
                 dyn_targets(&c.ctx, holes, at, thumb, target).unwrap_or_default()
-            })
+            });
+            // A jump after a context restore in its block goes back into
+            // the save's caller by unwinding (`longjmp`), which takes all
+            // four from it: no function's return.
+            e.by_value.retain(|at| {
+                !f.blocks.values().any(|b| {
+                    b.insns.iter().any(|(a, _)| a == at)
+                        && b.insns.iter().any(|(a, _)| jumps.restores.contains_key(a))
+                })
+            });
+            e
         };
         let proto = |k: u32| {
             let &(params, results) = holes.protos.get(&k)?;
@@ -10271,6 +10334,7 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
             &c.sums,
             edges,
             |k| holes.standins.contains_key(&k),
+            |k| reach.contains(&k),
             proto,
         ));
     }
