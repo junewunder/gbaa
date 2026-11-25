@@ -5476,15 +5476,22 @@
       "uses": ["heavy"],
       "priority": 92,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e30a7b20",
-        "session": "e30a7b20-03a2-4b53-955e-6059ae96b750",
-        "host": "quack",
-        "pid": 1983326,
-        "start": "101568883",
-        "at": "2026-11-25T00:26:35Z",
+        "at": "2026-11-25T01:38:10Z",
+        "evidence": "Full just lift-check (all 37 programs, before the main merge) passed: 0 differences on each 600-frame route, every planted fault caught incl. c-chain-gcc --plant-lent=0x080003b2 (bounce's ctx->hits++ through its Lent: frame 47, IWRAM 0x03000048, and the picture), both planted holes caught. After merging main: lift-check --only c-chain-gcc --only native-frame-locals passes, lift-metrics within bars, just check exit 0. --shadow-locals lift of c-chain-gcc on the final head: 600 frames, empty stderr. Metroid lift built, native route 2700 frames 0 differences (it prints no Lent now: its borrowers echo r4-r11, noted on {unit:native/lift-lent-games}). c-chain-gcc: frame_'s ctx is l44: [u8; 20]; step_world, move_body, bounce, draw_body take p0: Lent<'_>. Bars: lines_prelude 1390->1454 all rows, c-chain-gcc casts 49->51; lines 632->618 etc lowered. No review subagent (the loop reviews the diff).",
         "branch": "unit/native/lift-lent-print",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T01:38:10Z",
+          "by": "e30a7b20",
+          "host": "quack",
+          "pid": 1983326,
+          "start": "101568883",
+          "beats": true,
+          "session": "e30a7b20-03a2-4b53-955e-6059ae96b750",
+          "lane": "quack/4"
+        }
       },
       "round": "2026-11-25T00:26:35Z"
     },
