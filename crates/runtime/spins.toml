@@ -21,3 +21,10 @@
 [games."f3ae088181bf583e55daf962a92bb46f4f1d07b7"]
 name = "Pokemon - Emerald Version"
 edges = [0x082e_2b6a]
+
+# Emerald Imperium (pokeemerald-expansion, modern GCC): the same
+# AgbRFU_SoftReset loop, its timer's address computed from
+# timerSelect, at boot's second frame (native/imperium-first-stops).
+[games."1d20091c4d936f5eb122db8780554dd0829ffb63"]
+name = "Emerald Imperium"
+edges = [0x0800_4d90]

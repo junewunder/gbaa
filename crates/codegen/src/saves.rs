@@ -31,7 +31,9 @@
 //!
 //! A conditional instruction's writes are kept apart per condition, so a
 //! pop and return under one condition (libgcc's `ldmhi sp!, {r4, r5, lr};
-//! bxhi lr`) returns with what it popped ([`Walk::block`]).
+//! bxhi lr`) returns with what it popped ([`Walk::block`]). A register
+//! read only to keep it where a conditional write didn't happen, by code
+//! under that same condition, isn't read ([`needed`]).
 //!
 //! A summary's run takes an exit whose condition is a certain constant
 //! ([`State::sure`]) always or never, so what a path that can't run would
@@ -491,25 +493,15 @@ impl Walk<'_> {
         // An exit always taken ended the block.
         let mut over = false;
         // The values something uses: a read whose value nothing uses
-        // reads nothing.
-        let used: BTreeSet<ValueId> = match self.sum {
-            Some(_) => insts
-                .iter()
-                .flat_map(|i| i.op.operands().into_iter().chain(i.guard))
-                .collect(),
+        // reads nothing ([`needed`]).
+        let used = match self.sum {
+            Some(_) => needed(insts, true),
             None => BTreeSet::new(),
         };
         // The values some op uses other than as a store's value
         // ([`Sum::read_ip`]).
-        let used_not_stored: BTreeSet<ValueId> = match self.sum {
-            Some(_) => insts
-                .iter()
-                .flat_map(|i| match i.op {
-                    Op::Store { addr, .. } => vec![addr],
-                    op => op.operands().into_iter().collect(),
-                })
-                .chain(insts.iter().filter_map(|i| i.guard))
-                .collect(),
+        let used_not_stored = match self.sum {
+            Some(_) => needed(insts, false),
             None => BTreeSet::new(),
         };
         let mut at = gb.block.start;
@@ -873,6 +865,66 @@ fn under(insts: &[Inst], g: ValueId, e: Exit) -> Option<ValueId> {
         t = a;
     }
     Some(t)
+}
+
+/// The values of `insts` something needs: the operands of its effects,
+/// exits and loads, and of the values they need; with `stored` false, not
+/// a store's value (nor what only it needs). A guarded write of a register
+/// the block forwards as `select g, new, old` (`ir::build`): where every
+/// use of the select is under `g` itself, only `new` is needed, so
+/// libgcc's `rsble r12, r2, #32; …; orrle r1, r1, r0, lsr r12` doesn't
+/// read r12 as it came (native/imperium-first-stops). A select's first
+/// arm is needed under its condition (the `orrle`'s operands, under `le`,
+/// though its forwarded value is used in every case).
+fn needed(insts: &[Inst], stored: bool) -> BTreeSet<ValueId> {
+    // Per value, not needed (`None`), or needed under one guard
+    // (`Some(Some(g))`) or under any (`Some(None)`).
+    let mut need: Vec<Option<Option<ValueId>>> = vec![None; insts.len()];
+    let join = |need: &mut Vec<Option<Option<ValueId>>>, v: ValueId, c: Option<ValueId>| {
+        let old = &mut need[v.index()];
+        *old = match (*old, c) {
+            (None, c) => Some(c),
+            (Some(Some(a)), Some(b)) if same(insts, a, b) => Some(Some(a)),
+            _ => Some(None),
+        };
+    };
+    for (j, inst) in insts.iter().enumerate().rev() {
+        if let Some(g) = inst.guard {
+            join(&mut need, g, None);
+        }
+        let c = if inst.op.is_root() {
+            inst.guard
+        } else {
+            match need[j] {
+                Some(c) => c,
+                None => continue,
+            }
+        };
+        match inst.op {
+            Op::Store { addr, .. } if !stored => join(&mut need, addr, c),
+            // A select's first arm is needed only where its condition
+            // holds, its second only where it doesn't: not at all under
+            // the condition itself.
+            Op::Select { c: s, a, b } | Op::BSelect { c: s, a, b } => {
+                join(&mut need, s, c);
+                let under = c.is_some_and(|g| same(insts, g, s));
+                join(&mut need, a, if under || c.is_none() { Some(s) } else { c });
+                if !under {
+                    join(&mut need, b, c);
+                }
+            }
+            op => {
+                for v in op.operands() {
+                    join(&mut need, v, c);
+                }
+            }
+        }
+    }
+    need.iter()
+        .enumerate()
+        .filter(|(_, n)| n.is_some())
+        .map(|(i, _)| ValueId(i as u32))
+        .collect()
 }
 
 /// Whether bits `a` and `b` are the same condition: one value, or the
