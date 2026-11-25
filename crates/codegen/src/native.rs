@@ -3926,9 +3926,6 @@ fn may_release_irq(ctx: &Ctx, insts: &[Inst], addr: ValueId, width: Width, at: u
         .any(|&(a, b)| lo < b && a < hi)
 }
 
-/// One context's functions, summaries and frames. `named`: the indirect
-/// calls a holes file's `[[takes]]` names, where a stack address in a
-/// register the callees take escapes.
 /// Each context's stack locals lent to callees ([`frame::lend`];
 /// native/lift-lent-print). A function borrows nothing that is a
 /// stand-in, a checked one, a four-register one (its registers come in an
@@ -4004,6 +4001,9 @@ fn code_lends(
         .collect()
 }
 
+/// One context's functions, summaries and frames. `named`: the indirect
+/// calls a holes file's `[[takes]]` names, where a stack address in a
+/// register the callees take escapes.
 fn code<'a>(ctx: Ctx<'a>, funcs: Vec<Func>, named: &BTreeSet<u32>, passing: &Passing) -> Code<'a> {
     let sums = summarize_passing(&ctx, &funcs, Assume::default(), &Sets::new(), passing);
     let frames = frame::of_code(&ctx, &funcs, &sums, named);
