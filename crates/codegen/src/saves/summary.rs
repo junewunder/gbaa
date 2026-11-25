@@ -318,6 +318,10 @@ pub struct Passing {
     /// runs its extended entry with every register the jumper has, so
     /// the jumper takes from its callers those it still has as they came,
     /// as a tail call's caller does (unit `native/ram-jump-passes-regs`).
+    /// A call to one, direct or at a [`Passing::sites`] call, passes it
+    /// the caller's registers all the same (Minish Cap's IWRAM entity
+    /// loop's pointer call to its ROM NPC updater; unit
+    /// `native/lift-takes-across-copies`).
     pub foreign: BTreeMap<u32, u8>,
 }
 
@@ -791,9 +795,15 @@ impl<'a> Sum<'a> {
         };
         for c in takers {
             self.refs.insert(c);
+            // A callee in another code context (a named site's in an
+            // IWRAM copy calling a ROM function, or a ROM function's
+            // constant call into the copy) takes what that context's
+            // summary says ([`Passing::foreign`], unit
+            // `native/lift-takes-across-copies`).
             let takes = match self.sums.get(&c) {
-                Some(x) if !self.passing.replaced.contains(&c) => x.takes,
-                _ => 0,
+                _ if self.passing.replaced.contains(&c) => 0,
+                Some(x) => x.takes,
+                None => self.passing.foreign.get(&c).copied().unwrap_or(0),
             };
             // (A stack address through a named pointer call escapes
             // there: `native::frame` is handed the named sites.)

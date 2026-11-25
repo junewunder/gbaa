@@ -1870,6 +1870,102 @@ rom_static_fn_keys = 3
 rom_refs = 17
 gap_targets = 5
 
+[program.native-copy-takes]
+rom = "agb/native-copy-takes.gba"
+route = "units/native-copy-takes-600.toml"
+# A takes site in one code context reaching a taker in another
+# (native/lift-takes-across-copies): tc_set (ROM) calls tc_c, copied to
+# IWRAM, which calls tc_b (ROM) through a pointer, and tc_b reads r8 and r9
+# as tc_set left them; holes/native-copy-takes.toml's [[takes]] name both
+# calls. Stage A's old call (--takes-zeroed) passes them none.
+planted_flags = ["--takes-zeroed"]
+
+[program.native-copy-takes.bars]
+io_unnamed = 19
+lines = 18179
+lines_prelude = 1390
+ref_new_at_use = 0
+casts = 305
+texts_left = 0
+functions = 113
+functions_iwram = 4
+functions_lifted = 110
+functions_unrecognised = 113
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 53
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1714
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 296
+value_lets = 6408
+reg_local_writes = 3069
+unpacked_unread = 0
+regs_call_entries = 13
+proto_shapes_refused = 0
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 262
+sp_arith_unescaped = 0
+sp_arith_exact = 34
+lr_returned = 0
+loops_not_for = 133
+for_counter_arith = 0
+labelled_blocks = 206
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 228
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 710
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 453
+store_computed_ram = 1
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 352
+pointer_unexplained = 1
+ref_unexplained = 46
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 674
+sp_accesses_callers_frame = 7
+call_fn_calls = 64
+call_fn_four_complete = 56
+jumps_by_value = 8
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 58
+fn_keys_left = 61
+rom_static_fn_keys = 4
+rom_refs = 17
+gap_targets = 5
+
 [program.native-gives]
 rom = "agb/native-gives.gba"
 route = "units/native-gives-600.toml"
