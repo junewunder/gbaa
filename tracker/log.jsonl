@@ -4369,3 +4369,4 @@
 {"at":"2026-11-25T04:11:37Z","actor":"loop","tag":"148dc342","host":"quack","cmd":"done","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: done"}
 {"at":"2026-11-25T04:27:30Z","actor":"loop","tag":"9e3da845","host":"quack","cmd":"done","id":"native/lift-pointer-registers","text":"Register locals hold the Ref type the lift's flow gives: done"}
 {"at":"2026-11-25T04:31:19Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: on main"}
+{"at":"2026-11-25T04:31:24Z","actor":"loop","tag":"dd60d8a9","host":"quack","cmd":"claim","id":"native/warioware-stop-30003a8","text":"WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39): claimed"}
