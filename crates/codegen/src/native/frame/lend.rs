@@ -9,14 +9,20 @@
 //! reaches an effect, no BIOS or pointer call with it, no two values met
 //! at a join that something then uses. A function whose address is a word
 //! of the ROM (a pointer call may reach it) borrows nothing, and nor does
-//! one whose summary has a hole. Every caller must pass, there, an exact
+//! one whose summary has a hole, nor one a tail call or a fall enters (its
+//! registers come by `Regs`, which can't hold a host local; the lift's
+//! `skip` adds others, `native::code_lends`). Every caller must pass, there, an exact
 //! address of its own frame that it lends, or a borrowed parameter of its
 //! own plus a constant: one type a parameter.
 //!
 //! A **lent slot** escapes only so ([`Kind::Call`] alone, every pass of
 //! an address below or in it an exact frame address in r0-r3 of a direct
 //! call, [`Frame::lends`], to a borrowed parameter). The sets are the
-//! greatest such, found by taking out what fails until nothing does.
+//! greatest such, found by taking out what fails until nothing does. A
+//! slot accessed at an offset its width doesn't divide isn't lent (the
+//! hardware's rounding picks its bytes). The lift prints each function's
+//! lent objects ([`Lends::objects`]) as host locals and its borrowed
+//! parameters as `Lent`s (`native/lift-lent-print`).
 //!
 //! Each function's run tracks, through registers only, which values are a
 //! parameter (or the entry sp) plus a constant; a parameter spilled to the
@@ -26,7 +32,14 @@
 //! `GBAA_LEND_DEBUG=1` prints, per function, its pointer parameters and
 //! why each escaped (`guard`: a compare that reaches a branch; `store
 //! value`; `load addr`/`store addr`: arithmetic past a constant offset;
-//! `return`), and each parameter the program's rules take out.
+//! `return`), and each parameter the program's rules take out; the lift,
+//! each borrower `native::code_lends` skips, and why.
+//!
+//! As printed (`native/lift-lent-print`): an object is a local `lN: [u8;
+//! N]`, lent as `Lent::of(&mut lN, offset)`; a borrowed parameter is `pN:
+//! Lent<'_>`, its accesses `pN.ld16(k, F)`, passed on as `pN.at(k)`; where
+//! the body still reads rN as it came (a copy kept across a call), rN is
+//! `pN.addr()`, the guest address under `--shadow-locals`, else 0.
 
 use super::{Edge, FBlock, Frame, Kind};
 use analysis::ir::{BinOp, Op};
@@ -95,6 +108,10 @@ type Through = (u8, i32, u8);
 /// Bytes `lo..hi` from an address.
 type Span = (i32, i32);
 
+/// A borrowed parameter passed on ([`Lends::passes`]): the callee's
+/// register, the caller's own parameter, the constant added.
+pub type Pass = (u8, u8, i32);
+
 /// What one function's run found.
 #[derive(Clone, Debug, Default)]
 struct FnRun {
@@ -116,6 +133,10 @@ struct FnRun {
     spills: Vec<(u8, i32)>,
     /// Why each parameter escaped, for `GBAA_LEND_DEBUG`: (block, what).
     whys: Vec<(u8, &'static str)>,
+    /// The exits of `passes` that are tail calls (or falls into another
+    /// function's entry): the callee's registers come by `Regs`, which
+    /// can't hold a host local, so it borrows nothing there.
+    tails: BTreeSet<At>,
 }
 
 fn esc(out: &mut FnRun, m: u8, why: &'static str) {
@@ -402,6 +423,9 @@ fn exit(out: &mut FnRun, entry: u32, at: (u32, usize), e: &Edge, s: &State, env:
                 .map(|r| (r, s.regs[r as usize]))
                 .collect();
             out.passes.insert(at, (*t, passed));
+            if let Edge::Tail(_) = e {
+                out.tails.insert(at);
+            }
             // r4-r11 a callee takes, r12, lr: not a borrowed parameter.
             let rest = env.takes(*t);
             esc(out, any(rest), "call rest");
@@ -433,6 +457,18 @@ pub struct Lends {
     pub through: BTreeMap<u32, BTreeMap<At, Through>>,
     /// The bytes each borrowed parameter reaches, by (function, register).
     pub reach: BTreeMap<(u32, u8), (i32, i32)>,
+    /// Each function's lent objects, the host locals `native/lift-lent-print`
+    /// prints: bytes `lo..hi` from the entry sp, the lent slots and the
+    /// bytes their borrowers reach from each address lent, overlapping
+    /// ones one object.
+    pub objects: BTreeMap<u32, Vec<(i32, i32)>>,
+    /// Each function's lent addresses passed to a borrowed parameter, by
+    /// its call's exit: (the callee's register, the frame offset).
+    pub lent_passes: BTreeMap<u32, BTreeMap<At, Vec<(u8, i32)>>>,
+    /// Each function's borrowed parameters passed on to a borrowed
+    /// parameter, by its call's exit: (the callee's register, its own
+    /// parameter, the constant added).
+    pub passes: BTreeMap<u32, BTreeMap<At, Vec<Pass>>>,
 }
 
 impl Lends {
@@ -469,6 +505,8 @@ struct FrameLends {
     /// the frame's guess at an object's size: a lent address reaches no
     /// further than its borrowers do.
     reached: BTreeSet<i32>,
+    /// The lent objects ([`Lends::objects`]).
+    objects: Vec<(i32, i32)>,
 }
 
 /// The slots of `fr` lent, given what each of its calls' r0-r3 borrows
@@ -525,9 +563,19 @@ fn lent_slots(fr: &Frame, reach: &dyn Fn(&At, u8) -> Option<Span>) -> FrameLends
             };
         }
     }
+    // A slot some access reaches at an offset its width doesn't divide:
+    // the hardware's rounding picks its bytes, which a host local's
+    // don't follow (as for [`Frame::locals`]).
+    let odd = |j: usize| {
+        let s = &fr.slots[j];
+        fr.places.values().any(|p| {
+            matches!(p, super::Place::Exact(o, n)
+                if s.lo <= *o && *o < s.hi && o.rem_euclid(*n as i32) != 0)
+        })
+    };
     loop {
         let mut lent: BTreeSet<usize> = (0..fr.slots.len())
-            .filter(|&j| fr.slots[j].escapes == Kind::Call as u8 && fr.slots[j].lo < 0)
+            .filter(|&j| fr.slots[j].escapes == Kind::Call as u8 && fr.slots[j].lo < 0 && !odd(j))
             .collect();
         for (&k, r) in &bases {
             if r.is_none() {
@@ -558,11 +606,15 @@ fn lent_slots(fr: &Frame, reach: &dyn Fn(&At, u8) -> Option<Span>) -> FrameLends
                     None => reached.extend(object(k)),
                 }
             }
+            let lent: BTreeSet<usize> = lent.intersection(&good_slots).copied().collect();
+            let spans = bases
+                .values()
+                .flatten()
+                .copied()
+                .chain(lent.iter().map(|&j| (fr.slots[j].lo, fr.slots[j].hi)));
             return FrameLends {
-                lent: lent
-                    .intersection(&good_slots)
-                    .map(|&j| fr.slots[j].lo)
-                    .collect(),
+                objects: merge(spans),
+                lent: lent.iter().map(|&j| fr.slots[j].lo).collect(),
                 good: bases
                     .iter()
                     .filter(|(_, r)| r.is_some())
@@ -572,6 +624,20 @@ fn lent_slots(fr: &Frame, reach: &dyn Fn(&At, u8) -> Option<Span>) -> FrameLends
             };
         }
     }
+}
+
+/// `spans` with the overlapping ones made one, empty ones left out.
+fn merge(spans: impl Iterator<Item = Span>) -> Vec<Span> {
+    let mut v: Vec<Span> = spans.filter(|(lo, hi)| lo < hi).collect();
+    v.sort();
+    let mut out: Vec<Span> = Vec::new();
+    for (lo, hi) in v {
+        match out.last_mut() {
+            Some(l) if lo < l.1 => l.1 = l.1.max(hi),
+            _ => out.push((lo, hi)),
+        }
+    }
+    out
 }
 
 /// The bytes each borrowed parameter reaches, through itself and the
@@ -705,6 +771,9 @@ pub fn lends(
                 }
                 let ok_callers = callers.get(t).is_some_and(|cs| {
                     cs.iter().all(|(f, at)| {
+                        if runs[f].tails.contains(at) {
+                            return false;
+                        }
                         let w = runs[f].passes[at]
                             .1
                             .iter()
@@ -757,6 +826,45 @@ pub fn lends(
                     (*f, t)
                 })
                 .collect();
+            let borrows = |t: u32, r: u8| borrowed.get(&t).is_some_and(|m| m & 1 << r != 0);
+            let mut lent_passes: BTreeMap<u32, BTreeMap<At, Vec<(u8, i32)>>> = BTreeMap::new();
+            for (f, l) in &fl {
+                for (at, ps) in &frames[f].lends {
+                    let Some((t, _)) = runs.get(f).and_then(|r| r.passes.get(at)) else {
+                        continue;
+                    };
+                    let v: Vec<(u8, i32)> = ps
+                        .iter()
+                        .filter(|(r, k)| borrows(*t, *r) && l.good.contains(k))
+                        .copied()
+                        .collect();
+                    if !v.is_empty() {
+                        lent_passes.entry(*f).or_default().insert(*at, v);
+                    }
+                }
+            }
+            let mut passes: BTreeMap<u32, BTreeMap<At, Vec<Pass>>> = BTreeMap::new();
+            for (f, m) in &borrowed {
+                for (at, (t, ps)) in &runs[f].passes {
+                    let v: Vec<Pass> = ps
+                        .iter()
+                        .filter_map(|(r, w)| match *w {
+                            W::Arg(p, k) if p < 4 && m & 1 << p != 0 && borrows(*t, *r) => {
+                                Some((*r, p, k))
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    if !v.is_empty() {
+                        passes.entry(*f).or_default().insert(*at, v);
+                    }
+                }
+            }
+            let objects = fl
+                .iter()
+                .filter(|(_, l)| !l.lent.is_empty())
+                .map(|(f, l)| (*f, l.objects.clone()))
+                .collect();
             let lent = fl
                 .into_iter()
                 .filter(|(_, l)| !l.lent.is_empty())
@@ -768,6 +876,9 @@ pub fn lends(
                 pointers,
                 through,
                 reach,
+                objects,
+                lent_passes,
+                passes,
             };
         }
     }
