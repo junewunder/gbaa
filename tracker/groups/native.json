@@ -5030,18 +5030,22 @@
       "uses": ["heavy"],
       "priority": 97,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "990952a6",
-        "session": "990952a6-7c29-45d0-bbbc-f6d9830334f4",
-        "host": "quack",
-        "pid": 1981823,
-        "start": "101567893",
-        "at": "2026-11-24T22:53:10Z",
+        "at": "2026-11-25T00:54:23Z",
+        "evidence": "Head 9c90199e (main b40c1b2b merged in; earlier merge d27f4d5e settled conflicts with lift-for-top-tested/step-via; a bound loaded by the start's test is refused). just check passed; just lift-check passed, c-loops agbcc+gcc 600 frames 0 differences, planted stores caught, loops_not_for 8 and 16 (bars lowered; casts +1 each for draw_global's u8 bound, gcc ref_new_at_use 9->13 from more fors). Metroid native route units/metroid-native.toml 2700 frames 0 differences; loops_for 258, loops_not_for 438 under its bar 440 (for_counter_arith 34, bar 33 raised in a copy). Emerald just lift with current mods holes file (open-bus-typed landed): 600 of 600 frames no stop, loops_for 1147, loops_not_for 3236 under main's bar 3268 (the 3325 bar is superseded). Fix 3: the owner's decision 'Dead-path parameters and games' RAM-bound loops are follow-on units' moves HealPlayerParty to {unit:native/lift-for-ram-bounds-games}; no game loop takes the RAM-bound path yet.",
         "branch": "unit/native/lift-for-ram-bounds",
-        "resumed": "a67a0150",
-        "prevSession": "a67a0150-1e0c-4ab1-a123-7046e9f53591",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T00:54:23Z",
+          "by": "990952a6",
+          "host": "quack",
+          "pid": 1981823,
+          "start": "101567893",
+          "beats": true,
+          "session": "990952a6-7c29-45d0-bbbc-f6d9830334f4",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
