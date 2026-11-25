@@ -18,7 +18,6 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [pokeemerald's DWARF (locals, types, lines) through gdb](pokeemerald-dwarf.md) — binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info scope, ptype, info line) (2026-10-26)
 - [Running Metroid's native route against a lift variant](metroid-native-route-run.md) — lift, three builds and route-check --native in one long job: 6 min on quack, so check a lifter change on a game
 - [SDL3's static build, and testing a window under gamescope](sdl-build-and-gamescope.md) — spotting SDL's X11 driver; gamescope in a lane needs WAYLAND_DISPLAY unset; cu type can overtake cu key
-- [The C test ROMs in $GBAA_DATA are shared by every lane](shared-c-test-roms.md) — another lane's `just c-tests` rebuilds them from its own c/; bars over on c-* rows that you didn't touch: rerun `just c-tests` (3 s)
 - [The C test ROMs in $GBAA_DATA are shared by every lane](shared-c-roms.md) — another lane's `just c-tests` from an older branch swaps them under you; build main's into a symlinked private data dir (2026-11-24)
 - [Timing a hand-patched generated build, and testing a value](variant-builds-and-mirror-runs.md) — patch call sites, not call!; a copied crate needs its own --target-dir; use a positive control
 - [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
