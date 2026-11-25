@@ -5324,6 +5324,17 @@
       "check": "recorded",
       "uses": ["heavy"],
       "priority": 93,
+      "record": {
+        "state": "claimed",
+        "by": "b10f4712",
+        "session": "b10f4712-523b-45c1-bf69-d2938ea0a9f8",
+        "host": "quack",
+        "pid": 1982541,
+        "start": "101568383",
+        "at": "2026-11-25T03:04:11Z",
+        "branch": "unit/native/imperium-first-stops",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-25T03:04:06Z",
