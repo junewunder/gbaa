@@ -4400,3 +4400,4 @@
 {"at":"2026-11-25T06:04:13Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"add-unit","id":"native/fn-check-helper","text":"new unit: fn-check tests an LLM-written helper body at its sites"}
 {"at":"2026-11-25T06:04:15Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"add-unit","id":"native/lift-proto-overrides","text":"new unit: A game's own prototype file; stand-ins in its shape"}
 {"at":"2026-11-25T06:04:17Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"add-unit","id":"native/lift-call-forms","text":"new unit: A function's second form at chosen calls, tested unread"}
+{"at":"2026-11-25T06:04:39Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"ask","text":"asked the owner: How should an LLM pass add a helper many functions share?","q":"q/llm-shared-helpers"}
