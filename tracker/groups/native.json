@@ -3856,6 +3856,11 @@
       "minMinutes": 150,
       "notes": [
         {
+          "at": "2026-11-25T00:59:56Z",
+          "by": "05a949e7",
+          "text": "Hard holes still 4 (mods 6aea239): ZeldaFollowAction's r5 closed by takes up to AgbMain; new one: the resume 0x03005f24 reads r5 at 0x03005f94. All 4 now wait on {unit:native/lift-restore-saved-block}."
+        },
+        {
           "at": "2026-11-24T05:45:22Z",
           "by": "c2d4d707",
           "text": "hard 10 -> 4 by holes file only (mods a6294ff; no code, so no holes-all; lift 13 min at peak 1.2G, --mem 4G). Left: ZeldaFollowAction r5 (needs {unit:native/lift-takes-across-copies}), 3 longjmp ({unit:native/lift-longjmp}; 0x03005f24's struct is 0x03003dd0)."
@@ -3864,11 +3869,6 @@
           "at": "2026-11-20T12:58:54Z",
           "by": "a966794e",
           "text": "Left 12: OAM builder 0x030065e8 longjmps on overflow (ldr sp,[r11,#20]; ldr pc,[r11,#24]) and 0x03005f24 loads sp: 2 CPU state, jump 0x0300670c, 2 summaries; dispatch bx 0x0800129a, 0x080012c4 (no run reached); 0x080cdaf3 is data (table 0x080cde14); 3 summaries"
-        },
-        {
-          "at": "2026-11-20T12:12:30Z",
-          "by": "b6051479",
-          "text": "holes-all at 577e6672 (2026-11-20, holes-only, no flow): 28 hard, not 27: jumps 4, no code 21, summaries 3. docs/research/native-holes.numbers.md has the row."
         }
       ],
       "round": "2026-11-20T12:50:57Z"
