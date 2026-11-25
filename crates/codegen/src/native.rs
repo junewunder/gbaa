@@ -194,7 +194,8 @@
 //!   returns, stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
 //!   runs on the prelude's host coroutines, `task_resume`; but a context
 //!   restore some save matches, `longjmp`'s, which unwinds to the caller of
-//!   `setjmp`: [`longjmp`]);
+//!   `setjmp`, and one that loads sp and pc from a block a save filled,
+//!   which unwinds to the frame that saved it: [`longjmp`]);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
 //! - an undefined instruction, a jump to no code (but a compiler's trap,
@@ -4974,7 +4975,9 @@ impl FnPrinter<'_, '_> {
         // return goes into the frame of its save's caller (`setjmp`'s),
         // whose r4-r11 and sp are that function's locals natively. One a
         // save matches is lifted ([`longjmp`]): no hole; one with no save
-        // to match is a hole, named.
+        // to match is a hole, named. So is an sp loaded from a saved block
+        // that a jump to the frame that saved it follows ([`longjmp`]'s
+        // unwinds).
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
             if self.jumps.restores.contains_key(&at) || self.jumps.sp_loads.contains(&at) {
                 continue;
