@@ -4335,3 +4335,4 @@
 {"at":"2026-11-25T01:37:47Z","actor":"loop","tag":"a1b250a0","host":"quack","cmd":"decide","text":"decided: Game bars raised for the returns unit merged with for-ram-bounds","d":"d/game-bars-raised-for-the-returns-unit-merged"}
 {"at":"2026-11-25T01:38:10Z","actor":"loop","tag":"e30a7b20","host":"quack","cmd":"done","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: done"}
 {"at":"2026-11-25T01:42:34Z","actor":"loop","tag":"a1b250a0","host":"quack","cmd":"done","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: done"}
+{"at":"2026-11-25T01:42:41Z","actor":"loop","tag":"a1b250a0","host":"quack","cmd":"note","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: note: mods 49ed407 (Metroid and Emerald lift-bars.toml, bars raised after merging main 2336dc5) is committed in the mods repo but not pushed: sessions don't push."}

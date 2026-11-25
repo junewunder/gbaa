@@ -4947,6 +4947,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-25T01:42:41Z",
+          "by": "a1b250a0",
+          "text": "mods 49ed407 (Metroid and Emerald lift-bars.toml, bars raised after merging main 2336dc5) is committed in the mods repo but not pushed: sessions don't push."
+        },
+        {
           "at": "2026-11-25T00:27:04Z",
           "by": "6056824b",
           "text": "Overseer: code and evidence stand. Only fix: delete memory/shared-c-test-roms.md and its MEMORY.md line (fold its details into memory/shared-c-roms.md), merge main, rerun checks on that head. Land soon: mods already bars its two metrics."
@@ -4955,11 +4960,6 @@
           "at": "2026-11-25T00:18:24Z",
           "by": "c69dfdbb",
           "text": "Private bars for results_several/tuple_calls are committed in the mods repo (64a3ad8, metroid and emerald lift-bars.toml) but not pushed: sessions don't push."
-        },
-        {
-          "at": "2026-11-24T23:24:57Z",
-          "by": "e601e02d",
-          "text": "Its results_several and tuple_calls bars were taken out of Metroid's and Emerald's private bars ({unit:native/game-lift-bars-refresh}, main dd9a7df9: main measures neither). Landing this unit adds them back to both files at its measured values."
         }
       ],
       "review": {
