@@ -4928,23 +4928,10 @@
       "tags": ["slow-check"],
       "priority": 95,
       "record": {
-        "state": "done",
-        "by": "c69dfdbb",
-        "at": "2026-11-25T00:18:22Z",
-        "evidence": "On head 2a39ea8 (merge of main at its tip, nothing newer on main at recording): just lift-check passed, 37 programs 0 differences, every planted fault and hard hole caught; lift-metrics 0 over, 0 under (98 bars lowered after the merge), results_several and tuple_calls 0 on every C row but c-jump-gcc (1, 2); Metroid lift 600 of 600 frames, its native route 2700 frames 0 differences; Emerald lift 600 of 600 frames; just check passed. Private bars: Metroid results_several 68 tuple_calls 872, Emerald 287 and 17862 (mods 64a3ad8, unpushed). Dead-path parameters moved to {unit:native/lift-returns-past-holes} by the recorded decision. Emerald route check waits on {unit:native/emerald-native-route}.",
-        "branch": "unit/native/lift-returns-read",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-25T00:18:22Z",
-          "by": "c69dfdbb",
-          "host": "quack",
-          "pid": 1983326,
-          "start": "101568883",
-          "beats": true,
-          "session": "c69dfdbb-9a16-4c43-9b36-8c0384924b32",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "state": "blocked",
+        "why": "the loop's review asked for fixes a second time, so it waits for the overseer rather than going round again: - memory/shared-c-test-roms.md (new file) and its line in memory/MEMORY.md:21 duplicate a note that is already there: memory/shared-c-roms.md. Both have the same title, 'The C test ROMs in $GBAA_DATA are shared by every lane', and MEMORY.md now lists that title twice. The two notes also give differ…",
+        "by": "manual",
+        "at": "2026-11-25T00:26:29Z"
       },
       "notes": [
         {
@@ -4964,15 +4951,15 @@
         }
       ],
       "review": {
-        "fixes": 1,
-        "at": "2026-11-24T19:42:05Z",
-        "findings": "- Check run on code from before the main merge: the Evidence and the 2026-11-24 note say `just lift-check` (37 programs, 0 differences, every planted fault caught) and the Metroid and Emerald 600/600-frame runs were done at 2f545afc/ad85c204. That is before merge c558dda1, which brought in the prototype shapes. After the merge, only `just check` and lift-metrics were run. The merge changes the same code path this unit edits: `shapes_of` (crates/codegen/src/native.rs:9888) now takes prototype shapes through `holes.protos`, `sum_shapes` and `proto_agreement`, and `FnPrinter::clobbers` (native.rs:8835) masks out `changed(s) & !c.results`, where `results` can now come from a forced prototype. That means a proto-shaped callee's clobbers are now marked dead in callers on the merged code, and no correctness run covered it. Fix: on the branch head, rerun `just lift-check` (0 differences on every program, every planted fault caught) and the Metroid and Emerald headless runs (600 of 600 frames each), then put the new commit and results in the evidence.\n- Part of the card's What was split off instead of done: the card asks for 'The same for parameters only a dead path reads'. The 2026-11-24 note moves dead-path parameters (and results read past a stopped caller) to a new unit, {unit:native/lift-returns-past-holes}. The card never asked for that split, and nothing in the diff drops a parameter that only a dead path reads: the changes in crates/codegen/src/native/shape.rs only touch results, `addressed`, by-value demand and `changed`. Fix: either implement dead-path parameter pruning here and measure it on the C programs, Metroid and Emerald, or get the owner to agree to move it to the other unit and record that decision (`just decisions`) before closing this one.",
+        "fixes": 2,
+        "at": "2026-11-25T00:26:29Z",
+        "findings": "- memory/shared-c-test-roms.md (new file) and its line in memory/MEMORY.md:21 duplicate a note that is already there: memory/shared-c-roms.md. Both have the same title, 'The C test ROMs in $GBAA_DATA are shared by every lane', and MEMORY.md now lists that title twice. The two notes also give different fixes. The new one says rerun `just c-tests` from your checkout; the existing one says build main's ROMs into a symlinked private data dir. Fix: delete memory/shared-c-test-roms.md and its MEMORY.md line. Then either merge the new note's useful details into memory/shared-c-roms.md (the `ls -la --time-style` check, and that the bars step lifts within a minute of starting) or leave them out. Regenerate MEMORY.md with `just memor…` (the recipe its header names), so one note with one fix remains.",
         "sent": {
-          "evidence": "Results are what callers read: r0 and unknown tail-call demand only for FNS functions, a longjmp restore's jump no tail call, a callee's unreturned clobbers dead in the caller. just lift-check passed at 2f545afc: 37 programs 0 differences, every planted fault caught. New metrics results_several, tuple_calls barred on every row (C rows 0/0 but c-jump-gcc 1/2, uidivmod's read remainder) and in mods' Metroid/Emerald bars. Metroid vs main's rule: results_several 1976->1061, tuple_calls 7290->5110, regs_call_entries 955->745; 600/600 frames. Emerald: 663->626, 23191->22220, 3622->3279; 600/600 frames after fixing main's open-bus-through-typed-field build break. pret-score's new results rows: Metroid void/one agree 34->793 of 2554; Emerald void 6705->6913, one 2891->2802 (unread values dropped). Emerald route unit not done: skipped. just check passed after the last main merge (c558dda1; lift-metrics 0 over there).",
-          "by": "c2e64a37",
+          "evidence": "On head 2a39ea8 (merge of main at its tip, nothing newer on main at recording): just lift-check passed, 37 programs 0 differences, every planted fault and hard hole caught; lift-metrics 0 over, 0 under (98 bars lowered after the merge), results_several and tuple_calls 0 on every C row but c-jump-gcc (1, 2); Metroid lift 600 of 600 frames, its native route 2700 frames 0 differences; Emerald lift 600 of 600 frames; just check passed. Private bars: Metroid results_several 68 tuple_calls 872, Emerald 287 and 17862 (mods 64a3ad8, unpushed). Dead-path parameters moved to {unit:native/lift-returns-past-holes} by the recorded decision. Emerald route check waits on {unit:native/emerald-native-route}.",
+          "by": "c69dfdbb",
           "host": "quack",
           "branch": "unit/native/lift-returns-read",
-          "change": "45277e5896d1676b1ec8fb0c9210c2a4161743c6"
+          "change": "45b6b774644c0b5e426449c51752de4d58c19ecf"
         }
       },
       "round": "2026-11-24T17:06:07Z"
