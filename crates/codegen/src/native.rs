@@ -194,7 +194,8 @@
 //!   returns, stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
 //!   runs on the prelude's host coroutines, `task_resume`; but a context
 //!   restore some save matches, `longjmp`'s, which unwinds to the caller of
-//!   `setjmp`: [`longjmp`]);
+//!   `setjmp`, and one that loads sp and pc from a block a save filled,
+//!   which unwinds to the frame that saved it: [`longjmp`]);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
 //! - an undefined instruction, a jump to no code (but a compiler's trap,
@@ -1151,10 +1152,37 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             o.src,
         ));
     }
-    let built: Vec<Vec<Func>> = ctxs
+    let mut built: Vec<Vec<Func>> = ctxs
         .iter()
         .map(|(ctx, _)| ctx.entries.iter().map(|&e| build_func(ctx, e)).collect())
         .collect();
+    // The context restores that load sp and pc from a saved block: their
+    // jumps unwind ([`longjmp`]), so the functions are built again with
+    // them so.
+    fn pairs<'a, 'r>(
+        ctxs: &'a [(Ctx<'r>, u32)],
+        built: &'a [Vec<Func>],
+    ) -> Vec<(&'a Ctx<'r>, &'a [Func])> {
+        ctxs.iter()
+            .zip(built)
+            .map(|((c, _), f)| (c, f.as_slice()))
+            .collect()
+    }
+    let mut unwinds = longjmp::find_unwinds(&pairs(&ctxs, &built));
+    if !unwinds.is_empty() {
+        for (i, (ctx, _)) in ctxs.iter_mut().enumerate() {
+            ctx.unwinds = unwinds
+                .iter()
+                .filter(|u| u.ctx == i)
+                .map(|u| u.at)
+                .collect();
+        }
+        built = ctxs
+            .iter()
+            .map(|(ctx, _)| ctx.entries.iter().map(|&e| build_func(ctx, e)).collect())
+            .collect();
+        longjmp::rewrite_sets(&mut unwinds, &pairs(&ctxs, &built));
+    }
     // A RAM copy's functions a pointer may call: the ROM words that hold
     // a RAM address, but a constant jump's literal.
     let pointed = {
@@ -1516,7 +1544,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         _ => all.clone(),
     };
     // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
-    let jumps = longjmp::find(&codes);
+    let jumps = longjmp::find(&codes, &unwinds);
     let shapes = shapes_of(&codes, &all, holes, &reach, &jumps);
     // The summaries' shapes alone, to score them against the prototypes
     // (native/lift-signature-holes; `--no-prototype-shapes` prints them).
@@ -3851,6 +3879,8 @@ fn exact_sp(
                         }
                         Plan::Swi { .. } => p.irq = true,
                         Plan::Undefined { .. } => {}
+                        // Into another frame, on the sp it loaded.
+                        Plan::Unwind => p.unknown = true,
                     }
                     if x.idle != Idle::No {
                         p.irq = true;
@@ -4882,7 +4912,7 @@ impl FnPrinter<'_, '_> {
                     Plan::Call { .. }
                     | Plan::CallVia { .. }
                     | Plan::Dynamic { ret: Some(_), .. } => After::KeptCall,
-                    Plan::Swi { .. } | Plan::Undefined { .. } => After::Unknown,
+                    Plan::Swi { .. } | Plan::Undefined { .. } | Plan::Unwind => After::Unknown,
                 };
                 for to in self.jumps(&gb.block.insts[x.index].op, &x) {
                     if self.f.blocks.contains_key(&to) {
@@ -4969,9 +4999,11 @@ impl FnPrinter<'_, '_> {
         // return goes into the frame of its save's caller (`setjmp`'s),
         // whose r4-r11 and sp are that function's locals natively. One a
         // save matches is lifted ([`longjmp`]): no hole; one with no save
-        // to match is a hole, named.
+        // to match is a hole, named. So is an sp loaded from a saved block
+        // that a jump to the frame that saved it follows ([`longjmp`]'s
+        // unwinds).
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
-            if self.jumps.restores.contains_key(&at) {
+            if self.jumps.restores.contains_key(&at) || self.jumps.sp_loads.contains(&at) {
                 continue;
             }
             let restore = f
@@ -5019,6 +5051,19 @@ impl FnPrinter<'_, '_> {
         let mut order: Vec<u32> = vec![f.entry];
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        // A resume point ([`longjmp`]): its restores' targets.
+        let resume: Vec<u32> = if catch {
+            Vec::new()
+        } else {
+            self.jumps
+                .resumes
+                .get(&f.entry)
+                .into_iter()
+                .flatten()
+                .copied()
+                .collect()
+        };
+        let catch = catch || !resume.is_empty();
         (self.dead, self.live_in, self.local) = self.dead_writes();
         (self.field_at, self.field_idx, self.elem_addr, _) = self.field_types();
         self.banked = self.redundant_banks();
@@ -5066,8 +5111,21 @@ impl FnPrinter<'_, '_> {
                 let label = self.labels[k];
                 arms.push_str(&self.arm(label));
             }
-            s.push_str(&catch_form(&arms, &ty));
-            let body = fill_ctx_regs(&s[head..]);
+            let body = if resume.is_empty() {
+                s.push_str(&catch_form(&arms, &ty));
+                fill_ctx_regs(&s[head..])
+            } else {
+                // Each target: its label, or the jump into its function.
+                let to: Vec<(u32, String)> = resume
+                    .iter()
+                    .map(|&k| match self.labels.get(&k) {
+                        Some(l) => (k, format!("b = {l}")),
+                        None => (k, format!("{{ {} }}", self.fall_into(k))),
+                    })
+                    .collect();
+                s.push_str(&resume_form(&arms, &ty, &to));
+                fill_resume_regs(&s[head..])
+            };
             s.truncate(head);
             s.push_str(&body);
         } else {
@@ -5764,7 +5822,7 @@ impl FnPrinter<'_, '_> {
                             })
                             .unwrap_or_default()
                     }
-                    Plan::Undefined { .. } => Vec::new(),
+                    Plan::Undefined { .. } | Plan::Unwind => Vec::new(),
                 }
             },
             |b, i| {
@@ -5930,6 +5988,16 @@ impl FnPrinter<'_, '_> {
                 }
                 Plan::Undefined { trap: true } => (Vec::new(), 0),
                 Plan::Undefined { trap: false } => (Vec::new(), live::ALL),
+                // A context restore's jump passes r0-r12 and sp on
+                // ([`FnPrinter::exit`]).
+                Plan::Unwind => {
+                    let sets = self.jumps.unwinds.get(&x.at).copied().unwrap_or(0);
+                    let mut l = live::low(0xf) | live::reg(13);
+                    for r in (4..13).filter(|r| sets & 1 << r != 0) {
+                        l |= live::reg(r);
+                    }
+                    (Vec::new(), l)
+                }
             }
         };
         // The exits that print their reads through the block's names
@@ -6055,7 +6123,7 @@ impl FnPrinter<'_, '_> {
                         .filter_map(|t| at(t, false))
                         .collect()
                 }
-                Plan::Undefined { .. } => Vec::new(),
+                Plan::Undefined { .. } | Plan::Unwind => Vec::new(),
             }
         });
         order.into_iter().zip(redundant).collect()
@@ -6715,7 +6783,7 @@ impl FnPrinter<'_, '_> {
             let mut c: u16 = 0;
             for x in exits(self.ctx, b) {
                 match x.plan {
-                    Plan::Static(_) | Plan::Rekey(_) | Plan::Undefined { .. } => {}
+                    Plan::Static(_) | Plan::Rekey(_) | Plan::Undefined { .. } | Plan::Unwind => {}
                     Plan::Call { target, .. } => c |= 0xf | u16::from(self.gives(target)) << 4,
                     Plan::Swi { .. } => c |= 0xf,
                     Plan::Dynamic { ret: None, .. } => {}
@@ -7109,7 +7177,7 @@ impl FnPrinter<'_, '_> {
             } => dyn_targets(self.ctx, self.holes, x.at, x.thumb, target)
                 .unwrap_or_else(|_| target.into_iter().collect()),
             Plan::Swi { next } => vec![next],
-            Plan::Undefined { .. } => vec![],
+            Plan::Undefined { .. } | Plan::Unwind => vec![],
         }
     }
 
@@ -9899,6 +9967,9 @@ impl FnPrinter<'_, '_> {
     /// return to the entry lr or a call through a register whose one
     /// callee is called directly.
     fn reads_target(&self, x: &ExitInfo) -> bool {
+        if x.plan == Plan::Unwind {
+            return true;
+        }
         let Plan::Dynamic { ret, target, .. } = x.plan else {
             return false;
         };
@@ -10171,6 +10242,37 @@ impl FnPrinter<'_, '_> {
                     writeln!(s, "{ind}    _ => {{ {t} }}").unwrap();
                     writeln!(s, "{ind}}}").unwrap();
                 }
+            }
+            // A context restore's jump into the frame that saved its block
+            // ([`longjmp`]): an unwinding with the target's key, the sp it
+            // loaded, and r0-r3 and the r4-r12 its function writes.
+            Plan::Unwind => {
+                let (Exit::Jump(t) | Exit::JumpExchange(t)) = e else {
+                    unreachable!("an unwind jumps")
+                };
+                let t = self.val(t);
+                let k = if thumb {
+                    format!("{t} | 1")
+                } else {
+                    format!("{t} & !3")
+                };
+                let sets = self.jumps.unwinds.get(&at).copied().unwrap_or(0);
+                let regs: Vec<String> = (0..13)
+                    .map(|r| {
+                        if r < 4 || sets & 1 << r != 0 {
+                            self.reg(r)
+                        } else {
+                            "0".into()
+                        }
+                    })
+                    .collect();
+                writeln!(
+                    s,
+                    "{ind}resume({k}, {}, [{}], {sets:#x});",
+                    self.reg(13),
+                    regs.join(", ")
+                )
+                .unwrap();
             }
             Plan::Swi { next } => {
                 let Exit::Swi { comment, .. } = e else {
@@ -10887,6 +10989,64 @@ fn catch_form(arms: &str, ty: &str) -> String {
 
 "
     )
+}
+
+/// A resume point's `match` form ([`longjmp`]), its `arms` printed: run
+/// in the prelude's `catch_restore`, and an unwinding of a restore of a
+/// saved block whose sp is this frame's (its sp at the call under way)
+/// and whose key is one of `targets` goes on there (each with the code
+/// that does: its label's, or the jump into its function), r0-r3 and the r4-r12 the
+/// restorer wrote as it had them ([`fill_resume_regs`] names them). Any
+/// other goes on up.
+fn resume_form(arms: &str, ty: &str, targets: &[(u32, String)]) -> String {
+    let keys: Vec<String> = targets.iter().map(|(k, _)| format!("{k:#010x}")).collect();
+    let mut to = String::new();
+    for (k, l) in targets {
+        write!(to, "{k:#010x} => {l}, ").unwrap();
+    }
+    format!(
+        "    let mut b = 0usize;
+    loop {{
+        let thrown = match catch_restore(|| -> Result<{ty}, Exit> {{ loop {{
+        match b {{
+{arms}            _ => unreachable!(),
+        }}
+        }} }}) {{
+            Ok(v) => return v,
+            Err(t) => t,
+        }};
+        let got = resumed(thrown, {RESUME_SP}, &[{}]);
+{CTX_BACK}        match got.key {{ {to}_ => unreachable!() }}
+    }}
+}}
+
+",
+        keys.join(", ")
+    )
+}
+
+/// Where [`resume_form`] passes its sp, till its function prints whole.
+const RESUME_SP: &str = "\u{7}";
+
+/// A resume point's text with its registers in ([`resume_form`]): r0-r3
+/// and those of r4-r12 its body names, set from the restorer's, and its
+/// sp, if it names one, the frame's to match.
+fn fill_resume_regs(s: &str) -> String {
+    let words = rust_words(s);
+    let has = |r: usize| words.contains(&format!("r{r}"));
+    let mut back = String::new();
+    for r in (0..4).filter(|&r| has(r)) {
+        writeln!(back, "        r{r} = got.r[{r}];").unwrap();
+    }
+    for r in (4..13).filter(|&r| has(r)) {
+        writeln!(
+            back,
+            "        if got.sets & 1 << {r} != 0 {{ r{r} = got.r[{r}]; }}"
+        )
+        .unwrap();
+    }
+    let sp = if has(13) { "Some(r13)" } else { "None" };
+    s.replace(CTX_BACK, &back).replace(RESUME_SP, sp)
 }
 
 /// A catch point's text with its registers in ([`catch_form`]): those of
