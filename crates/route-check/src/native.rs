@@ -21,7 +21,8 @@
 //!   writes; the file is `--holes FILE`, else found as `just lift` finds
 //!   it, by the game's name: `holes/<name>.toml`, else
 //!   `mods/<name>/holes.toml`, the name `--name NAME`'s or the ROM's file
-//!   name lowercased) and the ranges `--replaced` FILE names
+//!   name lowercased), its `[[stack]]`s and `[[garbage]]` (bytes the game
+//!   writes and never reads, a struct's padding) and the ranges `--replaced` FILE names
 //!   (`[[replaced]]`: the globals of a library the native program replaces,
 //!   each with its why);
 //! - the I/O registers the library models ([`IO`]): the display's,
@@ -189,6 +190,7 @@ pub fn run(
         fixed.extend(holes_copies(&h, &f));
         stacks = holes_stacks(&h, &f);
         fixed.extend(stacks.iter().cloned());
+        fixed.extend(holes_garbage(&h, &f));
     }
     if let Some(f) = &extra.replaced {
         fixed.extend(replaced(f)?);
@@ -476,6 +478,24 @@ fn holes_stacks(h: &codegen::native::Holes, file: &Path) -> Vec<Skip> {
                 "a stack outside IWRAM ({}'s [[stack]]): {}",
                 file.display(),
                 s.why
+            ),
+        })
+        .collect()
+}
+
+/// The holes file's `[[garbage]]`: RAM the game writes and never reads
+/// (a struct's padding a whole-struct copy fills from the stack), whose
+/// bytes may differ without the program being wrong.
+fn holes_garbage(h: &codegen::native::Holes, file: &Path) -> Vec<Skip> {
+    h.garbage
+        .iter()
+        .map(|g| Skip {
+            start: g.start,
+            end: g.end,
+            why: format!(
+                "garbage the game never reads ({}'s [[garbage]]): {}",
+                file.display(),
+                g.why
             ),
         })
         .collect()

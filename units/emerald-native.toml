@@ -2,10 +2,11 @@
 # through the main menu, Birch's speech and the naming screen to the truck, units/emerald-newgame.toml's
 # presses. The lift (`just lift ROM out/lift-emerald --name emerald`, holes file mods/emerald/holes.toml)
 # against the play build at --timing native (`just recompile ROM out/emerald-play --timing native --name
-# emerald-play`), by route-check --native target/recompiled/release/gbaa-native-emerald
-# target/recompiled/release/gbaa-emerald-play units/emerald-native.toml --name emerald: 0 differences,
-# audio too (native/emerald-native-route; not yet: the play build's serial
-# IRQs at frame 3, m4a's compressed samples from 2150, text printer padding from 977). Headless, no save: a blank cartridge.
+# emerald-play`, then `just build-recompiled out/emerald-play`), by route-check --native
+# target/recompiled/release/gbaa-native-emerald target/recompiled/release/gbaa-emerald-play
+# units/emerald-native.toml --name emerald: 0 differences, audio too (native/emerald-native-route; the text
+# printers' padding, written from the stack and never read, is the holes file's [[garbage]]). Headless, no
+# save: a blank cartridge.
 rom = "$HOME/ROMs/gba/Pokemon - Emerald Version.gba"
 
 # Start skips the intro, A leaves the title.
