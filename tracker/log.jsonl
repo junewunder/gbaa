@@ -4376,3 +4376,4 @@
 {"at":"2026-11-25T04:41:42Z","actor":"loop","tag":"5b75ea47","host":"quack","cmd":"claim","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: claimed"}
 {"at":"2026-11-25T04:44:31Z","actor":"loop","tag":"ae959552","host":"quack","cmd":"done","id":"merge/quack-lane3-native-imperium-first-stops","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-25T04:46:32Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-lent-local-stop","text":"Emerald's lift stops at frame 5055 on a lent local: edited (priority, uses, detail)"}
+{"at":"2026-11-25T04:46:34Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: edited (add-needs)"}

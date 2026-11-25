@@ -5563,7 +5563,7 @@
       "title": "Lent stack locals on Metroid and Emerald",
       "detail": "Split from {unit:native/lift-stack-arrays}, whose owner's check this carries for the games. After {unit:native/lift-lent-frameless}: both games build and run 600 of 600 frames headless with lent slots printed; sp_accesses_escaping_slot and bank_sp_calls barred in the private bars of Metroid and Emerald (Emerald's base: 14,563 and 18,410); Emerald's route check still 0 differences once {unit:native/emerald-native-route} is done. Callers from RAM-copy contexts aren't seen by the lend run yet: a game may need that. Check: just lift-check passes on every program; both games 600/600; the bars; just check. Sprint 2026-11-24: first record each game's 'lent slots' report line; bars below today's (Metroid 2,422/2,475; Emerald 14,563/18,410); Metroid's native route 0 differences, also with --shadow-locals; say whether RAM-copy callers were needed. After {unit:native/lift-lend-wider}.",
       "check": "recorded",
-      "needs": ["native/lift-lent-frameless", "native/lift-lend-wider"],
+      "needs": ["native/lift-lent-frameless", "native/lift-lend-wider", "native/emerald-lent-local-stop"],
       "uses": ["heavy"],
       "priority": 77,
       "notes": [
