@@ -5793,6 +5793,13 @@
       "title": "The lift's report lists its repeated pure regions",
       "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', section 2: a clone count over the lift, each maximal pure region (an expression tree, or a single-entry single-exit region that only loads and computes one register) normalised (inputs by role, constants kept), listed by occurrences x size with the functions it is in: the candidates an LLM pass names as helpers. Check: Mirror's report lists the task struct lookup near its 1,070 sites; just lift-check passes; just check.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-helper-match",
+      "title": "Helpers declared once by example print at every match",
+      "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', section 2: mods/<game>/helpers.toml [[helper]] name, like (one site), params, returns, kind; the lifter takes that site's normal form as the pattern, prints the pattern once as the helper's body in helpers.rs and a call at every exact match, lists near-misses, refuses a function whose region exits or writes live locals. Check: a C program with an inlined macro at many sites and one near-miss; a planted wrong derived body caught by the native check; lift-check; just check.",
+      "needs": ["native/lift-clone-count"],
+      "uses": ["heavy"]
     }
   ]
 }

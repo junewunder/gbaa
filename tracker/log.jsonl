@@ -4396,3 +4396,4 @@
 {"at":"2026-11-25T06:00:04Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-25T06:00:09Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"claim","id":"native/llm-helpers-signatures-design","text":"LLM rewrites add helpers and change signatures: design: claimed"}
 {"at":"2026-11-25T06:04:08Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"add-unit","id":"native/lift-clone-count","text":"new unit: The lift's report lists its repeated pure regions"}
+{"at":"2026-11-25T06:04:10Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"add-unit","id":"native/lift-helper-match","text":"new unit: Helpers declared once by example print at every match"}
