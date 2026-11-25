@@ -5523,15 +5523,22 @@
       "uses": ["heavy"],
       "priority": 85,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "5b75ea47",
-        "session": "5b75ea47-a5cd-41d9-8f7f-5b59dc2e2a77",
-        "host": "quack",
-        "pid": 1981458,
-        "start": "101567385",
-        "at": "2026-11-25T04:41:42Z",
+        "at": "2026-11-25T05:53:10Z",
+        "evidence": "On 1f4a0305 (2e0e3407 plus latest main): frameless functions print no bank_sp (FnPrinter::needs_bank). c-chain-gcc bank_sp_calls bar 18 to 9 (fill_rect, memcpy, bounce, rect_union, irq_handler, frameless already, drop theirs), 15 other C rows lowered; agb rows unchanged (IRQ wrappers). sp_accesses_escaping_slot stays 4: fill_rect's stack argument keeps frame_, move_body, draw_body framed, so no new function went frameless; filed {unit:native/lift-stack-args}. just lift-check passed on 2e0e3407: 0 differences on every program, every planted fault caught incl. --plant-lent. --shadow-locals lift of c-chain-gcc 601 frames: 0 reports. Metroid native route 2700 frames 0 differences (bank_sp 2475 to 2327). Emerald route stops at frame 5055 on the lent local, as on main ({unit:native/emerald-lent-local-stop}), no difference before. just check exit 0 after the merge.",
         "branch": "unit/native/lift-lent-frameless",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T05:53:10Z",
+          "by": "5b75ea47",
+          "host": "quack",
+          "pid": 1981458,
+          "start": "101567385",
+          "beats": true,
+          "session": "5b75ea47-a5cd-41d9-8f7f-5b59dc2e2a77",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
