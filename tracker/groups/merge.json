@@ -842,7 +842,19 @@
       "detail": "Branch `unit/native/imperium-first-stops` holds {unit:native/imperium-first-stops}, finished but not on main: merging main conflicts in docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/3",
-      "branch": "unit/native/imperium-first-stops"
+      "branch": "unit/native/imperium-first-stops",
+      "record": {
+        "state": "claimed",
+        "by": "ae959552",
+        "session": "ae959552-1a11-42ec-87fa-099d62246df1",
+        "host": "quack",
+        "pid": 1982541,
+        "start": "101568383",
+        "at": "2026-11-25T04:35:42Z",
+        "branch": "unit/native/imperium-first-stops",
+        "beats": true
+      },
+      "round": "2026-11-25T04:35:42Z"
     }
   ]
 }
