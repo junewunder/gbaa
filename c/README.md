@@ -55,8 +55,9 @@ changed ROM needs its file made again, or its lift has no names.
 | `list/`     | a linked list over a static node pool: a free list and a sorted live list through one `next`, inserted into through a `Node **`, removed from and walked each frame, an `act` function pointer per node |
 | `jump/`     | errors thrown with `longjmp` out of a recursion to an outer and an inner `setjmp` (`setjmp.s`: the ARM pair behind Thumb entries, a program's own assembly) |
 | `resume/`   | restores that load sp and pc from a block of their own (`resume.s`): a search bailing out to its guard (`ldr sp; ldr pc`), a loop's step dropped from below and the loop going on (`ldr sp; b` into it) |
+| `lent/`     | a stack struct whose callee reads only its last byte: the address lent lies before the bytes lent (Emerald's RTC status) |
 
-The nine programs (eighteen ROMs) are in the lifter's check (`just
+The ten programs (twenty ROMs) are in the lifter's check (`just
 lift-check`, `crates/codegen/lift-check.toml`'s `c-*` tables, routes
 `units/c-<name>-<cc>-600.toml`), each with a planted store. A new program:
 copy `template/`, write its `SCENE.md`, run `just c-tests`, then add its
