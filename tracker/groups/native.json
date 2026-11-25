@@ -5349,7 +5349,19 @@
       "detail": "{unit:native/rogue-imperium-build} got Emerald Imperium's lift to build (0 hard holes, mods/imperium/holes.toml). Run headless it stops at frame 1 of 600: no-function 0x08003355, a call through call_fn from f_08000be1's chain to a Thumb routine (mov r12, r4; zero 64 bytes with stmia; bx lr) that discovery never found: reached only through a pointer. gbaa-holes' run finds 19 such run roots in Imperium (run roots: 301 ROM targets, 19 not discovered) but the lift's discovery doesn't take them. Emerald's holes file lists such starts as [[roots]], whose parser is on {unit:native/emerald-native-route}'s branch (commit e9b0b8c), not main: hence the need, so roots aren't designed twice. Then give Imperium's roots and fix the stops after, each a rule where general, the holes file where the game's own. Lift: just lift ROM out/lift-imperium --name imperium under just long start --mem 4G (about 30 min with build and run). Done when: 600 of 600 frames with no stop, or a stop too big for 3 hours filed as its own unit; just check passes. Sprint 2026-11-24: stale above: [[roots]] (keys, why) is on main since {unit:native/land-emerald-route-lifter} (crates/codegen/src/native.rs, docs/tools/commands.md), so this no longer waits on Emerald's route. Take the 19 keys from just holes' 'run roots … not discovered' lines. It edits mods/imperium/holes.toml, as {unit:native/gcc-switch-recovery} does: not beside it.",
       "check": "recorded",
       "uses": ["heavy"],
-      "priority": 93
+      "priority": 93,
+      "record": {
+        "state": "claimed",
+        "by": "18cd958f",
+        "session": "18cd958f-9c1f-4071-a90b-48386eb01519",
+        "host": "quack",
+        "pid": 1982541,
+        "start": "101568383",
+        "at": "2026-11-25T00:22:32Z",
+        "branch": "unit/native/imperium-first-stops",
+        "beats": true
+      },
+      "round": "2026-11-25T00:22:32Z"
     },
     {
       "id": "native/names-straddling-bitfields",
