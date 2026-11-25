@@ -5722,6 +5722,12 @@
       "title": "The native lift runs IWRAM code the game patches",
       "detail": "The native lift (gbaa-lift) lifts an IWRAM copy only as its ROM bytes; the recompiler's codegen::variants (versions of blocks seen patched, run by which bytes IWRAM holds) has no native counterpart, though docs/native-port-design.md's holes table says variants become functions and the patching store a field saying which runs. RHH-style m4a (Emerald Imperium, Emerald Rogue) stamps instructions into its IWRAM mixer: the compressed-sample decoder's two strb at 0x03001e78 (stm r9, {r12, lr} from 0x03001e8c/0x03001e94) and the interpolation loop's mov r0, r0 slots from 0x03002100 (a table at pc+0x1b0 picked by the pitch step, stm lr, ...). The lift runs the nops: the fraction r7 never advances, each frame takes a sample fewer than the interpreter's (0xaf against 0xb0), a sample's end is missed, and the decoder's stack buffer clear (0x03002724, from 0x03001fa0) zeroes IntrMain's literal at 0x030047e8, a stop at frame 436 in IntrMain (pointer 0 outside its global 0x03004ec4). Do: give the native lift the patched versions (seen by a run, as codegen::variants does, or the patch sites' bytes read at run time), with a test program that patches an IWRAM loop (agb, lift-check), and a hard hole for a patched copy left as is. Done when: the test program passes lift-check with a planted control, and Imperium's lift passes frame 436; just check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/emerald-lent-local-stop",
+      "title": "Emerald's lift stops at frame 5055 on a lent local",
+      "uses": ["heavy"],
+      "tags": ["slow-check"]
     }
   ]
 }
