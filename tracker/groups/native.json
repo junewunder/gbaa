@@ -5542,6 +5542,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-25T05:53:17Z",
+          "by": "5b75ea47",
+          "text": "Not run: a --shadow-locals lift of Metroid on its route (--shadow-locals turns frameless off, so this change can't show there; Metroid's plain native route passed). The 4 escaping accesses are fill_rect's stack args: {unit:native/lift-stack-args}."
+        },
+        {
           "at": "2026-11-25T04:46:58Z",
           "by": "6056824b",
           "text": "Overseer: lent-print broke Emerald on main (stops at frame 5055 of units/emerald-native.toml on a lent local; the regression unit holds it). Run Emerald's route before landing; don't widen what goes frameless past what that fix allows."
