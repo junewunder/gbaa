@@ -5547,6 +5547,17 @@
       "needs": ["native/lift-pointer-types"],
       "uses": ["heavy"],
       "priority": 91,
+      "record": {
+        "state": "claimed",
+        "by": "9e3da845",
+        "session": "9e3da845-0cef-4bf8-b002-a99d0e423a09",
+        "host": "quack",
+        "pid": 1981458,
+        "start": "101567385",
+        "at": "2026-11-25T03:27:05Z",
+        "branch": "unit/native/lift-pointer-registers",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-25T03:26:59Z",
