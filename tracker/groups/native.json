@@ -5484,7 +5484,19 @@
       "check": "recorded",
       "needs": ["native/lift-stack-arrays"],
       "uses": ["heavy"],
-      "priority": 92
+      "priority": 92,
+      "record": {
+        "state": "claimed",
+        "by": "e30a7b20",
+        "session": "e30a7b20-03a2-4b53-955e-6059ae96b750",
+        "host": "quack",
+        "pid": 1983326,
+        "start": "101568883",
+        "at": "2026-11-25T00:26:35Z",
+        "branch": "unit/native/lift-lent-print",
+        "beats": true
+      },
+      "round": "2026-11-25T00:26:35Z"
     },
     {
       "id": "native/lift-lent-frameless",
