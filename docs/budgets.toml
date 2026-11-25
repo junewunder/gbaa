@@ -69,10 +69,12 @@ max_lines = 2023
 # section 5's paragraph, two short tables); 1314 after
 # native/lift-text-editable's bullet on text as literals (6 lines); 1350
 # after native/lift-stack-arrays' design section (36 lines: its card asks
-# for what a pointer to a host local is, before the work).
+# for what a pointer to a host local is, before the work); 1482 after
+# native/llm-helpers-signatures-design's section (132 lines: its card asks
+# for the whole design, five parts and the owner's questions, here).
 [[doc]]
 path = "docs/native-port-design.md"
-max_lines = 1350
+max_lines = 1482
 
 [[doc]]
 path = "AGENTS.md"
