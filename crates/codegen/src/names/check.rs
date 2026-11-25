@@ -468,6 +468,7 @@ pub fn check_rom(
             spins: plain.spins.clone(),
             library: plain.library.clone(),
             given_jumps: plain.given_jumps.clone(),
+            unwinds: plain.unwinds.clone(),
         };
         for f in funcs {
             rep.funcs += 1;

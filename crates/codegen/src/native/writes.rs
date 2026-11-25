@@ -341,7 +341,7 @@ fn local(
                         .unwrap_or_else(|_| target.into_iter().collect()),
                     regs,
                 ),
-                Plan::Undefined { .. } => (vec![], regs),
+                Plan::Undefined { .. } | Plan::Unwind => (vec![], regs),
             };
             for t in succs {
                 if !f.blocks.contains_key(&t) {
@@ -429,7 +429,7 @@ fn local(
         for x in exits(ctx, b) {
             match x.plan {
                 Plan::Static(t) | Plan::Rekey(t) if !f.blocks.contains_key(&t) => callees.push(t),
-                Plan::Static(_) | Plan::Rekey(_) | Plan::Undefined { .. } => {}
+                Plan::Static(_) | Plan::Rekey(_) | Plan::Undefined { .. } | Plan::Unwind => {}
                 Plan::Call { target, .. } => callees.push(target),
                 Plan::Swi { .. } => {
                     if let Op::Exit(Exit::Swi { comment, .. }) = insts[x.index].op
