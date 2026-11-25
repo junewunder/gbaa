@@ -1268,285 +1268,135 @@ doc comments of `frame::lend` and `native::code_lends`).
 
 ## LLM rewrites that add helpers and change signatures (`native/llm-helpers-signatures-design`)
 
-Designed 2026-11-25, from the owner's thoughts of 2026-11-24 on Mirror's
-task struct lookups and Emerald's two forms of GetMonData (not yet a
+Designed 2026-11-25, from the owner's thoughts of 2026-11-24 (not yet a
 decision): an LLM pass should be able to name a repeated inlined shape as
-one Rust item, and to change a function's signature. A rewrite today
-can do neither. Tests, not proof, as for rewrites (june, 2026-11-13). No
-code yet: the units are filed and wait on the three questions at the end.
+one Rust item (Mirror's task struct lookup, 1,070 times in the lift) and
+to change a signature (Emerald's GetMonData, declared with two parameters
+and with three). Tests, not proof, as for rewrites (june, 2026-11-13). No
+code: the units are filed and wait on the questions at the end.
 
-### 1. What a rewrite may do today
+**Today.** A stand-in (`[[standin]]`) is the text of one `f_<key>` in
+stage A's four-register form. Its body may use anything in the prelude,
+but it can't yet name the lift's globals or functions (the name picker
+renames the lift's own: `native/standin-lift-names`). Its callers are
+lifted code printed from shapes, and a stand-in keeps four registers
+(`shape.rs`, `Node::standin`), so a rewrite can't drop a parameter, return
+a typed value or change a caller. A second item in its text is private to
+it, and no lifted code calls it. A cut (`[[cut]]`) keeps the lifted
+signature, and its calls print in its lift's shapes, so a build whose
+shapes differ breaks it at rustc (`native/cut-callee-shapes`). fn-check
+enters both sides through one four-register wrapper (`F`) and compares
+what callers read (`Spec::results`). So it is one function in, one out, in
+the same shape. Both additions below are lifter inputs, not edits of lifted
+text, so they reach every place the lifter prints, and the next lift keeps
+them.
 
-- **A stand-in** (`[[standin]] entry, why, code`, in the game's holes file
-  or a `--replace` file; `Holes::standins`) is the text of `f_<key>` and
-  nothing else: Rust in stage A's four-register form, `fn(g: &mut Game,
-  sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit>`. Its body may use
-  anything the prelude has (`ld*`/`st*`, typed `Ref<T>` fields,
-  `bank_sp`, `hw::idle`, `call_fn` by key). It can't yet name the lift's
-  globals and functions: a name in its text, its `why` included, makes the
-  name picker rename the lift's own (`TaskGetNextSlot_`), so the pilots'
-  rewrites use addresses and keys (Stand-ins may name the lift's globals
-  and functions, `native/standin-lift-names`, fixes that).
-- **Its callers don't change.** They are lifted code, printed from shapes
-  (`native::shape`), and a stand-in keeps four registers (`Node::standin`:
-  its callers are "blind"), so every caller passes r0-r3 and reads back
-  what it read before. A rewrite can't take fewer parameters, return a
-  typed value, or change what a caller passes.
-- **One item.** The text is pasted as the function's own, in whichever
-  module the split puts it. A second item in it is private to that text,
-  and no lifted code calls it: a helper that two rewrites, or a rewrite and
-  the lift, share has nowhere to live.
-- **A cut** (`[[cut]]`, a mod's edit, `native/lift-mod-cut`) keeps the
-  lifted signature, and its calls are printed in the shapes its lift had.
-  A build whose shapes differ breaks it: fn-check's lift (`--fn-check-cuts`)
-  checks the cut behind an adapter, a callee's shape widens to (r1, r2,
-  r3), and the cut no longer compiles (A cut's calls build in fn-check's
-  lift too, `native/cut-callee-shapes`). That is the first case of a
-  signature changing under hand-written code. The rule below for it is
-  the same: rustc names the call, and the fix is made at the call.
-- **The check** (`native/fn_check.rs`) enters the reference and the
-  replacement through one wrapper type, `F`, in four registers, and
-  compares the registers callers read (`Spec::results`): the shape is the
-  same on both sides.
+**Shared helpers.**
 
-So: one function in, one function out, the same shape. What follows adds
-lifter inputs instead of editing lifted text. A change then reaches every
-place the lifter prints, and the next lift keeps it.
+- *Finding them.* The candidates are mechanical
+  (`native/lift-clone-count`). The report lists each maximal pure region
+  (an expression tree, or a single-entry, single-exit region that only
+  loads and computes one register), normalised (inputs by role, constants
+  kept), with its occurrences times its size and the functions it is in.
+  The choice and the name are an LLM's, read against the names files and
+  the source (`TaskGetStructPtr` is a katam macro, with no symbol). No rule
+  tells a concept the authors had from a compiler idiom or chance.
+- *Declared once by example, applied by the lifter*
+  (`native/lift-helper-match`). In `mods/<game>/helpers.toml` (private), a
+  `[[helper]]` gives `name`, `like` (one site's first instruction),
+  `params`, `returns`, `kind` and `why`. The lifter takes that site's
+  normal form as the pattern, so the LLM writes no pattern language and
+  can't write one that differs from the code. It prints a call at every
+  exact match and lists the near misses. By default the helper's body is
+  the pattern itself, printed once in `helpers.rs`, which is exact by
+  construction. An optional `body` written by the LLM is tested (below).
+  A compiler's or library's helper is lifter code, tracked, once a C
+  program shows it. Stand-ins name a helper as they name lift items.
+- *Function or macro.* A helper is a function (values in, a value out,
+  `g` and `Result<_, Exit>` allowed) unless its region leaves the enclosing
+  function or loop, assigns caller locals that live on, or takes a place.
+  Then it is a macro, and the lifter refuses `kind = "fn"`, naming why.
+  Mirror's lookup is a function once its arms print as a value
+  (`native/lift-arm-values`). Before then it is two labelled blocks
+  writing one register, a macro's case.
 
-### 2. Shared helpers
+**Signatures.** Callers print from the callee's shape, and since
+`native/lift-signature-holes` a names-file prototype sets that shape,
+refused only on a proven read. A changed signature is a prototype in
+`mods/<game>/protos.toml` (`[[proto]] fn, proto, why`), written by the LLM
+and winning over the names files (`native/lift-proto-overrides`). The next
+lift prints every direct caller in the new shape, and pointer calls keep
+the adapter (`a_`). A refused override fails the lift and names the read,
+because someone asked for that shape. A `[[standin]]` with `proto = true`
+prints in that shape, and only then can a rewrite drop parameters. A
+hand-written caller using the old shape by name fails at rustc and is fixed
+at the call, as `native/cut-callee-shapes` is.
 
-**Who finds the shape.** It takes two steps:
+**Per-call-site forms** (`native/lift-call-forms`). The three-argument
+GetMonData passes each caller's r2 (exact, but it prints a junk argument).
+The two-argument form is wrong where the field copies out. A `[[form]]`
+(`fn`, a narrower `proto`, `when = { arg = 1, not = [MON_DATA_…] }` or
+`sites`) prints the narrow form at calls whose argument is a constant the
+rule takes in, through a wrapper that passes 0 for the argument it omits.
+A rule by value covers calls a later lift finds; a non-constant argument
+keeps the wide form. The form claims that the argument is unread there.
+A path-sensitive summary may prove the claim (GetMonData's own question,
+option a), or the LLM declares it and tests check it.
 
-- *Candidates, mechanically.* The lift's report gets a clone count (The
-  lift's report lists its repeated pure regions, `native/lift-clone-count`).
-  It takes each maximal pure region: an expression tree of IR values, or a
-  single-entry, single-exit region of blocks that only loads and computes
-  and ends with one register defined. Each region is normalised (inputs by
-  their role, registers abstracted, constants kept) and hashed. The list is
-  ordered by occurrences times size and names the functions each region is
-  in. This is exact and cheap, and it would list Mirror's lookup at about
-  1,070 sites.
-- *The choice and the name: an LLM's*, or an agent's. It reads the list
-  against the names files and the source where there is one (katam's
-  `TaskGetStructPtr` is a macro, with no symbol, so its name comes from
-  the source, not from DWARF). No rule decides which candidates name a
-  concept the authors had and which are a compiler idiom or chance. The
-  owner doubts the lifter can find such things by rule over and over, and
-  a rule per case is what Mirror's task struct lookups print as one
-  helper (`native/lift-task-struct`) would have been.
+**The checks.**
 
-**Declared once, applied by the lifter.** The LLM doesn't rewrite 1,070
-sites. It writes one declaration, and the lifter prints a call at every
-exact match (Helpers declared once by example print at every match,
-`native/lift-helper-match`):
+- *A helper by example, with the pattern as its body:* exact if the
+  matcher is right. lift-check tests the matcher: a C program with one
+  macro inlined at many sites and a near miss, and a planted wrong derived
+  body that the native check must catch.
+- *A helper with the LLM's body:* `native/fn-check-helper` runs the
+  pattern's expansion (`ref_h_<name>`) and the body from the same state at
+  each call on the run, with variants of the inputs and the RAM loaded.
+  The route covers the sites it reaches.
+- *An override:* the function's own fn-check, the wrapper entering each
+  side in its own shape. It doesn't see the callers; the native route and
+  a planted wrong override on a C program (as `--plant-proto` is) do.
+- *A form:* new fn-check variants rerun each call in the form with the
+  omitted argument random, and the ends must be the same. A C program has a
+  form planted where the argument is read, and the check must catch it.
+- *Nothing catches* code that no run reaches (Mirror's link code and pause
+  menu, Emerald off its route), the structured inputs that random variants
+  miss (round two's off-by-four, `docs/research/llm-pilot.md`), or a field
+  value no run passes. Only exactness covers unreached code. So the design
+  prefers derived bodies, exact matches and proven forms where they are
+  cheap, and the report counts the sites that some check ran.
 
-```toml
-# mods/kirby-mirror/helpers.toml (private: game-derived)
-[[helper]]
-name = "task_struct_ptr"
-like = 0x080…          # one site: the first instruction of the region
-params = ["task"]      # the region's inputs, in order, named
-returns = "u32"
-kind = "fn"            # or "macro"
-why = "katam's TaskGetStructPtr macro"
-# body = "…"           # optional: without it the region itself is the body
-```
+**The two waiting units.** Mirror's task struct lookups print as one
+helper (`native/lift-task-struct`): under `q/llm-shared-helpers` a, it
+becomes Mirror's one declaration, written by an LLM pass from the clone
+list. It needs the matcher and is checked by the count falling, lift-check
+and Mirror's route; this is its own question's option b, with no rule for
+the game. Under b it is dropped (its question's a). Emerald's
+GetMonData's two-argument calls take a prototype
+(`native/lift-proto-two-forms`): under `q/llm-call-forms` a, it becomes
+Emerald's `[[form]]`, read from pret's switch. It needs the forms unit and
+is checked by `proto_shapes_refused` falling (barred), the unread variants,
+600 frames and its route once `native/emerald-native-route` is done; its
+own question's "trust pret" is this form with no test. Under b it is that
+question's option a. Under c it is dropped.
 
-- *By example.* `like` names one occurrence, and the lifter takes that
-  region's normal form (the clone count's) as the pattern. The LLM writes
-  no pattern language, and so it can't write a pattern that differs from
-  the code. A match is the same normal form at another site: the same
-  operations and constants, with the inputs in the same roles. Near misses
-  (one constant or one operation off) are listed in the report, not
-  matched.
-- *The body.* By default the lifter prints the pattern once as the
-  helper's body, in the crate's `helpers.rs`. That is exact by
-  construction: the LLM supplies only the name and the parameters' names
-  and types. A `body` the LLM writes (`if flags & 0x10 { … } else { … }`,
-  more readable than the printed region) is allowed, and is checked as
-  section 4 says.
-- *Where it lives.* A game's helpers go in `mods/<game>/helpers.toml`,
-  beside its holes file (game-derived, private). A compiler's or a
-  library's (libgcc's, an agbcc idiom) go in the lifter, tracked, once a C
-  program shows them (test programs may share short ARM idioms with
-  games). The generated `helpers.rs` is in `out/` with the rest.
-- *Rewrites use it.* A stand-in names it as it names lift items, once
-  native/standin-lift-names is done, so the rewrites of the functions that
-  hold sites share it.
+**The owner's choices** (asked 2026-11-25; the five units wait on them):
 
-**Function or macro.** A helper is a function unless the shape can't be
-one, and what decides is what crosses its boundary. A function takes values
-and gives back one value (or a tuple). It may read or write `g` and return
-`Result<_, Exit>` for `?`. A macro is needed only where the shape (a)
-leaves the enclosing function or loop (`return`, `break 'bN`), (b) assigns
-several of the caller's locals that live on past it (registers kept `mut`
-across blocks), or (c) takes a place, not a value. The lifter refuses a
-`kind = "fn"` declaration whose region does one of these, and names which.
-Mirror's lookup is two arms that compute one address from the task, with
-no exit, so it is a function. That holds once the arms print as a value (A
-value chosen in each arm prints as an if/match value,
-`native/lift-arm-values`). Before then the lookup is two labelled blocks
-that write one register, case (b), and only a macro fits, so the matcher
-waits on that unit's printing. The clone count works on blocks, so it
-doesn't wait.
-
-### 3. Signatures
-
-**A signature is a lifter input, never an edit of the callers.** Callers
-are printed from the callee's shape. Since `native/lift-signature-holes`, a
-prototype from the names files sets that shape, hole or not, and is refused
-only where the summaries prove it wrong (decided 2026-11-24). A changed
-signature is then a prototype that the names files lack (a game with no
-decomp) or give wrongly or twice (pret's GetMonData). It goes in a
-per-game file that the LLM writes, which the lifter reads as it reads the
-names files' prototypes and which wins over them (A game's own prototype
-file; stand-ins in its shape, `native/lift-proto-overrides`):
-
-```toml
-# mods/emerald/protos.toml (private)
-[[proto]]
-fn = "GetMonData"      # a name or a key
-proto = "u32 GetMonData(struct Pokemon *mon, s32 field, u8 *data)"
-why = "…"
-```
-
-- *Every caller at once.* The next lift prints every direct caller in the
-  new shape, and pointer calls go through the adapter (`a_`) in four
-  registers as today. The refusal rule doesn't change: a proven read past
-  the prototype's parameters, or a caller's proven read of a result it
-  doesn't return, refuses it. For an override, though, a refusal fails the
-  lift and names the read, rather than falling back in silence: someone
-  asked for that shape.
-- *A stand-in in the new shape.* A `[[standin]]` with `proto = true` is
-  printed with the prototype's parameters and result, not in four
-  registers, and its callers take that shape. Only then may a rewrite take
-  fewer arguments and return a typed value.
-- *Hand-written callers.* A stand-in or cut that calls the function by
-  name in the old shape stops compiling, and rustc names the call. The fix
-  is made at that call, as native/cut-callee-shapes's is. A caller through
-  `call_fn` goes through the adapter and is unchanged.
-
-**Per-call-site forms.** GetMonData is one function with two C
-prototypes. Callers of the two-argument form leave r2 holding whatever it
-held, and `GetBoxMonData` reads r2 only for the fields that copy out. No
-single shape is both exact and readable for every call. The three-argument
-shape passes each caller's r2, which is exact but prints a junk argument;
-the two-argument shape leaves r2 out, which is wrong wherever the field
-copies out. A *form* is a second shape at chosen calls (A function's
-second form at chosen calls, tested unread, `native/lift-call-forms`):
-
-```toml
-[[form]]
-fn = "GetMonData"
-proto = "u32 GetMonData(struct Pokemon *mon, s32 field)"
-when = { arg = 1, not = ["MON_DATA_NICKNAME", "MON_DATA_OT_NAME", "…"] }
-# or sites = [0x…], by call instruction
-```
-
-At a call whose argument 1 is a constant that the rule takes in, the
-lifter prints the narrow form, `get_mon_data2(g, mon, field)`, a wrapper
-that passes 0 for the argument it leaves out. A rule by value is better
-than a list of sites: it covers calls a later lift finds, and it says why.
-At a call whose argument isn't a constant the lift sees, the wide form
-stands. The form claims that the argument is unread at those calls. Either
-the summaries prove the claim (a path-sensitive summary, GetMonData's own
-question's option a, and then no file is needed: the lifter does it), or
-the LLM declares it from reading the switch and tests check it (below).
-
-### 4. The checks
-
-What each check catches. None of them is proof (june, 2026-11-13).
-
-| change | fn-check | lift-check's planted faults | the game's native route | nothing catches |
-|---|---|---|---|---|
-| a helper by example, its body the pattern | nothing to catch if the matcher is right | the matcher: a C program with one inlined macro at many sites and a near miss; a planted wrong derived body (`--plant-helper`) caught by the native check | every site the route reaches | a matcher bug that shows only in code no run reaches |
-| a helper with the LLM's body | at each call of the helper on the run (fn-check tests an LLM-written helper body at its sites, `native/fn-check-helper`), the pattern's own expansion (`ref_h_<name>`) and the body from the same state, with variants of its inputs and of the RAM it loaded: the same driver, a region instead of a function | — (the body is the game's) | every site the route reaches | operand values no run or variant makes; sites in code no run reaches |
-| a prototype override | the function's own check, the wrapper entering the reference in the lift's shape and the replacement in the new one; it doesn't see the callers | a C program's planted wrong override (as `--plant-proto` does today) caught by the native check | the callers on the route | a caller off the route that reads a result the prototype leaves out, past a hole the summaries can't see through |
-| a per-site form | new variants: each call in the form is run with the omitted argument as passed and as random, and the ends must be the same (the argument is unread there, by test) | a C program with a two-form function; a form planted at a call whose argument is read, caught | the route's calls | a field value that no run passes at a call where the omitted argument is read |
-
-Across all four, nothing catches code that no run reaches (Mirror's link
-code past its init, the pause menu, Emerald off its route) or the
-structured inputs that random variants don't make (round two's
-off-by-four in IwramMalloc, `docs/research/llm-pilot.md`). The only cover
-for unreached code is exactness. So where it is cheap, the design prefers
-derived bodies over written ones, exact matches over near ones, and
-proven forms over declared ones. A written body or a declared form is
-tested only where something runs it, and the report says so: the count
-of sites, and of those, the sites any check ran.
-
-### 5. The two waiting units, under each choice
-
-**Mirror's task struct lookups print as one helper
-(`native/lift-task-struct`)**, waiting on its own question (a per-game
-helper in the lift?):
-
-- *Declared once* (q/llm-shared-helpers, a): the unit becomes Mirror's
-  declaration: an LLM pass names one site, from the clone count's list and
-  katam's macro, in `mods/kirby-mirror/helpers.toml`. It needs
-  native/lift-helper-match. Its check: the report's 1,070 sites fall to
-  the near misses, lift-check passes with the matcher's C program, and
-  Mirror's native route stays at 0 differences. This is its question's
-  option b, with the declaration written by the LLM pass, not by a rule
-  for this game.
-- *Each site rewritten* (b): the unit is dropped (its question's a). Each
-  function rewrite carries the two arms or a private copy, and the 1,070
-  sites stay in the lift until their functions are rewritten.
-- *Not now* (c): it waits.
-
-**Emerald: GetMonData's two-argument calls take a prototype
-(`native/lift-proto-two-forms`)**, waiting on its own question (prove r2
-unread, or trust pret?):
-
-- *Declared and tested* (q/llm-call-forms, a): the unit becomes Emerald's
-  `[[form]]` for GetMonData, its fields read from pret's switch. It needs
-  native/lift-call-forms. Its check: Emerald's `proto_shapes_refused`
-  falls by the calls the form covers (barred in
-  `mods/emerald/lift-bars.toml`); the unread variants pass; Emerald runs
-  600 of 600 frames headless; and its route stays at 0 differences once
-  Emerald's lift matches the play build on a route
-  (`native/emerald-native-route`) is done. Its own question's "trust pret"
-  is this form with no test.
-- *Only proven* (b): the unit is its question's option a, a path-sensitive
-  summary, with no form file.
-- *Never* (c): the unit is dropped, and the 876 calls keep their
-  register-passing form.
-
-**Units filed** (2026-11-25), each waiting on its question:
-native/lift-clone-count, native/lift-helper-match and
-native/fn-check-helper on q/llm-shared-helpers;
-native/lift-proto-overrides on q/llm-signatures; native/lift-call-forms
-on q/llm-call-forms. All of them are code-shape lifter work, judged on the
-C programs and a game (the owner's rule).
-
-### The owner's choices (asked 2026-11-25)
-
-1. **How should an LLM pass add a helper many functions share?**
-   (`q/llm-shared-helpers`)
-   - a (default): it is declared once by example, and the lifter prints it
-     at every exact match. The LLM writes one `[[helper]]` in
-     `mods/<game>/helpers.toml`. This builds the clone count, the matcher
-     and the helper check, and Mirror's lookup becomes a declaration.
-   - b: the LLM rewrites each site inside its function rewrites. There is
-     no lifter change but the clone count, and the 1,070 sites stay until
-     their functions are rewritten.
-   - c: not now. The three units wait.
-2. **May an LLM pass change a function's signature?** (`q/llm-signatures`)
-   - a (default): yes, through `mods/<game>/protos.toml`. The lift uses
-     it as it uses the names files' prototypes, refused on a proven read,
-     every caller changes at the next lift, and a stand-in may take the
-     shape.
-   - b: only decomp prototypes. Games with no decomp keep the summaries'
-     shapes, and stand-ins keep four registers.
-   - c: not now.
-3. **May a call use a narrower form of its callee, tested only?**
-   (`q/llm-call-forms`)
-   - a (default): a form the LLM declares prints at the calls its rule
-     takes in, and fn-check's unread variants and the route test it. This
-     loosens "refuse only on a proven read" to "a declared form stands
-     until a test shows the read".
-   - b: only where proven: GetMonData's own question's option a, a
-     path-sensitive summary.
-   - c: never. The calls keep the widest form.
+1. *How should an LLM pass add a helper many functions share?*
+   (`q/llm-shared-helpers`, blocking the clone count, the matcher and the
+   helper check.) a (default): declared once by example, and the lifter
+   prints it at every exact match. b: the LLM rewrites each site in its
+   function rewrites, and the lifter gets only the clone count. c: not now.
+2. *May an LLM pass change a function's signature?* (`q/llm-signatures`,
+   blocking the overrides.) a (default): yes, through
+   `mods/<game>/protos.toml`, refused on a proven read, with every caller
+   changed at the next lift. b: only decomp prototypes, and stand-ins keep
+   four registers. c: not now.
+3. *May a call use a narrower form of its callee, tested only?*
+   (`q/llm-call-forms`, blocking the forms.) a (default): a declared form,
+   tested by the unread variants and the route. This loosens "refuse only
+   on a proven read" to "a declared form stands until a test shows the
+   read". b: only where a path-sensitive summary proves it. c: never.
 
 ## The units that follow
 
