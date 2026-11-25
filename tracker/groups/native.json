@@ -5760,7 +5760,14 @@
       "title": "WarioWare's lift: the call to 0x080f0669 (frame 130)",
       "detail": "After WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39) ({unit:native/warioware-stop-30003a8}): with the copier's stand-in and the IWRAM division's [[copy]] (mods/warioware/holes.toml) the lift stops at frame 130 of 600: f_080f1239 (pc 0x080f1417) calls 0x080f0669, no function: a Thumb function in the sound driver's ROM (0x080f0668: orrs r0, r0; bne; bx lr; then push r4-r11), between its copied routines, that discovery didn't find (likely a pointer call or a table entry). Its ROM neighbour 0x08002620 also copies 0x08000910..0x08000ae0 (an ARM integer square root) to 0x030001c0, which no [[copy]] names yet. Done when: just lift on WarioWare has 0 hard holes, builds, and its first stop is past frame 130 (filed as a unit if not 600 of 600); route-check --native on units/warioware-native.toml (its header has the commands) matches the play build to the new stop, or the first difference is filed; just check passes.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-25T05:37:51Z",
+          "by": "dd60d8a9",
+          "text": "The copier stand-in's resume path (busy byte 0x03004880 set) never ran in frames 1-129: 5 calls, each finishing. Past 130, if route-check differs after a call with busy set, look there first (mods/warioware/holes.toml, f_030003a8)."
+        }
+      ]
     }
   ]
 }
