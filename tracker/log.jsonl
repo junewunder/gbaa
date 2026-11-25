@@ -4309,3 +4309,4 @@
 {"at":"2026-11-24T23:53:24Z","actor":"loop","tag":"81cfc956","host":"quack","cmd":"done","id":"native/emerald-m4a-compressed","text":"Emerald's lift mixes m4a's compressed samples as play does: done"}
 {"at":"2026-11-25T00:18:22Z","actor":"loop","tag":"c69dfdbb","host":"quack","cmd":"done","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: done"}
 {"at":"2026-11-25T00:18:24Z","actor":"loop","tag":"c69dfdbb","host":"quack","cmd":"note","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: note: Private bars for results_several/tuple_calls are committed in the mods repo (64a3ad8, metroid and emerald lift-bars.toml) but not pushed: sessions don't push."}
+{"at":"2026-11-25T00:22:28Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/emerald-m4a-compressed","text":"Emerald's lift mixes m4a's compressed samples as play does: on main"}
