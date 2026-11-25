@@ -2081,7 +2081,12 @@
         "host": "quack",
         "unit": "native/lift-takes-across-copies"
       },
-      "answer": null
+      "answer": null,
+      "withdrawn": {
+        "at": "2026-11-25T01:15:53Z",
+        "by": "6056824b",
+        "why": "Moot: the '4 to 3' it asks about was the overseer's own sentence, added to the card on 2026-11-24, not the owner's. The card now says the r5 read moves to the resume, which the restore unit closes; counts are the agents' call by the owner's decision of 2026-11-12."
+      }
     }
   ]
 }

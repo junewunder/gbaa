@@ -5161,12 +5161,6 @@
       "check": "recorded",
       "uses": ["heavy"],
       "priority": 94,
-      "record": {
-        "state": "blocked",
-        "on": "q/may-minish-cap-s-cross",
-        "by": "5d94ca93",
-        "at": "2026-11-25T01:15:12Z"
-      },
       "notes": [
         {
           "at": "2026-11-25T01:15:20Z",
