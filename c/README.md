@@ -19,7 +19,8 @@ are the programs' names files (`target/release/pret-names ELF ROM OUT`;
 c/switch's), which give their lifts types (native/lift-typed-access); a
 changed ROM needs its file made again, or its lift has no names.
 
-- A program's own `.s` files are assembled into it too (`jump/setjmp.s`).
+- A program's own `.s` files are assembled into it too (`jump/setjmp.s`,
+  `resume/resume.s`).
 - `common/`: our own start-up and hardware, no game's or library's code
   (no libtonc, no libgba). `crt0.s` (ARM: points the BIOS's IRQ vector at
   its `irq_handler`, copies `.data`, zeroes `.bss` and `.ewram`, calls
@@ -53,9 +54,10 @@ changed ROM needs its file made again, or its lift has no names.
 | `loops/`    | counted loops to a parameter, a global and a field; nested, counting down, breaking out, skipping rounds, a `u8` counter; arrays indexed by the counter: of structs, a field array through a pointer, two by one counter, a pointer stepped beside it |
 | `list/`     | a linked list over a static node pool: a free list and a sorted live list through one `next`, inserted into through a `Node **`, removed from and walked each frame, an `act` function pointer per node |
 | `jump/`     | errors thrown with `longjmp` out of a recursion to an outer and an inner `setjmp` (`setjmp.s`: the ARM pair behind Thumb entries, a program's own assembly) |
+| `resume/`   | restores that load sp and pc from a block of their own (`resume.s`): a search bailing out to its guard (`ldr sp; ldr pc`), a loop's step dropped from below and the loop going on (`ldr sp; b` into it) |
 | `lent/`     | a stack struct whose callee reads only its last byte: the address lent lies before the bytes lent (Emerald's RTC status) |
 
-The nine programs (eighteen ROMs) are in the lifter's check (`just
+The ten programs (twenty ROMs) are in the lifter's check (`just
 lift-check`, `crates/codegen/lift-check.toml`'s `c-*` tables, routes
 `units/c-<name>-<cc>-600.toml`), each with a planted store. A new program:
 copy `template/`, write its `SCENE.md`, run `just c-tests`, then add its

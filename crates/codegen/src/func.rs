@@ -68,6 +68,10 @@ pub struct Ctx<'a> {
     /// the function's blocks reach them. Only the native lift sets them
     /// ([`Ctx::with_jumps`]).
     pub given_jumps: BTreeMap<u32, Vec<u32>>,
+    /// The jumps of the context restores that load sp and pc from a saved
+    /// block, by address: each is a [`Plan::Unwind`]. Only the native lift
+    /// sets them ([`Ctx::with_unwinds`], `native::longjmp`).
+    pub unwinds: BTreeSet<u32>,
 }
 
 /// The library routines the runtime stands in for that a context's code
@@ -244,6 +248,7 @@ impl<'a> Ctx<'a> {
             spins: std::sync::OnceLock::new(),
             library: std::sync::OnceLock::new(),
             given_jumps: BTreeMap::new(),
+            unwinds: BTreeSet::new(),
         };
         // An entry discovery found no code at in its mode (a root whose
         // analysis hit the step cap, or one also a root in the other mode)
@@ -288,6 +293,12 @@ impl<'a> Ctx<'a> {
     /// address.
     pub fn with_jumps<'b>(mut self, jumps: impl IntoIterator<Item = (u32, &'b [u32])>) -> Ctx<'a> {
         self.given_jumps = jumps.into_iter().map(|(a, ts)| (a, ts.to_vec())).collect();
+        self
+    }
+
+    /// This context with its restores' jumps as unwinds ([`Ctx::unwinds`]).
+    pub fn with_unwinds(mut self, unwinds: BTreeSet<u32>) -> Ctx<'a> {
+        self.unwinds = unwinds;
         self
     }
 
@@ -559,6 +570,12 @@ pub enum Plan {
     /// ([`analysis::vsa::func::is_trap`]), which a lift prints as a stop of
     /// the game, not a hole.
     Undefined { trap: bool },
+    /// A context restore's jump, after it loaded sp from a saved block
+    /// (`native::longjmp`; native/lift-restore-saved-block): the target is
+    /// a block of the function that saved it, which the native lift
+    /// reaches by unwinding to that function's frame. The path goes on in
+    /// no block of this function, and returns nowhere.
+    Unwind,
 }
 
 /// An exit of a block, with what codegen needs to lower it.
@@ -704,6 +721,7 @@ pub fn exits(ctx: &Ctx, gb: &GBlock) -> Vec<ExitInfo> {
         };
         let plan = match plan {
             Plan::Static(k) if writes_control => Plan::Rekey(k),
+            _ if ctx.unwinds.contains(&at) && matches!(e, Exit::Jump(_)) => Plan::Unwind,
             p => p,
         };
         let idle_branch = || {
@@ -760,7 +778,7 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
             }
             _ => vec![next],
         },
-        Plan::Undefined { .. } => vec![],
+        Plan::Undefined { .. } | Plan::Unwind => vec![],
     };
     out.extend(x.ret);
     out.extend(ctx.table_targets(x.at, x.thumb).unwrap_or_default());
