@@ -5572,15 +5572,22 @@
       "uses": ["heavy"],
       "priority": 91,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "c1e9bd20",
-        "session": "c1e9bd20-e210-4bfc-88e1-e6036effc34a",
-        "host": "quack",
-        "pid": 1981458,
-        "start": "101567385",
-        "at": "2026-11-25T01:15:32Z",
+        "at": "2026-11-25T03:18:21Z",
+        "evidence": "Register locals (mut params, let mut, the entries' tuple names) declared once with one made Ref type are typed Ref<T>; assignments wrap. ref_new_at_use: Metroid 2955 (main today) -> 1835, Emerald 33780 -> 26408. On merged head f7b8c225: just check passed; just lift-check passed (0 differences, planted faults caught); Metroid just lift 600/600 no stop, native route units/metroid-native.toml 2700 frames 0 differences. Emerald just lift 600/600 no stop on 5269be74 (pre-merge); its rerun on f7b8c225 stopped at the lifter reading mods/emerald/holes.toml: 'unknown table garbage', a table another lane added to the shared private file, not this branch's change. C rows' ref_new bars lowered, lines raised 1-10 on 26 rows (tuple lets split). native-copy-takes given its missing results_several/tuple_calls bars (main merged two units side by side).",
         "branch": "unit/native/lift-pointer-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T03:18:21Z",
+          "by": "c1e9bd20",
+          "host": "quack",
+          "pid": 1981458,
+          "start": "101567385",
+          "beats": true,
+          "session": "c1e9bd20-e210-4bfc-88e1-e6036effc34a",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-25T01:15:32Z"
     },
