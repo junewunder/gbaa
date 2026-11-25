@@ -5674,15 +5674,22 @@
       "uses": ["heavy"],
       "priority": 88,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "2b1424bb",
-        "session": "2b1424bb-90bf-4b8f-aeb0-b1726da23d1d",
-        "host": "quack",
-        "pid": 1981823,
-        "start": "101567893",
-        "at": "2026-11-25T03:22:15Z",
+        "at": "2026-11-25T05:27:06Z",
+        "evidence": "On a762907d (main 89ba14ab merged): just check passes. just lift-check --only c-resume-agbcc --only c-resume-gcc passes: the new program c/resume (resume.s: bail's ldr sp; ldr pc from guard_call's adr'd block, skip's ldr sp; b into run_list's loop) matches the play build for 600 frames in both builds, packed and dense too, planted gFrame++ store caught in each (frame 2). Minish Cap: just lift (--mem 6G, peak 1.3G) 4 -> 0 hard holes and builds (first stop 4/600, EEPROMWrite's wait); holes-all on main 466c8a46 against the branch: only minish-cap moved (4 -> 0), the others equal (emerald compared with mods e97854b's holes file, since main can't read the mods' new [[garbage]]); post-merge minish-cap 0. Review is the loop's.",
         "branch": "unit/native/lift-restore-saved-block",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T05:27:06Z",
+          "by": "2b1424bb",
+          "host": "quack",
+          "pid": 1981823,
+          "start": "101567893",
+          "beats": true,
+          "session": "2b1424bb-90bf-4b8f-aeb0-b1726da23d1d",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
