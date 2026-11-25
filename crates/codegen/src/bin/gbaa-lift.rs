@@ -122,10 +122,12 @@
 //! one block from a constant start (unit `native/lift-for-loops`), or of
 //! any number of blocks to a bound the guard before it proves the range
 //! of (unit `native/lift-for-bounds`), or tested at its start, which may
-//! leave before the first round (unit `native/lift-for-top-tested`). The
-//! report counts both (`loops_for`, `loops_not_for`). A measure by hand
-//! too. `GBAA_FOR_WHY=1` prints to stderr why each loop of several blocks
-//! stays a `loop`, and each one's range that doesn't.
+//! leave before the first round (unit `native/lift-for-top-tested`); the
+//! bound may be loaded from RAM each round where nothing in a round stores
+//! to it (unit `native/lift-for-ram-bounds`). The report counts both
+//! (`loops_for`, `loops_not_for`). A measure by hand too. `GBAA_FOR_WHY=1`
+//! prints to stderr why each loop of several blocks stays a `loop`, and
+//! each one's range that doesn't.
 //!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,

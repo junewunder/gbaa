@@ -210,6 +210,13 @@ impl Frame {
         self.slots.iter().filter(|s| s.escapes()).count()
     }
 
+    /// Whether the access by inst `i` of block `b` is placed exactly
+    /// below the entry sp: in the function's own frame, not its caller's
+    /// (`native/lift-for-ram-bounds`).
+    pub fn own_at(&self, b: u32, i: usize) -> bool {
+        matches!(self.places.get(&(b, i)), Some(Place::Exact(o, n)) if o + i32::from(*n) <= 0)
+    }
+
     /// The slot an access placed exactly reaches, with its offset and
     /// width.
     fn slot_at(&self, b: u32, i: usize) -> Option<(&Slot, i32, u8)> {
