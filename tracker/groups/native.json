@@ -5481,15 +5481,22 @@
       "uses": ["heavy"],
       "priority": 92,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d3ccf311",
-        "session": "d3ccf311-cee7-4f64-bf35-dce80f9817e9",
-        "host": "quack",
-        "pid": 1981823,
-        "start": "101567893",
-        "at": "2026-11-25T02:10:07Z",
+        "at": "2026-11-25T02:54:52Z",
+        "evidence": "On e494b45a (review fix: fn code's doc moved back above fn code; latest main merged, bars re-measured with lift-metrics --lower-bars, 0 over): just check exit 0; just lift-check passed, 0 differences on every program, every planted fault caught incl. c-chain-gcc --plant-lent=0x080003b2 (frame 47, IWRAM 0x03000048); --shadow-locals lift of c-chain-gcc (4 Lent uses) run 601 frames reports nothing; Metroid native route units/metroid-native.toml pass, 2700 frames, 0 differences.",
         "branch": "unit/native/lift-lent-print",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T02:54:52Z",
+          "by": "d3ccf311",
+          "host": "quack",
+          "pid": 1981823,
+          "start": "101567893",
+          "beats": true,
+          "session": "d3ccf311-cee7-4f64-bf35-dce80f9817e9",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
