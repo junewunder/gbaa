@@ -5170,15 +5170,22 @@
       "uses": ["heavy"],
       "priority": 94,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "87399151",
-        "session": "87399151-c678-4997-85ac-cbcfc6495830",
-        "host": "quack",
-        "pid": 1983326,
-        "start": "101568883",
-        "at": "2026-11-25T01:45:58Z",
+        "at": "2026-11-25T02:09:53Z",
+        "evidence": "Passing::foreign (from {unit:native/ram-jump-passes-regs}) already covered the IWRAM-to-ROM jump crossing; this extends it to [[takes]] sites and direct calls into another context (crates/codegen/src/native.rs, saves/summary.rs). Unit test a_takes_site_passes_into_another_context passes; just lift-check passes incl. native-copy-takes-600 (IWRAM copy pointer-calls ROM taker; --takes-zeroed planted fault caught: EWRAM 0x020000c0 play 0x63 native 0x00). Minish Cap: ZeldaFollowAction r5 hole closed via 22 holes-file [[takes]] entries up to AgbMain, where r5 is finally set (r5=255 at 0x08055f10); the read moves to the resume 0x03005f24 (read at 0x03005f94), the restore unit's; hard holes stay 4 as the corrected card allows. just check passes after merging latest main. Loop review's fix resolved by the overseer's card correction (2026-11-25 note).",
         "branch": "unit/native/lift-takes-across-copies",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T02:09:53Z",
+          "by": "87399151",
+          "host": "quack",
+          "pid": 1983326,
+          "start": "101568883",
+          "beats": true,
+          "session": "87399151-c678-4997-85ac-cbcfc6495830",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
