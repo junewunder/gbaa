@@ -17,10 +17,20 @@
 //! - each `Ref::<T>::new(w)` prints `w`, and every other use `w.addr()`
 //!   (C's pointer as an integer: a compare, arithmetic, an argument).
 //!
-//! Only a variable declared once in its function (no shadowing, no
-//! pattern, not `mut`) and made a `Ref` of one type at least once is
-//! bound; a `Ref::<T>::to(w, k)` (an object `w` is a field of) is an
-//! other use. **A type changes no byte read**: `Ref::new` and `addr` are
+//! A register local (unit `native/lift-pointer-registers`): a `mut`
+//! parameter, a `let mut w: u32`, or a name of the entries' tuple
+//! `let (mut r4, mut pData) = (0u32, 0u32);`, declared nowhere else in
+//! its function, whose made `Ref`s are all of one type, is declared that
+//! type: its own line out of the tuple (`let mut pData: Ref<T> =
+//! Ref::new(0u32);`), a parameter bound again as `mut`, and each plain
+//! assignment's right side wrapped, `pData = Ref::new(e);` (or as it is,
+//! a variable bound to the same type). A register that holds a number in
+//! between holds it as a `Ref` too: the word is the same. One assigned
+//! with others (`(a, w) = …`) or by an operator (`w += 4`) isn't bound.
+//!
+//! Otherwise only a variable declared once in its scope (no shadowing,
+//! no pattern) and made a `Ref` of one type at least once is bound; a
+//! `Ref::<T>::to(w, k)` (an object `w` is a field of) is an other use. **A type changes no byte read**: `Ref::new` and `addr` are
 //! the same word, so the accesses are the ones the untyped text made.
 //!
 //! What it counts, apart by where the type came from: `named` (a type of
@@ -77,15 +87,58 @@ struct Cand {
     decl: usize,
     /// A `let`'s `u32` token and its right side (tokens, the `;` last).
     lett: Option<(usize, usize, usize)>,
+    /// A parameter (bound again after the entries).
+    param: bool,
+    /// Declared once in its function, and followed through its plain
+    /// assignments (`w = e;`): a register local.
+    reg: bool,
+    /// A parameter's `mut` token, dropped where it is bound again.
+    mut_tok: Option<usize>,
+    /// Its tuple `let` (in `lets`) and its place in it.
+    tuple: Option<(usize, usize)>,
+}
+
+/// A `let (mut a, b) = (x, y);`: its `let` and `;` tokens, each name's
+/// tokens (`mut`'s, the name's) and each value's bytes.
+struct TupleLet {
+    first: usize,
+    semi: usize,
+    names: Vec<(Option<usize>, usize)>,
+    vals: Vec<(usize, usize)>,
+}
+
+/// A plain assignment `w = e` of a register local: its right side's
+/// first token and the token after its last.
+type Assign = (usize, usize);
+
+/// The bytes that stay as they are, `frozen` (an edit there drops the
+/// function's), and the bytes [`bind_in`] says where they went, `track`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Keep {
+    pub frozen: (usize, usize),
+    pub track: (usize, usize),
 }
 
 /// `text` (one or more functions) with its pointer variables bound; a
 /// parameter's binding goes no earlier than byte `after` (the end of the
 /// entries the printer finds by their text).
 pub fn bind(text: &str, after: usize) -> (String, Bound) {
+    let (t, b, _) = bind_in(text, after, None);
+    (t, b)
+}
+
+/// [`bind`], leaving `keep.frozen` as it is and giving where
+/// `keep.track` went: the entries' bytes, of which the printer keeps two
+/// copies ([`super::Entries`]) and only their common end may change.
+pub fn bind_in(
+    text: &str,
+    after: usize,
+    keep: Option<Keep>,
+) -> (String, Bound, Option<(usize, usize)>) {
     let mut bound = Bound::default();
+    let unchanged = |b| (text.to_string(), b, keep.map(|k| k.track));
     let Some(toks) = tokens(text) else {
-        return (text.to_string(), bound);
+        return unchanged(bound);
     };
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
     let mut i = 0;
@@ -93,17 +146,34 @@ pub fn bind(text: &str, after: usize) -> (String, Bound) {
         if word(text, &toks, i) == Some("fn")
             && word(text, &toks, i + 1).is_some()
             && punct(&toks, i + 2) == Some(b'(')
-            && let Some(next) = one_fn(text, &toks, i + 2, after, &mut edits, &mut bound)
         {
-            i = next;
-            continue;
+            let (n, b) = (edits.len(), bound);
+            if let Some(next) = one_fn(text, &toks, i + 2, after, &mut edits, &mut bound) {
+                if let Some(k) = keep
+                    && edits[n..].iter().any(|e| touches(e, k.frozen))
+                {
+                    edits.truncate(n);
+                    bound = b;
+                }
+                i = next;
+                continue;
+            }
         }
         i += 1;
     }
     if edits.is_empty() {
-        return (text.to_string(), bound);
+        return unchanged(bound);
     }
     edits.sort_by_key(|e| (e.0, e.1));
+    let track = keep.and_then(|k| {
+        Some((
+            moved(&edits, k.track.0, true)?,
+            moved(&edits, k.track.1, false)?,
+        ))
+    });
+    if keep.is_some() && track.is_none() {
+        return unchanged(Bound::default());
+    }
     let mut out = String::with_capacity(text.len() + edits.len() * 8);
     let mut at = 0;
     for (s, e, t) in edits {
@@ -113,7 +183,27 @@ pub fn bind(text: &str, after: usize) -> (String, Bound) {
         at = e;
     }
     out.push_str(&text[at..]);
-    (out, bound)
+    (out, bound, track)
+}
+
+/// Whether edit `e` changes a byte of `r`, or inserts inside it.
+fn touches(e: &(usize, usize, String), r: (usize, usize)) -> bool {
+    e.0 < r.1 && (e.1 > r.0 || (e.0 == e.1 && e.0 > r.0))
+}
+
+/// Where byte `p` goes under `edits` (sorted): an insertion at `p` goes
+/// after it where `start`, else before. `None` inside a replacement.
+fn moved(edits: &[(usize, usize, String)], p: usize, start: bool) -> Option<usize> {
+    let mut q = p as isize;
+    for (s, e, t) in edits {
+        if *s < p && *e > p {
+            return None;
+        }
+        if *e < p || (*e == p && (*s < p || !start)) {
+            q += t.len() as isize - (*e - *s) as isize;
+        }
+    }
+    Some(q as usize)
 }
 
 fn word<'a>(text: &'a str, toks: &[(Tok, usize)], i: usize) -> Option<&'a str> {
@@ -127,6 +217,14 @@ fn punct(toks: &[(Tok, usize)], i: usize) -> Option<u8> {
     match toks.get(i)?.0 {
         Tok::Punct(c) => Some(c),
         Tok::Word(..) => None,
+    }
+}
+
+/// The byte after token `i`.
+fn tok_end(toks: &[(Tok, usize)], i: usize) -> usize {
+    match toks[i].0 {
+        Tok::Word(_, e) => e,
+        Tok::Punct(_) => toks[i].1 + 1,
     }
 }
 
@@ -146,6 +244,51 @@ fn close_of(toks: &[(Tok, usize)], open: usize) -> Option<usize> {
         }
     }
     None
+}
+
+/// Token `k` begins a statement (or a match arm's expression).
+fn stmt_start(toks: &[(Tok, usize)], k: usize) -> bool {
+    let p = |i: usize| punct(toks, i);
+    k >= 2
+        && (matches!(p(k - 1), Some(b';' | b'{' | b'}'))
+            || (p(k - 1) == Some(b'>') && p(k - 2) == Some(b'=')))
+}
+
+/// `[from, to)`'s items split by `,` at its top: each item's tokens.
+fn items(toks: &[(Tok, usize)], from: usize, to: usize) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut start = from;
+    let mut d = 0;
+    for j in from..to {
+        match punct(toks, j) {
+            Some(b'(' | b'[' | b'{' | b'<') => d += 1,
+            Some(b')' | b']' | b'}' | b'>') => d -= 1,
+            Some(b',') if d == 0 => {
+                out.push((start, j));
+                start = j + 1;
+            }
+            _ => {}
+        }
+    }
+    if start < to {
+        out.push((start, to));
+    }
+    out
+}
+
+/// A pattern item of a name: its `mut` token, if it has one, and the
+/// name's.
+fn name_item(
+    text: &str,
+    toks: &[(Tok, usize)],
+    (s, e): (usize, usize),
+) -> Option<(Option<usize>, usize)> {
+    let n = |i| word(text, toks, i).filter(|w| *w != "mut" && *w != "_");
+    match e - s {
+        1 => n(s).map(|_| (None, s)),
+        2 if word(text, toks, s) == Some("mut") => n(s + 1).map(|_| (Some(s), s + 1)),
+        _ => None,
+    }
 }
 
 /// The function whose parameters open at `lp`: its edits. The token
@@ -177,34 +320,42 @@ fn one_fn(
     let w = |i| word(text, toks, i);
     let p = |i| punct(toks, i);
     let mut cands: Vec<Cand> = Vec::new();
-    // Parameters: `w: u32`, each between commas at the top.
-    let mut start = lp + 1;
-    let mut depth = 0;
-    for j in lp + 1..=rp {
-        match p(j) {
-            Some(b'(' | b'[' | b'<') => depth += 1,
-            Some(b')' | b']' | b'>') if j < rp => depth -= 1,
-            _ => {}
-        }
-        if (p(j) == Some(b',') && depth == 0) || j == rp {
-            if j == start + 3
-                && let Some(name) = w(start)
-                && p(start + 1) == Some(b':')
-                && w(start + 2) == Some("u32")
-                && name != "_"
-            {
-                cands.push(Cand {
-                    name: name.to_string(),
-                    decl: start,
-                    lett: None,
-                });
+    let mut decls: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    let param = |name: usize, mut_tok: Option<usize>| Cand {
+        name: w(name).unwrap_or_default().to_string(),
+        decl: name,
+        lett: None,
+        param: true,
+        reg: mut_tok.is_some(),
+        mut_tok,
+        tuple: None,
+    };
+    // Parameters, each between commas at the top: `w: u32`, `mut w:
+    // u32` and `[mut r0, r1, _, r3]: [u32; 4]`.
+    for (s, e) in items(toks, lp + 1, rp) {
+        if e == s + 3 && p(s + 1) == Some(b':') && w(s + 2) == Some("u32") {
+            if let Some((None, n)) = name_item(text, toks, (s, s + 1)) {
+                cands.push(param(n, None));
             }
-            start = j + 1;
+        } else if e == s + 4 && p(s + 2) == Some(b':') && w(s + 3) == Some("u32") {
+            if let Some((Some(m), n)) = name_item(text, toks, (s, s + 2)) {
+                cands.push(param(n, Some(m)));
+            }
+        } else if p(s) == Some(b'[')
+            && let Some(c) = close_of(toks, s)
+            && p(c + 1) == Some(b':')
+            && w(c + 3) == Some("u32")
+        {
+            for it in items(toks, s + 1, c) {
+                if let Some((m, n)) = name_item(text, toks, it) {
+                    decls.entry(w(n)?).or_default().push(n);
+                    cands.push(param(n, m));
+                }
+            }
         }
     }
     // Every name a `let`, `for` or parameter pattern declares (its
     // token), and the plain `let w: u32 = e;`s.
-    let mut decls: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     let mut depth = 0;
     for j in lp + 1..rp {
         match p(j) {
@@ -222,12 +373,23 @@ fn one_fn(
     // The brace group each token is in: its closing token.
     let mut groups: Vec<usize> = Vec::new();
     let mut lets: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    let mut tuples: Vec<TupleLet> = Vec::new();
+    // A tuple or array assignment's targets: `(a, b) = …`.
+    let mut targets: Vec<(usize, usize)> = Vec::new();
     let mut j = open;
     while j < close {
         match p(j) {
             Some(b'{') => groups.push(close_of(toks, j)?),
             Some(b'}') => {
                 groups.pop();
+            }
+            Some(b'(' | b'[') if stmt_start(toks, j) => {
+                if let Some(c) = close_of(toks, j)
+                    && p(c + 1) == Some(b'=')
+                    && p(c + 2) != Some(b'=')
+                {
+                    targets.push((j, c));
+                }
             }
             _ => {}
         }
@@ -253,6 +415,45 @@ fn one_fn(
                 }
                 k += 1;
             }
+            // `let (mut a, b) = (x, y);`: each name a register local.
+            if kw == Some("let")
+                && p(j + 1) == Some(b'(')
+                && close_of(toks, j + 1) == Some(k - 1)
+                && p(k) == Some(b'=')
+                && p(k + 1) == Some(b'(')
+                && let Some(vc) = close_of(toks, k + 1)
+                && p(vc + 1) == Some(b';')
+            {
+                let names: Option<Vec<_>> = items(toks, j + 2, k - 1)
+                    .into_iter()
+                    .map(|it| name_item(text, toks, it))
+                    .collect();
+                let vals: Vec<_> = items(toks, k + 2, vc)
+                    .into_iter()
+                    .map(|(s, e)| (toks[s].1, tok_end(toks, e - 1)))
+                    .collect();
+                if let Some(names) = names
+                    && names.len() == vals.len()
+                {
+                    for (ei, &(m, n)) in names.iter().enumerate() {
+                        cands.push(Cand {
+                            name: w(n)?.to_string(),
+                            decl: n,
+                            lett: None,
+                            param: false,
+                            reg: true,
+                            mut_tok: m,
+                            tuple: Some((tuples.len(), ei)),
+                        });
+                    }
+                    tuples.push(TupleLet {
+                        first: j,
+                        semi: vc + 1,
+                        names,
+                        vals,
+                    });
+                }
+            }
             // A `let` of one name: its `;` (from which it is in scope)
             // and its group's end.
             let one = match (w(j + 1), w(j + 2)) {
@@ -275,8 +476,7 @@ fn one_fn(
                     e += 1;
                 }
                 lets.insert(at, (e, *groups.last()?));
-                if at == j + 1
-                    && p(k) == Some(b':')
+                if p(k) == Some(b':')
                     && w(k + 1) == Some("u32")
                     && p(k + 2) == Some(b'=')
                     && p(k + 3) != Some(b'=')
@@ -287,6 +487,10 @@ fn one_fn(
                         name: w(at)?.to_string(),
                         decl: at,
                         lett: Some((k + 1, k + 3, e)),
+                        param: false,
+                        reg: at == j + 2,
+                        mut_tok: None,
+                        tuple: None,
                     });
                 }
             }
@@ -303,24 +507,44 @@ fn one_fn(
         j += 1;
     }
     let body = &text[toks[lp].1..toks[close].1];
+    // Where a parameter is bound again: after the `{` line, and the
+    // entries' text if it goes on past it (`one_entry` finds them by it);
+    // its uses are from there.
+    let rebind = {
+        let b = toks[open].1 + 1;
+        let mut at = text[b..].find('\n').map_or(b, |n| b + n + 1);
+        if at < after && after <= toks[close].1 {
+            at = after;
+        }
+        at
+    };
+    let rebind_tok = (open..close)
+        .find(|&k| toks[k].1 >= rebind)
+        .unwrap_or(close);
     // Each candidate's uses: (token, the `Ref::<T>::new(w)` around it).
     let mut types: Vec<Option<String>> = vec![None; cands.len()];
     let mut owner: BTreeMap<usize, usize> = BTreeMap::new();
-    let mut plans: Vec<(usize, Vec<Use>)> = Vec::new();
+    let mut plans: Vec<(usize, Vec<Use>, Vec<Assign>)> = Vec::new();
     for (ci, c) in cands.iter().enumerate() {
         if body.contains(&format!("{{{}}}", c.name)) || body.contains(&format!("{{{}:", c.name)) {
             continue;
         }
-        // Where its uses are: a parameter's, the body; a `let`'s, from
-        // its `;` to its group's end. Up to a later `let` of its name in
-        // that group (its right side still this one's), and but the scope
-        // of one in a group inside; any other binding of its name there,
-        // and it isn't bound.
-        let (from, mut to) = match c.lett {
-            Some(l) => (l.2, lets[&c.decl].1),
-            None => (open, close),
-        };
         let mine = decls.get(c.name.as_str()).map_or(&[][..], |v| &v[..]);
+        // Where its uses are: a parameter's, the body past its binding; a
+        // `let`'s, from its `;` to its group's end. Up to a later `let` of
+        // its name in that group (its right side still this one's), and
+        // but the scope of one in a group inside; any other binding of
+        // its name there, and it isn't bound. A register local is the
+        // only binding of its name.
+        let (from, mut to) = match (c.lett, c.tuple) {
+            _ if c.param => (rebind_tok, close),
+            (Some(l), _) => (l.2, if c.reg { close } else { lets[&c.decl].1 }),
+            (_, Some((t, _))) => (tuples[t].semi, close),
+            _ => continue,
+        };
+        if c.reg && mine != [c.decl] {
+            continue;
+        }
         let mut holes: Vec<(usize, usize)> = Vec::new();
         let mut shadowed = false;
         for &d in mine {
@@ -337,6 +561,7 @@ fn one_fn(
             continue;
         }
         let mut uses = Vec::new();
+        let mut assigns = Vec::new();
         let mut ty: Option<String> = None;
         let mut ok = true;
         for k in from..to {
@@ -347,7 +572,8 @@ fn one_fn(
                 continue;
             }
             let path_before = p(k - 1) == Some(b':') && p(k - 2) == Some(b':');
-            let field = p(k - 1) == Some(b'.');
+            // `a.w` (not a range's `0..w`).
+            let field = p(k - 1) == Some(b'.') && p(k - 2) != Some(b'.');
             let after_colon = p(k + 1) == Some(b':');
             let mac = p(k + 1) == Some(b'!') && matches!(p(k + 2), Some(b'(' | b'[' | b'{'));
             if field || path_before || after_colon || mac {
@@ -357,6 +583,45 @@ fn one_fn(
                     ok = false;
                 }
                 continue;
+            }
+            if targets.iter().any(|t| k > t.0 && k < t.1) {
+                // Assigned with others: not followed.
+                ok = false;
+                break;
+            }
+            if stmt_start(toks, k) {
+                let op = |i: usize| {
+                    matches!(
+                        p(i),
+                        Some(b'+' | b'-' | b'*' | b'/' | b'%' | b'^' | b'|' | b'&' | b'<' | b'>')
+                    )
+                };
+                if p(k + 1) == Some(b'=') && p(k + 2) != Some(b'=') {
+                    // `w = e`: its right side to the `;`, `,` or brace
+                    // that ends it.
+                    let mut e = k + 2;
+                    let mut d = 0;
+                    while e < to {
+                        match p(e) {
+                            Some(b'(' | b'[' | b'{') => d += 1,
+                            Some(b')' | b']' | b'}') if d == 0 => break,
+                            Some(b')' | b']' | b'}') => d -= 1,
+                            Some(b';' | b',') if d == 0 => break,
+                            _ => {}
+                        }
+                        e += 1;
+                    }
+                    if e == k + 2 || e >= to || !c.reg {
+                        ok = false;
+                        break;
+                    }
+                    assigns.push((k + 2, e));
+                    continue;
+                }
+                if op(k + 1) && (p(k + 2) == Some(b'=') || (op(k + 2) && p(k + 3) == Some(b'='))) {
+                    ok = false;
+                    break;
+                }
             }
             match made_ref(text, toks, k) {
                 Some((s, e, t)) => {
@@ -373,17 +638,23 @@ fn one_fn(
         if let (true, Some(t)) = (ok, ty) {
             types[ci] = Some(t);
             owner.extend(uses.iter().map(|u| (u.0, ci)));
-            plans.push((ci, uses));
+            plans.push((ci, uses, assigns));
         }
     }
-    // A `let` whose right side is one variable bound to its type.
+    // A right side that is one variable bound to its type: a copy.
+    let same = |ci: usize, s: usize, e: usize| -> bool {
+        e == s + 1 && owner.get(&s).is_some_and(|&o| types[o] == types[ci])
+    };
     let copy_of = |ci: usize| -> Option<usize> {
         let (_, s, e) = cands[ci].lett?;
-        let o = *owner.get(&s)?;
-        (e == s + 1 && types[o] == types[ci]).then_some(s)
+        same(ci, s, e).then_some(s)
     };
-    let copies: Vec<usize> = plans.iter().filter_map(|&(ci, _)| copy_of(ci)).collect();
-    for (ci, uses) in &plans {
+    let mut copies: Vec<usize> = plans.iter().filter_map(|&(ci, ..)| copy_of(ci)).collect();
+    for (ci, _, assigns) in &plans {
+        copies.extend(assigns.iter().filter(|a| same(*ci, a.0, a.1)).map(|a| a.0));
+    }
+    let mut in_tuples: BTreeMap<usize, Vec<(usize, String)>> = BTreeMap::new();
+    for (ci, uses, assigns) in &plans {
         let c = &cands[*ci];
         let t = types[*ci].as_deref().unwrap_or_default();
         if t.starts_with("t::") || t.starts_with("[t::") {
@@ -401,8 +672,16 @@ fn one_fn(
                 }
             }
         }
-        match c.lett {
-            Some((u, s, e)) => {
+        for &(s, e) in assigns {
+            if !same(*ci, s, e) {
+                edits.push((toks[s].1, toks[s].1, "Ref::new(".into()));
+                let end = tok_end(toks, e - 1);
+                edits.push((end, end, ")".into()));
+            }
+        }
+        let m = if c.reg { "mut " } else { "" };
+        match (c.lett, c.tuple) {
+            (Some((u, s, e)), _) => {
                 let at = toks[u].1;
                 edits.push((at, at + 3, format!("Ref<{t}>")));
                 if copy_of(*ci).is_none() {
@@ -410,18 +689,61 @@ fn one_fn(
                     edits.push((toks[e].1, toks[e].1, ")".into()));
                 }
             }
-            None => {
-                // After the `{` line, and the entries' text if it goes on
-                // past it (`one_entry` finds them by it).
-                let b = toks[open].1 + 1;
-                let mut at = text[b..].find('\n').map_or(b, |n| b + n + 1);
-                if at < after && after <= toks[close].1 {
-                    at = after;
+            (_, Some((ti, ei))) => in_tuples.entry(ti).or_default().push((ei, t.to_string())),
+            _ => {
+                if let Some(mt) = c.mut_tok {
+                    edits.push((toks[mt].1, toks[c.decl].1, String::new()));
                 }
                 let n = &c.name;
-                edits.push((at, at, format!("    let {n}: Ref<{t}> = Ref::new({n});\n")));
+                edits.push((
+                    rebind,
+                    rebind,
+                    format!("    let {m}{n}: Ref<{t}> = Ref::new({n});\n"),
+                ));
             }
         }
+    }
+    // A tuple `let` with names bound: the others' `let`, then a line
+    // each.
+    for (ti, bound_here) in in_tuples {
+        let tl = &tuples[ti];
+        let s = toks[tl.first].1;
+        let indent = &text[text[..s].rfind('\n').map_or(0, |n| n + 1)..s];
+        let item = |ei: usize| {
+            let (m, n) = tl.names[ei];
+            let m = if m.is_some() { "mut " } else { "" };
+            (
+                format!("{m}{}", w(n).unwrap_or_default()),
+                &text[tl.vals[ei].0..tl.vals[ei].1],
+            )
+        };
+        let rest: Vec<_> = (0..tl.names.len())
+            .filter(|ei| bound_here.iter().all(|b| b.0 != *ei))
+            .map(item)
+            .collect();
+        let mut lines: Vec<String> = match &rest[..] {
+            [] => Vec::new(),
+            [(n, v)] => vec![format!("let {n} = {v};")],
+            ns => vec![format!(
+                "let ({}) = ({});",
+                ns.iter()
+                    .map(|x| x.0.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                ns.iter().map(|x| x.1).collect::<Vec<_>>().join(", ")
+            )],
+        };
+        let mut bound_here = bound_here;
+        bound_here.sort();
+        for (ei, t) in bound_here {
+            let (n, v) = item(ei);
+            lines.push(format!("let {n}: Ref<{t}> = Ref::new({v});"));
+        }
+        edits.push((
+            s,
+            tok_end(toks, tl.semi),
+            lines.join(&format!("\n{indent}")),
+        ));
     }
     Some(close + 1)
 }
@@ -511,9 +833,11 @@ mod tests {
 
     #[test]
     fn leaves_mut_shadowed_and_mixed_types() {
-        // `mut`: assigned again; two types; an object `n` is in.
+        // Two types; an object `n` is in; a register local assigned with
+        // another, or by `+=`.
         for t in [
-            "fn f(g: &mut Game, mut n: u32) {\n    g.get(Ref::<t::A>::new(n).x());\n    n = 3;\n}\n",
+            "fn f(g: &mut Game) {\n    let (mut n, mut m) = (0u32, 0u32);\n    g.get(Ref::<t::A>::new(n).x());\n    (n, m) = (m, n);\n}\n",
+            "fn f(g: &mut Game) {\n    let (mut n, mut m) = (0u32, 0u32);\n    g.get(Ref::<t::A>::new(n).x());\n    n += 4;\n}\n",
             "fn f(g: &mut Game, n: u32) {\n    g.get(Ref::<t::A>::new(n).x());\n    g.get(Ref::<t::B>::new(n).y());\n}\n",
             "fn f(g: &mut Game, n: u32) {\n    g.get(Ref::<t::A>::to(n, 4).x());\n}\n",
         ] {
@@ -600,5 +924,79 @@ mod tests {
         );
         assert!(o.contains("g.get(x.idx(i).x())"), "{o}");
         assert!(o.contains("g.ram.x = a;"), "{o}");
+    }
+
+    #[test]
+    fn a_register_local_follows_its_assignments() {
+        let t = "fn f(g: &mut Game, sp: u32, [mut r0, r1, _, mut r3]: [u32; 4]) -> () {\n    let (mut r4, r13, mut pData) = (0u32, sp, 0u32);\n    let e0: u32 = r0;\n    pData = r1;\n    g.get(Ref::<t::S>::new(pData).x());\n    if c { pData = pData.wrapping_add(4) } else { pData = r4 }\n    r0 = pData;\n    r4 = 7;\n    call(Regs { r: [r0, pData, r3] });\n    g.set(Ref::<t::S>::new(r0).y(), 1);\n    r3 = 2;\n    g.set(Ref::<u8>::new(r3), 1);\n}\n";
+        let head = "fn f(g: &mut Game, sp: u32, [mut r0, r1, _, mut r3]: [u32; 4]) -> () {\n    let (mut r4, r13, mut pData) = (0u32, sp, 0u32);\n    let e0: u32 = r0;\n";
+        let (o, b) = bind(t, head.len());
+        assert_eq!(b.named, 2, "{o}");
+        assert_eq!(b.proven, 1, "{o}");
+        assert!(o.starts_with("fn f(g: &mut Game, sp: u32, [r0, r1, _, r3]: [u32; 4]) -> () {\n    let (mut r4, r13) = (0u32, sp);\n    let mut pData: Ref<t::S> = Ref::new(0u32);\n    let e0: u32 = r0;\n    let mut r0: Ref<t::S> = Ref::new(r0);\n    let mut r3: Ref<u8> = Ref::new(r3);\n"), "{o}");
+        assert!(
+            o.contains("pData = Ref::new(r1);\n    g.get(pData.x());"),
+            "{o}"
+        );
+        assert!(
+            o.contains(
+                "{ pData = Ref::new(pData.addr().wrapping_add(4)) } else { pData = Ref::new(r4) }"
+            ),
+            "{o}"
+        );
+        // A copy of one of its type.
+        assert!(o.contains("r0 = pData;\n    r4 = 7;"), "{o}");
+        assert!(
+            o.contains("Regs { r: [r0.addr(), pData.addr(), r3.addr()] }"),
+            "{o}"
+        );
+        assert!(
+            o.contains("g.set(r0.y(), 1);\n    r3 = Ref::new(2);\n    g.set(r3, 1);"),
+            "{o}"
+        );
+        assert_eq!(at_use(&o), 0);
+    }
+
+    #[test]
+    fn a_range_bound_is_a_use() {
+        let t = "fn f(g: &mut Game) {\n    let (mut n) = (0u32);\n    g.get(Ref::<u8>::new(n));\n    for i in 0..n { }\n}\n";
+        let (o, _) = bind(t, 0);
+        assert!(o.contains("for i in 0..n.addr() { }"), "{o}");
+    }
+
+    #[test]
+    fn a_mut_let_and_a_lone_tuple_name() {
+        let t = "fn f(g: &mut Game) {\n    let (mut p) = (0u32);\n    let mut q: u32 = r5;\n    g.get(Ref::<t::A>::new(q).x());\n    q = p;\n    g.get(Ref::<t::A>::new(p).x());\n}\n";
+        let (o, b) = bind(t, 0);
+        assert_eq!(b.named, 2, "{o}");
+        assert!(o.contains("{\n    let mut p: Ref<t::A> = Ref::new(0u32);\n    let mut q: Ref<t::A> = Ref::new(r5);\n    g.get(q.x());\n    q = p;\n    g.get(p.x());"), "{o}");
+    }
+
+    #[test]
+    fn the_entries_kept_but_their_end() {
+        let t = "fn x(g: &mut Game) { let (mut p) = (0u32); }\nfn f(g: &mut Game) {\n    let (mut p, mut q) = (0u32, 0u32);\n    g.get(Ref::<t::A>::new(p).x());\n}\n";
+        let at = t.find("fn f").unwrap();
+        let line = t.find("    let (mut p, mut q)").unwrap();
+        let end = t.find(";\n    g.get").unwrap() + 2;
+        let keep = Keep {
+            frozen: (0, line),
+            track: (line, end),
+        };
+        let (o, b, r) = bind_in(t, end, Some(keep));
+        assert_eq!(b.named, 1);
+        let (s, e) = r.unwrap();
+        assert_eq!(&o[..s], &t[..line]);
+        assert_eq!(
+            &o[s..e],
+            "    let mut q = 0u32;\n    let mut p: Ref<t::A> = Ref::new(0u32);\n"
+        );
+        // An edit in the frozen part leaves that function as it was.
+        let keep = Keep {
+            frozen: (at, line + 5),
+            track: (line + 5, end),
+        };
+        let (o, b, _) = bind_in(t, end, Some(keep));
+        assert_eq!(b, Bound::default());
+        assert_eq!(o, t);
     }
 }

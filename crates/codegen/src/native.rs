@@ -5254,16 +5254,55 @@ impl FnPrinter<'_, '_> {
         if self.holes.no_ref_binds {
             return;
         }
-        // Its entries as printed stay ([`one_entry`] finds them so): a
-        // parameter's binding goes after them.
-        let all = self.soft.entries.get(&self.f.entry).map(Entries::all);
-        let after = all
+        // Its entries as printed stay ([`one_entry`] finds them so), but
+        // for the end its two copies share (`no_x` and `keep_x`: the
+        // register locals' `let`, which a register local typed changes):
+        // a parameter's binding goes after them.
+        let k = self.f.entry;
+        let all = self.soft.entries.get(&k).map(Entries::all);
+        let at = all
             .as_ref()
-            .and_then(|e| s[head..].find(e.as_str()).map(|i| i + e.len()))
-            .unwrap_or(0);
-        let (text, n) = ref_binds::bind(&s[head..], after);
-        let kept = all.is_none_or(|e| !s[head..].contains(&e) || text.contains(&e));
-        if n != ref_binds::Bound::default() && kept {
+            .and_then(|e| s[head..].find(e.as_str()).map(|i| (i, i + e.len())));
+        let after = at.map_or(0, |a| a.1);
+        let shared = self.soft.entries.get(&k).map_or(0, |e| {
+            let (a, b) = (e.keep_x.as_bytes(), e.no_x.as_bytes());
+            a.iter()
+                .rev()
+                .zip(b.iter().rev())
+                .take_while(|(x, y)| x == y)
+                .count()
+        });
+        let keep = at.map(|(a, b)| {
+            let mid = b - shared.min(b - a);
+            ref_binds::Keep {
+                frozen: (a, mid),
+                track: (mid, b),
+            }
+        });
+        let (text, n, moved) = ref_binds::bind_in(&s[head..], after, keep);
+        if n == ref_binds::Bound::default() {
+            return;
+        }
+        // The entries as they are now: each copy's own start, then the
+        // common end as bound.
+        let mut new_all = all.clone();
+        if let (Some(e), Some(keep), Some((a, b))) = (self.soft.entries.get_mut(&k), keep, moved) {
+            let end = &text[a..b];
+            let old = keep.track.1 - keep.track.0;
+            let mut ne = Entries {
+                adapter: e.adapter.clone(),
+                keep_x: format!("{}{end}", &e.keep_x[..e.keep_x.len() - old]),
+                no_x: format!("{}{end}", &e.no_x[..e.no_x.len() - old]),
+                taker: e.taker,
+            };
+            if !text.contains(&ne.all()) {
+                return;
+            }
+            new_all = Some(ne.all());
+            std::mem::swap(e, &mut ne);
+        }
+        let kept = new_all.is_none_or(|e| at.is_none() || text.contains(&e));
+        if kept {
             s.replace_range(head.., &text);
             self.soft.refs_bound_named += n.named;
             self.soft.refs_bound_proven += n.proven;
