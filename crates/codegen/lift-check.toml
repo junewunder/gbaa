@@ -2699,6 +2699,216 @@ rom_static_fn_keys = 0
 rom_refs = 0
 gap_targets = 0
 
+[program.c-lent-agbcc]
+rom = "c/c-lent-agbcc.gba"
+route = "units/c-lent-agbcc-600.toml"
+# A C program (native/emerald-lent-local-stop; c/README.md, c/lent/SCENE.md),
+# built by agbcc (GCC 2.95) with `just c-tests`: a stack struct lent to a callee
+# that reads only its last byte, so the address passed lies before the
+# bytes lent (stamp to stamp_mark; Emerald's SiiRtcReset to SiiRtcSetStatus).
+# Before the lent object was found from the bytes its borrower reaches, the
+# call passed Lent::NONE and the lift stopped at its first frame. The
+# planted store is AgbMain's gMarks += m.
+planted_store = 0x0800031a
+
+[program.c-lent-agbcc.bars]
+results_several = 0
+tuple_calls = 0
+locals_noted = 4
+data_constants_unnamed = 0
+io_unnamed = 0
+computed_unknown_unnamed = 2
+bitfield_arith = 0
+bitfield_joined = 0
+lines = 241
+lines_prelude = 1454
+ref_new_at_use = 0
+casts = 15
+texts_left = 0
+functions = 8
+functions_iwram = 0
+functions_lifted = 8
+functions_unrecognised = 8
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+entries_beyond_one = 10
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 30
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 1
+value_lets = 51
+reg_local_writes = 33
+unpacked_unread = 0
+regs_call_entries = 0
+proto_shapes_refused = 0
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 6
+sp_arith_unescaped = 0
+sp_arith_exact = 0
+lr_returned = 0
+loops_not_for = 3
+for_counter_arith = 0
+labelled_blocks = 0
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 1
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 2
+store_computed_ram = 1
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 2
+pointer_unexplained = 1
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 2
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
+gap_targets = 0
+
+[program.c-lent-gcc]
+rom = "c/c-lent-gcc.gba"
+route = "units/c-lent-gcc-600.toml"
+# A C program (native/emerald-lent-local-stop; c/README.md, c/lent/SCENE.md),
+# built by modern GCC with `just c-tests`: a stack struct lent to a callee
+# that reads only its last byte, so the address passed lies before the
+# bytes lent (stamp to stamp_mark; Emerald's SiiRtcReset to SiiRtcSetStatus).
+# Before the lent object was found from the bytes its borrower reaches, the
+# call passed Lent::NONE and the lift stopped at its first frame. The
+# planted store is AgbMain's gMarks += m.
+planted_store = 0x08000310
+
+[program.c-lent-gcc.bars]
+results_several = 0
+tuple_calls = 0
+locals_noted = 9
+data_constants_unnamed = 0
+io_unnamed = 0
+computed_unknown_unnamed = 3
+bitfield_arith = 0
+bitfield_joined = 0
+lines = 289
+lines_prelude = 1454
+ref_new_at_use = 0
+casts = 14
+texts_left = 0
+functions = 7
+functions_iwram = 0
+functions_lifted = 7
+functions_unrecognised = 7
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+entries_beyond_one = 9
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 33
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 1
+value_lets = 67
+reg_local_writes = 40
+unpacked_unread = 0
+regs_call_entries = 0
+proto_shapes_refused = 0
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 8
+sp_arith_unescaped = 0
+sp_arith_exact = 0
+lr_returned = 0
+loops_not_for = 5
+for_counter_arith = 0
+labelled_blocks = 4
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 1
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 2
+store_computed_ram = 1
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 2
+pointer_unexplained = 1
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 2
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
+gap_targets = 0
+
 [program.c-heap-agbcc]
 rom = "c/c-heap-agbcc.gba"
 route = "units/c-heap-agbcc-600.toml"
