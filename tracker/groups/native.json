@@ -5548,6 +5548,11 @@
       "priority": 77,
       "notes": [
         {
+          "at": "2026-11-25T04:11:35Z",
+          "by": "148dc342",
+          "text": "Emerald's native route passed (0 diff, 5400 f) at main 9d6c8f1 but stops at f5055 since lent-print landed (main 466c8a4): 'lent local of 0' panic at 0x082e23a9. Filed as {unit:native/emerald-lent-local-stop}."
+        },
+        {
           "at": "2026-11-25T01:04:25Z",
           "by": "e30a7b20",
           "text": "Metroid prints no Lent yet: borrowers 0x0805baad, 0x080584d9, 0x0806ef2d give r4-r11 back as they came (echoes), so their calls go by x_ and Regs, and code_lends skips them; the 9 others borrow only for them. GBAA_LEND_DEBUG=1 lists each skip and why."
