@@ -5768,21 +5768,9 @@
         "by": "fa3c994f",
         "at": "2026-11-25T06:43:21Z",
         "evidence": "Reproduced on main 89ba14a: Emerald route stopped at frame 5055, 0x082e23a9 (SiiRtcSetStatus) reading byte 7 of Lent::NONE: SiiRtcReset lends its struct, whose lent bytes are +7 alone, and the printer looked the object up by the passed address. Fix (FnPrinter::lent_args): the object holding the first byte the borrower reaches, Lent at a negative offset. New C program c/lent (agbcc+gcc, mGBA-verified hash) lifts Lent::NONE with the old printer, passes with the fix. On the branch: Emerald route units/emerald-native.toml 5400 frames 0 differences; Metroid route 2700 frames 0 differences; just lift-check passed (full, after merging main cf31d13); just check passed.",
-        "branch": "unit/native/emerald-lent-local-stop",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T06:43:21Z",
-          "by": "fa3c994f",
-          "host": "quack",
-          "pid": 1982541,
-          "start": "101568383",
-          "beats": true,
-          "session": "fa3c994f-e99c-4f77-ba3e-93896e2eb535",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-25T04:52:22Z"
+        "landed": "2026-11-25T06:48:04Z"
+      }
     },
     {
       "id": "native/lift-stack-args",
