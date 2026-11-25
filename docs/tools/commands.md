@@ -1298,12 +1298,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
   more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x080001f4, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
   native-fallthrough, native-irq-hold, native-frame-locals,
-  native-ime-release, native-takes, native-ram-jump, native-gives, native-entry-jump and native-ime-i-set lifted with their `planted_flags`
+  native-ime-release, native-takes, native-ram-jump, native-gives, native-entry-jump, native-ime-i-set and c-chain-gcc lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall, jump or call's return into another function;
   `--irq-at-waits`, the old IRQ run at a wait inside a critical section (or at an `IME` store while I is set);
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
-  store that sets `IME` again to the next wait, native/ime-release; `--takes-zeroed`, a taker's r4-r11 passed as zeroes, native/taker-test-program; `--gives-kept`, a caller's r4-r11 left as they were after a call that gives them back, native/lift-gives) must be caught too. Each program is lifted once more with `--layout packed`
+  store that sets `IME` again to the next wait, native/ime-release; `--takes-zeroed`, a taker's r4-r11 passed as zeroes, native/taker-test-program; `--gives-kept`, a caller's r4-r11 left as they were after a call that gives them back, native/lift-gives; `--plant-lent=0x080003b2`, bounce's `ctx->hits++` through its borrowed `Lent` made one more, native/lift-lent-print: `frame 47: IWRAM byte 0x03000048`) must be caught too. Each program is lifted once more with `--layout packed`
   (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
   layout's frames and record the same bytes, nothing skipped
   (native/lift-packed-layout); and with `--fn-ids dense`
@@ -1322,7 +1322,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
   `shadow local: AT loads X from lN, the frame's bytes hold Y` wherever a
-  load differs: a write to the frame the escape analysis didn't see. Lift
+  load differs: a write to the frame the escape analysis didn't see. A
+  lent local (native/lift-lent-print) is shadowed the same way, its `Lent`
+  carrying its guest address, and a load through a borrowed parameter
+  prints `shadow local: AT loads X through pN, …`. Lift
   with `--name <name>-shadow`, `just build-recompiled`, then run
   `target/recompiled/release/gbaa-native-<name>-shadow --headless --frames
   601` and grep its stderr.

@@ -1,6 +1,6 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
-//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
+//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--plant-lent=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
@@ -86,7 +86,10 @@
 //! makes the store of the instruction at AT, which must be to a stack slot
 //! printed as a Rust local, store its value plus one, which the native
 //! check must catch on `agb/native-frame-locals` (unit
-//! `native/frame-locals`).
+//! `native/frame-locals`); `--plant-lent=AT` does the same to a store
+//! through a borrowed parameter (a `Lent`, a pointer to a caller's stack
+//! local), which it must catch on `c-chain-gcc` (unit
+//! `native/lift-lent-print`).
 //!
 //! Where the names files give a function's prototype, its parameters and
 //! result are the prototype's, hole or not, unless its summary proves
@@ -99,7 +102,9 @@
 //! `--shadow-locals` keeps every stack local in the frame's bytes as well
 //! and prints a `shadow local:` line to stderr wherever a load from a
 //! local differs from them: something the escape analysis didn't see
-//! wrote the frame. A check by hand, not part of the lift check.
+//! wrote the frame. A lent local is kept there too, and its `Lent`
+//! carries its guest address, so a load through a borrowed parameter is
+//! checked the same way: a write the lend analysis didn't see. A check by hand, not part of the lift check.
 //!
 //! `--keep-dead-writes` prints every write of a register or flag, as
 //! stage A first did, also those nothing reads after them (unit
@@ -203,7 +208,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--plant-lent=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -229,6 +234,7 @@ fn main() -> ExitCode {
     let (mut no_proto_shapes, mut plant_proto) = (false, None);
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
+    let mut plant_lent = None;
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
     let (mut interp_every, mut plant_reference) = (8, false);
     let mut fn_check_cuts = false;
@@ -330,6 +336,13 @@ fn main() -> ExitCode {
         if let Some(k) = a.strip_prefix("--plant-proto=") {
             match hex(k) {
                 Some(k) => plant_proto = Some(k),
+                None => return usage(),
+            }
+            continue;
+        }
+        if let Some(at) = a.strip_prefix("--plant-lent=") {
+            match hex(at) {
+                Some(at) => plant_lent = Some(at),
                 None => return usage(),
             }
             continue;
@@ -472,6 +485,7 @@ fn main() -> ExitCode {
     holes.no_let_names = no_let_names;
     holes.no_ref_binds = no_ref_binds;
     holes.plant_slot = plant_slot;
+    holes.plant_lent = plant_lent;
     holes.shadow_locals = shadow;
     holes.copies = copies;
     holes.layout = layout;

@@ -1266,6 +1266,42 @@ address only reaches callees is a Rust local; the rest stays bytes.
   differs: a write the analysis missed. The planted control makes a store
   through a borrowed parameter one more (`--plant-lent=ADDR`).
 
+Printed 2026-11-24 (`native/lift-lent-print`):
+
+- Each lent **object** is the lent slots and the bytes their borrowers
+  reach from each address lent, overlapping ones one (`Lends::objects`):
+  a local `l<offset>: [u8; N]` among the frame's others
+  (`Frame::locals`), its own accesses as theirs. A call passes it as
+  `Lent::of(&mut lN, offset)` (an object passed twice in one call is one
+  borrow, `q`).
+- `Lent<'a>` is the prelude's: the bytes as `&[Cell<u8>]`, the offset in
+  them (a borrower may be passed an address below what it reaches), and
+  the guest address with `--shadow-locals` (`Lent::shadow`). Its
+  `ld8`..`st32(k, …, F)` check the bounds and panic naming function `F`.
+- A **borrowed parameter** prints `pN: Lent<'_>`; its loads and stores
+  through it (`Lends::through`) as `pN.ld16(k, F)`, passes on as
+  `pN.at(k)` (`Lends::passes`). Where the body still reads rN as it came
+  (a register copy kept across a call, agbcc's spill), rN is
+  `pN.addr()`: what is made of it reaches only accesses and passes the
+  `Lent`'s print over (0 but under `--shadow-locals`). Liveness takes a
+  call's lent registers as unread, and `exact_sp` a store through a
+  `Lent` as reaching no I/O, so a lender whose slots are all locals is
+  frameless.
+- Narrowed in the analysis so every caller can pass a `Lent`: nothing is
+  borrowed through a tail call or fall (`x_` takes `Regs`; a named
+  borrower's `x_` is a stop), nor by a four-register function, a stand-in,
+  a checked one, one a call enters by `x_` (it takes r4-r11 or r12 from
+  its callers, or gives r4-r11 back as they came), or one another code
+  context calls (a RAM copy's call,
+  which this context's run doesn't see); a slot accessed at an offset its
+  width doesn't divide isn't lent.
+- Today: c-chain-gcc's `frame` lends `ctx` (20 bytes) to `step_world`,
+  `move_body`, `bounce` and `draw_body`; agb/native-frame-locals lends one
+  word. Metroid's run finds 14 slots in 8 functions, but three of its
+  borrowers give r4-r11 back as they came (a call to one goes by `x_`),
+  and the rest borrow only for them: none print (`GBAA_LEND_DEBUG=1`
+  names each skipped borrower and why).
+
 ## The units that follow
 
 All are filed in the group (`native`); the ones this design added are

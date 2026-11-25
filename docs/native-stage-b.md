@@ -208,7 +208,9 @@ local), so locals need an escape analysis first.
   differs (`docs/tools/commands.md`). Frameless: `native/lift-frame-gone`.
 
 Escaping slots passed as `&mut`: `native/lift-stack-arrays` (design,
-`frame::lend`), printed by `native/lift-lent-print` and its follow-ups.
+`frame::lend`), printed by `native/lift-lent-print` (done 2026-11-24: a
+lent object is a local `[u8; N]`, a borrowed parameter `pN: Lent<'_>`;
+control `--plant-lent=ADDR` on c-chain-gcc) and its follow-ups.
 
 ### 5. Typed data
 
