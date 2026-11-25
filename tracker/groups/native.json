@@ -4723,6 +4723,17 @@
       ],
       "uses": ["heavy"],
       "priority": 89,
+      "record": {
+        "state": "claimed",
+        "by": "148dc342",
+        "session": "148dc342-80d9-4492-a993-39ac8ca61241",
+        "host": "quack",
+        "pid": 1983326,
+        "start": "101568883",
+        "at": "2026-11-25T02:16:19Z",
+        "branch": "unit/native/emerald-native-route",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T21:59:47Z",
