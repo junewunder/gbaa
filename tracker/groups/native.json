@@ -5332,15 +5332,22 @@
       "uses": ["heavy"],
       "priority": 93,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b10f4712",
-        "session": "b10f4712-523b-45c1-bf69-d2938ea0a9f8",
-        "host": "quack",
-        "pid": 1982541,
-        "start": "101568383",
-        "at": "2026-11-25T03:04:11Z",
+        "at": "2026-11-25T04:01:46Z",
+        "evidence": "Re-lifted Imperium with the current holes file (just lift under just long start --mem 4G): m4a's jump-table [[roots]] verified, the lift now runs 436 of 600 frames (was 302). The stop at 436 (IntrMain pc 0x0300476c: pointer 0 outside its global 0x03004ec4) is too big for this unit: traced with a store watch and interp --trace/--peek, m4a's decoder clear (0x03002724) zeroes IntrMain's literal at 0x030047e8 because the mixer patches its own IWRAM instructions (0x03001e78 strb pair, the 0x03002100 loop's nop slots; interp shows the patched words) and the native lift has no patched-code versions at all (codegen::variants is the recompiler's only): a new lifter feature shared with Rogue, past the unit's 3 hours (2h20 before, 1h10 now). Filed as {unit:native/lift-patched-iwram-loops}; {unit:native/imperium-stops-302} retitled to past frame 436 and needs it. Review fixes: docs/tools/commands.md and docs/native-port-design.md say sites = [] spares an r12 reader, a takes with sites passes only r4-r11. Merged origin/main; just check passed (exit 0).",
         "branch": "unit/native/imperium-first-stops",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T04:01:46Z",
+          "by": "b10f4712",
+          "host": "quack",
+          "pid": 1982541,
+          "start": "101568383",
+          "beats": true,
+          "session": "b10f4712-523b-45c1-bf69-d2938ea0a9f8",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
