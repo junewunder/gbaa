@@ -5589,6 +5589,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-25T03:18:29Z",
+          "by": "c1e9bd20",
+          "text": "Left: pointer arithmetic as .add(n) (assignments print Ref::new(p.addr().wrapping_add(k))); in Metroid, (v<<3) index exprs, statics made Refs at use, Ref::to of rN, rN of two types. mods/emerald/holes.toml has a [garbage] table this lifter rejects."
+        }
+      ],
       "round": "2026-11-25T01:15:32Z"
     },
     {
