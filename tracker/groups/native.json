@@ -5576,15 +5576,22 @@
       "uses": ["heavy"],
       "priority": 91,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9e3da845",
-        "session": "9e3da845-0cef-4bf8-b002-a99d0e423a09",
-        "host": "quack",
-        "pid": 1981458,
-        "start": "101567385",
-        "at": "2026-11-25T03:27:05Z",
+        "at": "2026-11-25T04:27:30Z",
+        "evidence": "On merged head 1a3da985 (origin/main 466c8a46 merged in, lift-check.toml bar conflicts settled: larger, then lift-metrics --lower-bars; native-copy-takes lines_prelude 1390->1454 as lift-lent-print raised the rest): Emerald lifted with a copy of mods/emerald/holes.toml minus its two [[garbage]] tables (this lifter rejects that table), 0 hard holes, built, gbaa-first-stop 600 of 600 frames, no stop (Emerald ref_new_at_use 26,396). Metroid ref_new_at_use 1,835 (card: at most 2,127; was 2,703), first-stop 600/600, units/metroid-native.toml route-check --native pass, 2700 frames, 0 differences. just lift-check passed, every planted fault and hard hole caught. just check passed.",
         "branch": "unit/native/lift-pointer-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T04:27:30Z",
+          "by": "9e3da845",
+          "host": "quack",
+          "pid": 1981458,
+          "start": "101567385",
+          "beats": true,
+          "session": "9e3da845-0cef-4bf8-b002-a99d0e423a09",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
