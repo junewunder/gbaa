@@ -111,7 +111,12 @@
 //!   pointer reaches it ([`jump_literals`]; unit
 //!   `native/ram-copy-jump-only`), and a jumper that hands on a register
 //!   it reads as it came takes it from its callers in turn
-//!   ([`Passing::foreign`], unit `native/ram-jump-passes-regs`). A context save
+//!   ([`Passing::foreign`], unit `native/ram-jump-passes-regs`). So does
+//!   a call into another context's function, direct (a constant call into
+//!   a RAM copy) or at a `[[takes]]` site (Minish Cap's IWRAM entity loop
+//!   calling its ROM NPC updater): the contexts' summaries run to a
+//!   fixpoint with each other's takers (unit
+//!   `native/lift-takes-across-copies`). A context save
 //!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - A function's blocks are printed from the structuring plan
 //!   ([`crate::plan`], as the mod view's structured codegen has it; unit
@@ -1416,10 +1421,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     });
     // And what each jump into another context's function passes it: the
     // jumper takes what the target takes (`Passing::foreign`), and its
-    // callers in turn. A context whose jumps' targets take more than its
-    // summaries saw is summarized again, until none does (each pass only
-    // adds takers: a few at most).
-    passing.foreign = foreign_takes(&codes);
+    // callers in turn; and a named indirect call into another context's
+    // likewise (unit `native/lift-takes-across-copies`). A context whose
+    // jumps' or named calls' targets take more than its summaries saw is
+    // summarized again, until none does (each pass only adds takers: a
+    // few at most).
+    passing.foreign = foreign_takes(&codes, &passing.sites);
     let jumps_take = codes.iter().any(|c| {
         c.sums.by_entry.values().any(|s| {
             s.foreign
@@ -1433,7 +1440,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     for _ in 0..8 {
-        let now = foreign_takes(&codes);
+        let now = foreign_takes(&codes, &passing.sites);
         let changed: BTreeSet<u32> = now
             .iter()
             .filter(|&(k, t)| passing.foreign.get(k) != Some(t))
@@ -1448,7 +1455,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 .sums
                 .by_entry
                 .values()
-                .any(|s| s.foreign.keys().any(|k| changed.contains(k)));
+                .any(|s| reaches_changed(s, &passing.sites, &changed));
             if jumps {
                 c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
             }
@@ -1503,12 +1510,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // The functions that take r4-r11 from their callers, over all
     // contexts; a stand-in that calls one by its plain entry would run
     // into its stop.
-    let takers: BTreeSet<u32> = codes
+    let passed_by: BTreeMap<u32, u8> = codes
         .iter()
         .flat_map(|c| c.sums.by_entry.iter())
         .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
-        .map(|(&k, _)| k)
+        .map(|(&k, s)| (k, s.passed()))
         .collect();
+    let takers: BTreeSet<u32> = passed_by.keys().copied().collect();
     let lr_ret = lr_entries(&codes, &all, holes);
     let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
     // What RAM each function may store to (native/lift-for-ram-bounds).
@@ -1551,6 +1559,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     all: &all,
                     sums: &c.sums,
                     takers: &takers,
+                    passed_by: &passed_by,
                     jumps: &jumps,
                     shapes: &shapes.shaped,
                     me: shapes
@@ -3864,12 +3873,22 @@ fn exact_sp(
 
 /// What each function of every context takes of r4-r11 from its callers
 /// ([`Summary::takes`]) where another context jumps into it
-/// ([`Summary::foreign`]): [`Passing::foreign`].
-fn foreign_takes(codes: &[Code]) -> BTreeMap<u32, u8> {
+/// ([`Summary::foreign`]), calls it directly ([`Summary::callees`]: a
+/// constant call into a RAM copy) or reaches it by a named indirect call
+/// (`sites`, [`Passing::sites`]; unit `native/lift-takes-across-copies`):
+/// [`Passing::foreign`].
+fn foreign_takes(codes: &[Code], sites: &BTreeMap<u32, BTreeSet<u32>>) -> BTreeMap<u32, u8> {
     let mut out = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
         for s in c.sums.by_entry.values() {
-            for &k in s.foreign.keys() {
+            let named = s
+                .indirect_sites
+                .iter()
+                .filter_map(|at| sites.get(at))
+                .flatten()
+                .chain(&s.callees)
+                .filter(|&&k| c.sums.get(k).is_none());
+            for &k in s.foreign.keys().chain(named) {
                 let t = codes
                     .iter()
                     .enumerate()
@@ -3882,6 +3901,25 @@ fn foreign_takes(codes: &[Code]) -> BTreeMap<u32, u8> {
         }
     }
     out
+}
+
+/// Whether `s` jumps into, calls, or calls through a named site
+/// ([`Passing::sites`]), one of `changed`: another context's functions
+/// whose [`Passing::foreign`] changed.
+fn reaches_changed(
+    s: &Summary,
+    sites: &BTreeMap<u32, BTreeSet<u32>>,
+    changed: &BTreeSet<u32>,
+) -> bool {
+    s.foreign
+        .keys()
+        .chain(&s.callees)
+        .any(|k| changed.contains(k))
+        || s.indirect_sites
+            .iter()
+            .filter_map(|at| sites.get(at))
+            .flatten()
+            .any(|k| changed.contains(k))
 }
 
 /// Whether a store may run the IRQ handlers in the native build: one that
@@ -4427,6 +4465,9 @@ struct FnPrinter<'a, 'b> {
     sums: &'a Summaries,
     /// Every context's functions that take r4-r11 from their callers.
     takers: &'a BTreeSet<u32>,
+    /// What each of them takes ([`Summary::passed`]): a call into
+    /// another context's passes it so ([`FnPrinter::passed`]).
+    passed_by: &'a BTreeMap<u32, u8>,
     /// The program's context saves and restores ([`longjmp`]).
     jumps: &'a longjmp::Jumps,
     /// Every shaped function's parameters and results.
@@ -9148,14 +9189,17 @@ impl FnPrinter<'_, '_> {
     }
 
     /// What `k` takes of r4-r11 from its callers (bit `n - 4` for rN,
-    /// [`Summary::passed`]): 0 for a stand-in, or a function of another
-    /// context (its summary isn't this one's, so this caller's reads of
-    /// what it passes went unseen; the plain entry stops the program).
+    /// [`Summary::passed`]), another context's function's too (the
+    /// summaries ran with it, [`Passing::foreign`]; unit
+    /// `native/lift-takes-across-copies`): 0 for a stand-in.
     fn passed(&self, k: u32) -> u8 {
         if self.holes.standins.contains_key(&k) {
             return 0;
         }
-        self.sums.get(k).map_or(0, Summary::passed)
+        match self.sums.get(k) {
+            Some(s) => s.passed(),
+            None => self.passed_by.get(&k).copied().unwrap_or(0),
+        }
     }
 
     /// Whether a direct call passes `k` r12 ([`Summary::ip`]): false for
@@ -11592,6 +11636,65 @@ mod tests {
             !hs.iter().any(|h| h.contains("another code context's")),
             "{hs:?}"
         );
+    }
+
+    /// A ROM whose reset sets r4 (`set`) and calls 0x08000010, which
+    /// jumps into an IWRAM copy at 0x03000000: `push {lr}; ldr r1, =K;
+    /// mov lr, pc; bx r1; pop {pc}`, K = 0x08000030 the ROM's `ldr r0,
+    /// [r4]; bx lr`, which reads r4 as it came. `takes`: whether the
+    /// holes file names the copy's call (at 0x0300000c) as reaching K.
+    /// The holes, and the copy's text.
+    fn copy_calls_rom_taker(set: u32, takes: bool) -> (Vec<String>, String) {
+        let mut words = vec![0xE1A0_0000u32; 0x48];
+        words[0] = set;
+        words[1] = 0xEB00_0001; // bl 0x08000010
+        words[2] = 0xEAFF_FFFE; // b .
+        words[4] = 0xE59F_3008; // ldr r3, [pc, #8]: the word at 0x20
+        words[6] = 0xE12F_FF13; // bx r3
+        words[8] = 0x0300_0000;
+        words[12] = 0xE594_0000; // 0x08000030: ldr r0, [r4]
+        words[13] = 0xE12F_FF1E; // bx lr
+        words[0x40] = 0xE52D_E004; // 0x03000000: push {lr}
+        words[0x41] = 0xE59F_1008; // ldr r1, [pc, #8]: the word at 0x03000014
+        words[0x42] = 0xE1A0_E00F; // mov lr, pc
+        words[0x43] = 0xE12F_FF11; // bx r1
+        words[0x44] = 0xE49D_F004; // pop {pc}
+        words[0x45] = 0x0800_0030;
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut file = String::from(
+            "[[copy]]\nsrc = 0x08000100\ndst = 0x03000000\nlen = 0x18\nroots = [0x03000000]\nwhy = \"t\"\n\
+             [[roots]]\nkeys = [0x08000030]\nwhy = \"t\"\n",
+        );
+        if takes {
+            file.push_str("[[takes]]\nentry = 0x08000030\nsites = [0x0300000c]\nwhy = \"t\"\n");
+        }
+        let l = lift(&rom, "t", &Holes::parse(&file).unwrap());
+        let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+        let copy = text
+            .find("pub fn x_03000000(")
+            .or_else(|| text.find("pub fn f_03000000("))
+            .map(|i| &text[i..])
+            .map(|t| t[..t.find("\n}\n").unwrap()].to_string())
+            .expect("the copy");
+        (l.holes.iter().map(|h| h.to_string()).collect(), copy)
+    }
+
+    /// A `[[takes]]` site in one code context, an IWRAM copy, reaching a
+    /// taker in another, the ROM, passes its registers: the copy takes
+    /// them in turn from its jumper, which takes them from the reset,
+    /// which sets them (native/lift-takes-across-copies).
+    #[test]
+    fn a_takes_site_passes_into_another_context() {
+        const SET_R4: u32 = 0xE3A0_4402; // mov r4, #0x02000000
+        let (hs, copy) = copy_calls_rom_taker(SET_R4, true);
+        assert_eq!(hs, Vec::<String>::new());
+        assert!(
+            copy.contains("x_08000030(g, Regs { r: [r0, r1, r2, r3, r4,"),
+            "{copy}"
+        );
+        // Unnamed, the pointer call zeroes r4: a hole.
+        let (hs, _) = copy_calls_rom_taker(SET_R4, false);
+        assert!(!hs.is_empty(), "{hs:?}");
     }
 
     #[test]
