@@ -4343,3 +4343,4 @@
 {"at":"2026-11-25T02:10:07Z","actor":"loop","tag":"d3ccf311","host":"quack","cmd":"claim","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: claimed"}
 {"at":"2026-11-25T02:16:13Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: on main"}
 {"at":"2026-11-25T02:16:19Z","actor":"loop","tag":"148dc342","host":"quack","cmd":"claim","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: claimed"}
+{"at":"2026-11-25T02:38:35Z","actor":"loop","tag":"18cd958f","host":"quack","cmd":"add-unit","id":"native/imperium-stops-302","text":"new unit: Imperium's lift runs 600 frames: past frame 302"}

@@ -5648,6 +5648,11 @@
           "text": "With {unit:native/lift-takes-across-copies}'s [[takes]] chain, 0x03005f24's resume into the IWRAM loop now reads r5 at 0x03005f94 (hard, summaries: it passes r5 to NPCUpdate). Unwinding it to UpdateEntities should close that too: Minish's 4 hard holes fall by 4."
         }
       ]
+    },
+    {
+      "id": "native/imperium-stops-302",
+      "title": "Imperium's lift runs 600 frames: past frame 302",
+      "uses": ["heavy"]
     }
   ]
 }
