@@ -5485,6 +5485,17 @@
       "needs": ["native/lift-stack-arrays"],
       "uses": ["heavy"],
       "priority": 92,
+      "record": {
+        "state": "claimed",
+        "by": "d3ccf311",
+        "session": "d3ccf311-cee7-4f64-bf35-dce80f9817e9",
+        "host": "quack",
+        "pid": 1981823,
+        "start": "101567893",
+        "at": "2026-11-25T02:10:07Z",
+        "branch": "unit/native/lift-lent-print",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-25T01:45:52Z",
