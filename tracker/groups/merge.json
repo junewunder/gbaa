@@ -844,15 +844,22 @@
       "lane": "quack/3",
       "branch": "unit/native/imperium-first-stops",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ae959552",
-        "session": "ae959552-1a11-42ec-87fa-099d62246df1",
-        "host": "quack",
-        "pid": 1982541,
-        "start": "101568383",
-        "at": "2026-11-25T04:35:42Z",
+        "at": "2026-11-25T04:44:31Z",
+        "evidence": "Merged origin/main into unit/native/imperium-first-stops; settled docs/tools/commands.md conflict keeping branch's r12/[[roots]] text and main's [[garbage]] entry; just check passed (exit 0) after the merge.",
         "branch": "unit/native/imperium-first-stops",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T04:44:31Z",
+          "by": "ae959552",
+          "host": "quack",
+          "pid": 1982541,
+          "start": "101568383",
+          "beats": true,
+          "session": "ae959552-1a11-42ec-87fa-099d62246df1",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-25T04:35:42Z"
     }
