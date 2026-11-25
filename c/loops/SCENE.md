@@ -13,7 +13,9 @@ breaking out early (its counter read after the loop), `draw_odd` skipping
 rounds with `continue`, `grow` with a `u8` counter, and `grid` two loops
 nested, the inner from a value to a bound. `AgbMain` fills `gLens` and
 copies it backwards into `gRow.len` with loops to a constant and to a
-field.
+field. `draw_global`'s and `draw_row`'s bounds are loaded from RAM each
+round, around a call: the lift prints them as `for` where nothing a round
+runs may store to the bound (unit native/lift-for-ram-bounds).
 
 Arrays indexed by the counter (unit native/lift-for-index): `move_bars`
 an array of structs (`gMovers`, 8 bytes each) a field each, `pocket_count`

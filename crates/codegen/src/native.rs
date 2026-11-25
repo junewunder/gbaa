@@ -245,6 +245,7 @@ pub mod switch;
 pub mod text_statics;
 pub mod unread;
 pub mod value_names;
+pub mod writes;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
@@ -439,7 +440,7 @@ pub struct Holes {
     /// Stage A's old call of a function that takes r4-r11 from its
     /// callers (`gbaa-lift --takes-zeroed`): each call that passes them
     /// (a direct call, a `[[takes]]` site) passes zeroes instead, as the
-    /// plain entry did. The taker check's planted control
+    /// plain entry did, and r12 too ([`Summary::ip`]). The taker check's planted control
     /// (`native/taker-test-program`): the native check must catch it on
     /// `agb/native-takes`.
     pub takes_zeroed: bool,
@@ -1510,6 +1511,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .collect();
     let lr_ret = lr_entries(&codes, &all, holes);
     let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
+    // What RAM each function may store to (native/lift-for-ram-bounds).
+    let ram_writes = writes::ram_writes(
+        codes.iter().map(|c| (&c.ctx, &c.funcs[..], &c.frames)),
+        holes,
+        psr_fns.wrappers.iter().copied(),
+    );
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -1599,6 +1606,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     inl: Vec::new(),
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
+                    ram_writes: &ram_writes,
                     load_values: BTreeMap::new(),
                     arg_sums: BTreeMap::new(),
                     printed: BTreeSet::new(),
@@ -4482,6 +4490,9 @@ struct FnPrinter<'a, 'b> {
     edges: Option<Vec<plan::Edge>>,
     /// The function's stack frame.
     frame: Option<&'a Frame>,
+    /// What RAM each function and block may store to, and the IRQ
+    /// handlers ([`writes`]).
+    ram_writes: &'a writes::RamWrites,
     /// Its slots printed as Rust locals ([`Frame::locals`]).
     locals: Vec<Local>,
     /// The block being printed.
@@ -6261,8 +6272,10 @@ impl FnPrinter<'_, '_> {
     /// the latch is reached from without passing the start), by the latch
     /// before its jump back, and by no call there (r0-r3 by any, r4-r11 by
     /// one that gives them back); the bound's register written nowhere in
-    /// a round. The binding shadows the counter, so: the latch reads it
-    /// nowhere after its step, and its exits after the step go where it
+    /// a round, or the bound loaded from RAM each round, which no store
+    /// that may run in a round reaches ([`FnPrinter::loaded_bound`];
+    /// unit `native/lift-for-ram-bounds`). The binding shadows the
+    /// counter, so: the latch reads it nowhere after its step, and its exits after the step go where it
     /// isn't live; no edge out of what is printed inside goes where it is.
     /// What is printed inside but runs once the loop is done may write it:
     /// the binding is `mut`. A pointer call in a round (whose writes
@@ -6541,6 +6554,16 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
             };
+            let range = match &proven.load {
+                None => proven.range,
+                Some((li, a)) => match self.loaded_bound(latch, *li, a, &round) {
+                    Ok(t) => proven.range.replace(bounds::BOUND, &t),
+                    Err(w) => {
+                        why += &format!("r{r}: {w}; ");
+                        continue;
+                    }
+                },
+            };
             let top = match by {
                 Some(bounds::Test::Top(..)) => out_to,
                 _ => None,
@@ -6551,7 +6574,7 @@ impl FnPrinter<'_, '_> {
                 first: proven.start.unwrap_or(0),
                 last: 0,
                 step: proven.by,
-                text: Some(proven.range),
+                text: Some(range),
                 start: proven.start,
                 ptrs: Vec::new(),
             };
@@ -6563,6 +6586,94 @@ impl FnPrinter<'_, '_> {
         } else {
             format!("{top_why}{why}")
         })
+    }
+
+    /// A `for`'s bound loaded each round by the latch's inst `li` from
+    /// `a` (over the registers at the loop's start; [`bounds::Proven`]),
+    /// printed for the range's end where nothing that may run in a round
+    /// (`round`'s blocks, the functions they call, the IRQ handlers;
+    /// [`writes`]) stores to its bytes: a global's in RAM, kept off them;
+    /// one through a pointer, with nothing in RAM stored to, but for the
+    /// callees' own frames, the BIOS's words at IWRAM's top and, if none
+    /// of its slots escape, this function's frame.
+    fn loaded_bound(
+        &self,
+        latch: &[Inst],
+        li: usize,
+        a: &bounds::Sym,
+        round: &[u32],
+    ) -> Result<String, &'static str> {
+        let Op::Load { width, .. } = latch[li].op else {
+            return Err("bound not a load");
+        };
+        let n = bytes(width);
+        let mut w = self.ram_writes.irq.clone();
+        for k in round {
+            match self.ram_writes.by_block.get(&(self.f.entry, *k)) {
+                Some(b) => w.join(b),
+                None => w = writes::Writes::any(),
+            }
+            for x in exits(self.ctx, &self.f.blocks[k]) {
+                match x.plan {
+                    Plan::Call { target, .. } => w.join(&self.ram_writes.call(target)),
+                    Plan::Static(t) | Plan::Rekey(t) if !self.f.blocks.contains_key(&t) => {
+                        w.join(&self.ram_writes.call(t))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let (f, m) = match width {
+            Width::Byte => ("ld8", ""),
+            Width::Half => ("ld16", " & !1"),
+            Width::Word => ("ld32", " & !3"),
+        };
+        if let Some(addr) = a.as_const() {
+            let lo = addr & !(n - 1);
+            if !matches!(lo >> 24, 0x02 | 0x03) {
+                return Err("bound loaded from outside RAM");
+            }
+            if w.hits(lo, lo + n) {
+                return Err("bound's bytes may be stored to in a round");
+            }
+            return Ok(
+                match globals::ram_at(lo).and_then(|o| self.globals.place(o, n)) {
+                    Some(p) if p.bit.is_none() => globals::load(&p, n),
+                    _ => format!("{f}(g, {lo:#x})"),
+                },
+            );
+        }
+        // The BIOS's words at IWRAM's top (the IRQ flags a handler
+        // acknowledges, its vector) hold no object a pointer reaches.
+        let bios = |&(lo, hi): &(u32, u32)| lo >= 0x0300_7ff0 && hi <= 0x0300_8000;
+        if w.any || !w.ranges.iter().all(bios) {
+            return Err("RAM may be stored to in a round, the bound through a pointer");
+        }
+        if w.stack && self.frame.is_none_or(|fr| fr.escaping() > 0) {
+            return Err("the frame stored to in a round, the bound through a pointer");
+        }
+        // Not I/O, whose registers change by themselves.
+        let at = latch[..li]
+            .iter()
+            .rev()
+            .find_map(|i| match i.op {
+                Op::Insn(a) => Some(a),
+                _ => None,
+            })
+            .unwrap_or(0);
+        if self.ctx.disc.rec.accesses.get(&at).is_some_and(|x| {
+            x.hull.is_some_and(|(lo, hi)| {
+                !(matches!(lo >> 24, 0x02 | 0x03) && matches!(hi >> 24, 0x02 | 0x03))
+            })
+        }) {
+            return Err("bound may be loaded from outside RAM");
+        }
+        let q = a.base.ok_or("bound's address unknown")?;
+        let base = match a.add {
+            0 => format!("r{q}"),
+            k => format!("r{q}.wrapping_add({k:#x})"),
+        };
+        Ok(format!("{f}(g, {base}{m})"))
     }
 
     /// Where loop start `h` (latch `l`, the round `round`, its plan's
@@ -9047,6 +9158,14 @@ impl FnPrinter<'_, '_> {
         self.sums.get(k).map_or(0, Summary::passed)
     }
 
+    /// Whether a direct call passes `k` r12 ([`Summary::ip`]): false for
+    /// a stand-in, or with `--takes-zeroed`.
+    fn ip(&self, k: u32) -> bool {
+        !self.holes.standins.contains_key(&k)
+            && !self.holes.takes_zeroed
+            && self.sums.get(k).is_some_and(|s| s.ip.is_some())
+    }
+
     /// The registers of r4-r11 (bit `n - 4` for rN) `k` returns in r0-r3
     /// as they came ([`Summary::echoes`]): a call passes them, so it
     /// returns the caller's, as the machine does. 0 for a stand-in.
@@ -9133,9 +9252,9 @@ impl FnPrinter<'_, '_> {
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
-        let (m, e) = (self.passed(k), self.echoes(k));
-        if m | e != 0 {
-            return (self.results_lhs(k), taking(k, self.taken(m) | e));
+        let (m, e, ip) = (self.passed(k), self.echoes(k), self.ip(k));
+        if m | e != 0 || ip {
+            return (self.results_lhs(k), taking(k, self.taken(m) | e, ip));
         }
         let four = (0..4).map(|r| self.reg(r)).collect::<Vec<_>>().join(", ");
         match self.shape(k) {
@@ -9351,7 +9470,7 @@ impl FnPrinter<'_, '_> {
                     "{:#010x} => {{ {}{}?; }} ",
                     self.id(e),
                     self.results_lhs(e),
-                    taking(e, m)
+                    taking(e, m, false)
                 )
                 .unwrap();
             }
@@ -9968,9 +10087,10 @@ fn complete_sets(flow: &fnref::Flow) -> Sets {
 }
 
 /// A call of `k`, which takes the registers of `m` (bit `n - 4` for rN,
-/// of r4-r11) from its callers: its extended entry with r0-r3 and those
-/// of the caller's, the rest as `Regs::call` gives them (without `?`).
-fn taking(k: u32, m: u8) -> String {
+/// of r4-r11) from its callers, and r12 with `ip` ([`Summary::ip`]): its
+/// extended entry with r0-r3 and those of the caller's, the rest as
+/// `Regs::call` gives them (without `?`).
+fn taking(k: u32, m: u8, ip: bool) -> String {
     let hi: Vec<String> = (4..12)
         .map(|r| {
             if m & 1 << (r - 4) != 0 {
@@ -9981,8 +10101,9 @@ fn taking(k: u32, m: u8) -> String {
         })
         .collect();
     format!(
-        "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, {}, 0, r13, RET], f: [false; 4] }})",
-        hi.join(", ")
+        "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, {}, {}, r13, RET], f: [false; 4] }})",
+        hi.join(", "),
+        if ip { "r12" } else { "0" }
     )
 }
 
@@ -11803,7 +11924,7 @@ why = "a table"
             .unwrap();
         assert!(h.takes[&0x0800_0015].0.is_empty());
         assert_eq!(
-            taking(0x0800_0015, 0b10_0010),
+            taking(0x0800_0015, 0b10_0010, false),
             "x_08000015(g, Regs { r: [r0, r1, r2, r3, 0, r5, 0, 0, 0, r9, 0, 0, 0, r13, RET], f: [false; 4] })"
         );
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
