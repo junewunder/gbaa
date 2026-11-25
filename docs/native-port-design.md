@@ -1232,8 +1232,8 @@ as a seed, a budget and a digest, never as states.
 
 ## Stack locals passed by address (`native/lift-stack-arrays`)
 
-Designed 2026-11-24 (printing: `native/lift-lent-print`). A slot whose
-address only reaches callees is a Rust local; the rest stays bytes.
+Designed 2026-11-24, printed by `native/lift-lent-print` (as built: the
+doc comments of `frame::lend` and `native::code_lends`).
 
 - **A borrowed parameter** is a direct callee's r0-r3, never a pointer
   call's (`call_fn`), whose value the callee only adds constants to,
@@ -1242,18 +1242,18 @@ address only reaches callees is a Rust local; the rest stays bytes.
   store of it, a return of it, a compare, a BIOS call or a pointer call
   with it, a join with another value: it isn't borrowed. Every caller
   must pass a lent slot or a borrowed parameter of its own there (one
-  type a parameter). The greatest such set, over the call graph
-  (`frame::lend`).
+  type a parameter), and by a call, not `x_`'s `Regs` (a tail call, a
+  taker's call). The greatest such set, over the call graph.
 - **A lent slot** is an escaping one whose only escapes are passes of an
-  exact frame address to borrowed parameters. Its object (the slots from
-  that address up to the saved registers, as for any escape) is one
-  local, `[u8; N]` by access width; DWARF's type where a names file has
-  one is a later step (`native/lift-stack-typed-locals`).
+  exact frame address to borrowed parameters. Its object (the lent slots
+  and what their borrowers reach) is one local, `[u8; N]` of its bytes;
+  DWARF's type where a names file has one is a later step
+  (`native/lift-stack-typed-locals`).
 - **A pointer to a host local** is a `Lent<'_>`, the prelude's
-  `&[Cell<u8>]` (copyable, aliasable: two arguments may be the same
-  object, as `rect_union(&a, &a)` is, with `g: &mut Game` beside them).
-  It has no guest address: a borrowed parameter is never a number, so
-  nothing compares or stores it, and an access past its end panics,
+  `&[Cell<u8>]` and an offset in it (copyable, aliasable: two arguments
+  may be one object, as `rect_union(&a, &a)`, beside `g: &mut Game`).
+  It has no guest address: nothing compares or stores it (a register
+  copy left reads `pN.addr()`, 0), and an access past its end panics,
   naming the function. Other pointers stay guest addresses, unchanged.
 - **sp.** A function whose slots are all locals or lent keeps nothing in
   memory: no sp, no `bank_sp` (`native/lift-frame-gone`'s rule, with lent
@@ -1265,42 +1265,6 @@ address only reaches callees is a Rust local; the rest stays bytes.
   `Lent` carries its guest address there) and reports a load that
   differs: a write the analysis missed. The planted control makes a store
   through a borrowed parameter one more (`--plant-lent=ADDR`).
-
-Printed 2026-11-24 (`native/lift-lent-print`):
-
-- Each lent **object** is the lent slots and the bytes their borrowers
-  reach from each address lent, overlapping ones one (`Lends::objects`):
-  a local `l<offset>: [u8; N]` among the frame's others
-  (`Frame::locals`), its own accesses as theirs. A call passes it as
-  `Lent::of(&mut lN, offset)` (an object passed twice in one call is one
-  borrow, `q`).
-- `Lent<'a>` is the prelude's: the bytes as `&[Cell<u8>]`, the offset in
-  them (a borrower may be passed an address below what it reaches), and
-  the guest address with `--shadow-locals` (`Lent::shadow`). Its
-  `ld8`..`st32(k, …, F)` check the bounds and panic naming function `F`.
-- A **borrowed parameter** prints `pN: Lent<'_>`; its loads and stores
-  through it (`Lends::through`) as `pN.ld16(k, F)`, passes on as
-  `pN.at(k)` (`Lends::passes`). Where the body still reads rN as it came
-  (a register copy kept across a call, agbcc's spill), rN is
-  `pN.addr()`: what is made of it reaches only accesses and passes the
-  `Lent`'s print over (0 but under `--shadow-locals`). Liveness takes a
-  call's lent registers as unread, and `exact_sp` a store through a
-  `Lent` as reaching no I/O, so a lender whose slots are all locals is
-  frameless.
-- Narrowed in the analysis so every caller can pass a `Lent`: nothing is
-  borrowed through a tail call or fall (`x_` takes `Regs`; a named
-  borrower's `x_` is a stop), nor by a four-register function, a stand-in,
-  a checked one, one a call enters by `x_` (it takes r4-r11 or r12 from
-  its callers, or gives r4-r11 back as they came), or one another code
-  context calls (a RAM copy's call,
-  which this context's run doesn't see); a slot accessed at an offset its
-  width doesn't divide isn't lent.
-- Today: c-chain-gcc's `frame` lends `ctx` (20 bytes) to `step_world`,
-  `move_body`, `bounce` and `draw_body`; agb/native-frame-locals lends one
-  word. Metroid's run finds 14 slots in 8 functions, but three of its
-  borrowers give r4-r11 back as they came (a call to one goes by `x_`),
-  and the rest borrow only for them: none print (`GBAA_LEND_DEBUG=1`
-  names each skipped borrower and why).
 
 ## The units that follow
 

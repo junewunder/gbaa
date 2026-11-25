@@ -32,7 +32,14 @@
 //! `GBAA_LEND_DEBUG=1` prints, per function, its pointer parameters and
 //! why each escaped (`guard`: a compare that reaches a branch; `store
 //! value`; `load addr`/`store addr`: arithmetic past a constant offset;
-//! `return`), and each parameter the program's rules take out.
+//! `return`), and each parameter the program's rules take out; the lift,
+//! each borrower `native::code_lends` skips, and why.
+//!
+//! As printed (`native/lift-lent-print`): an object is a local `lN: [u8;
+//! N]`, lent as `Lent::of(&mut lN, offset)`; a borrowed parameter is `pN:
+//! Lent<'_>`, its accesses `pN.ld16(k, F)`, passed on as `pN.at(k)`; where
+//! the body still reads rN as it came (a copy kept across a call), rN is
+//! `pN.addr()`, the guest address under `--shadow-locals`, else 0.
 
 use super::{Edge, FBlock, Frame, Kind};
 use analysis::ir::{BinOp, Op};
