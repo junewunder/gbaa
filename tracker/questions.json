@@ -2056,6 +2056,32 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/may-minish-cap-s-cross",
+      "title": "May Minish Cap's cross-context r5 work land with its hard holes still at 4?",
+      "context": "{unit:native/lift-takes-across-copies} works: a [[takes]] site now passes r4-r11 into another code context (unit test, agb program with its planted fault caught), and ZeldaFollowAction's r5 hole closed, the chain ending at AgbMain's r5 = 255 (0x08055f10). But the read moves, by the rule that a broken chain's hole is its reader's, to the resume at 0x03005f24 that DeleteThisEntity jumps into: its r5 is the deleter's as it came, and naming that site makes DeleteThisEntity's hundreds of callers take r5 (457 hard holes, tried). The resume is already a hard hole (a stack switch), which {unit:native/lift-restore-saved-block} unwinds; its card already counts this r5 read (Minish falls by 4). The card asks for 4 to 3.",
+      "options": [
+        {
+          "key": "a",
+          "label": "land it at 4",
+          "changes": "this card's 'hard holes 4 to 3' becomes 'the r5 read moves to the resume 0x03005f24'; it lands now and the restore unit closes the read with its unwind"
+        },
+        {
+          "key": "b",
+          "label": "wait for the restore unit",
+          "changes": "this unit waits until the restore unit lands, then is rechecked and recorded with the count that gives; the code waits on its branch, unmerged"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-takes-across-copies"],
+      "asked": {
+        "at": "2026-11-25T01:15:12Z",
+        "by": "5d94ca93",
+        "host": "quack",
+        "unit": "native/lift-takes-across-copies"
+      },
+      "answer": null
     }
   ]
 }
