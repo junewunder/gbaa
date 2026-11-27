@@ -5543,15 +5543,22 @@
       "uses": ["heavy"],
       "priority": 85,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e25023a3",
-        "session": "e25023a3-5c73-48a7-bae7-30110a892786",
-        "host": "quack",
-        "pid": 2117956,
-        "start": "121114680",
-        "at": "2026-11-27T05:10:59Z",
+        "at": "2026-11-27T06:32:44Z",
+        "evidence": "Head 0b20d8c2 (main merged). Review fixes: needs_bank's doc moved above is_frameless's, so each keeps its own. Frameless functions print no bank_sp: bank_sp_calls lowered on every C row, c-chain-gcc 18->9 (19 left out of frameless AgbMain, bounce, fill_rect, rect_union, memcpy). No function newly went frameless (7 before and after): lent slots already counted as locals since {unit:native/lift-lent-print}. sp_accesses_escaping_slot stays 4 (fill_rect's stack argument) and is handed to {unit:native/lift-stack-args} under d/lent-frameless-lands-on-bank-sp-calls-escaping; an independent checker subagent's verdict: fair. just lift-check passed (every program 0 differences, every planted fault caught). --shadow-locals lifts: c-chain-gcc 601 frames, 0 reports; Metroid 2700 frames on units/metroid-native.toml's inputs, 0 reports, frame hashes identical to the plain lift's. Native routes: Metroid 2700 frames, 0 differences, audio too; Emerald 5400 frames, 0 differences, audio too. just check passed.",
         "branch": "unit/native/lift-lent-frameless",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T06:32:44Z",
+          "by": "e25023a3",
+          "host": "quack",
+          "pid": 2117956,
+          "start": "121114680",
+          "beats": true,
+          "session": "e25023a3-5c73-48a7-bae7-30110a892786",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
