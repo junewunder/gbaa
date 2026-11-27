@@ -253,6 +253,7 @@ pub mod ref_params;
 pub mod ref_results;
 pub mod rom_data;
 pub mod shape;
+pub mod signed;
 pub mod switch;
 pub mod text_statics;
 pub mod unread;
@@ -2806,6 +2807,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("value_lets", soft.value_lets);
     // Of those, the ones named for what they hold (native/lift-let-names).
     m.push("lets_named", n(soft.lets_named));
+    // Of those, the ones declared `i32` (native/lift-signed-values).
+    m.push("lets_signed", n(soft.lets_signed));
     // Pointer variables declared `Ref<T>` (native/lift-pointer-types; no
     // bar: they should rise), by where the type came from: the names
     // files' (`t::…`) and the heap runs' (proven); and the typed pointers
@@ -4948,6 +4951,8 @@ struct Soft {
     locals_noted: usize,
     /// The `let vN` values named for what they hold ([`value_names`]).
     lets_named: usize,
+    /// The `let`s declared `i32` ([`signed`]).
+    lets_signed: usize,
     /// Pointer variables declared `Ref<T>` ([`ref_binds`]), by where
     /// their type came from: the names files', a heap run's.
     refs_bound_named: usize,
@@ -5554,6 +5559,7 @@ impl FnPrinter<'_, '_> {
             self.name_locals(&mut s, head, e.len());
             self.name_values(&mut s, head);
             self.bind_refs(&mut s, head);
+            self.sign_values(&mut s, head);
             return s;
         }
         self.soft.fns_match += 1;
@@ -5599,6 +5605,7 @@ impl FnPrinter<'_, '_> {
         self.name_locals(&mut s, head, e.len());
         self.name_values(&mut s, head);
         self.bind_refs(&mut s, head);
+        self.sign_values(&mut s, head);
         s
     }
 
@@ -5829,6 +5836,26 @@ impl FnPrinter<'_, '_> {
             s.replace_range(head.., &text);
             self.soft.refs_bound_named += n.named;
             self.soft.refs_bound_proven += n.proven;
+        }
+    }
+
+    /// The function's values that save casts as `i32` declared so
+    /// ([`signed`]): last, after the `Ref` bindings. The entries' text
+    /// (both copies, [`Entries`]) is left as it is.
+    fn sign_values(&mut self, s: &mut String, head: usize) {
+        let Some((text, n)) = signed::sign(&s[head..]) else {
+            return;
+        };
+        if n == 0 {
+            return;
+        }
+        let kept = self.soft.entries.get(&self.f.entry).is_none_or(|e| {
+            let all = e.all();
+            !s[head..].contains(&all) || text.contains(&all)
+        });
+        if kept {
+            s.replace_range(head.., &text);
+            self.soft.lets_signed += n;
         }
     }
 
