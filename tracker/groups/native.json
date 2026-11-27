@@ -5293,15 +5293,22 @@
       "uses": ["heavy"],
       "priority": 72,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "0a34a83d",
-        "session": "0a34a83d-ec97-47a3-be7f-c00d23601733",
-        "host": "quack",
-        "pid": 3999615,
-        "start": "125627294",
-        "at": "2026-11-27T17:43:04Z",
+        "at": "2026-11-27T19:50:24Z",
+        "evidence": "On 9ff2d647 (main merged, up to date): Mirror's '& 0x…u32) & 0x' in src/*.rs 386 to 1 (a byte store of x & !0x40, which doesn't fit its width); masks_folded 1178, new barred mask_chains 0 on Mirror and every lift-check row (177 links used again, stored then masked on, stay lets by the card's one-use rule). Mirror native route (units/kirby-mirror-native.toml) on c9a6df3c: 3000 frames, 0 differences, audio the same. just check passed on 9ff2d647. Codegen unit test mask_chains_print_as_one_mask covers and-, or-chains, and-then-or not folding, a used-again link, a fold past a register write; no C program has a chain. lift-metrics: bitfield_* unchanged, all bars hold. just lift-check stopped at the 2 h mark after 43 of 46 programs passed, none failed: the rest is {unit:native/lift-mask-fold-lift-check}. Loop's diff review pending.",
         "branch": "unit/native/lift-mask-fold",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T19:50:24Z",
+          "by": "0a34a83d",
+          "host": "quack",
+          "pid": 3999615,
+          "start": "125627294",
+          "beats": true,
+          "session": "0a34a83d-ec97-47a3-be7f-c00d23601733",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-27T17:43:04Z"
     },
