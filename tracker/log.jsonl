@@ -4530,3 +4530,4 @@
 {"at":"2026-11-27T17:55:18Z","actor":"loop","tag":"e716ec2e","host":"quack","cmd":"done","id":"merge/quack-lane3-native-fnref-dense-keys-left","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-27T17:55:26Z","actor":"loop","tag":"manual","host":"quack","cmd":"landing","id":"merge/quack-lane3-native-fnref-dense-keys-left","text":"Merge main on quack lane 3, Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: landing taken over by quack"}
 {"at":"2026-11-27T18:02:19Z","actor":"loop","tag":"manual","host":"quack","cmd":"block","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: stuck: the loop's review asked for fixes a second time"}
+{"at":"2026-11-27T18:02:24Z","actor":"loop","tag":"2500f465","host":"quack","cmd":"claim","id":"native/lift-aligned-params","text":"Untyped pointer loads drop rotates their callers prove 0: claimed"}
