@@ -5596,19 +5596,8 @@
         "by": "584e83c0",
         "at": "2026-11-27T20:48:23Z",
         "evidence": "Review fix made: a let shifted right or compared unsigned (<,>,<=,>= without its as i32) stays u32; test unsigned_uses_stay_u32. lift-check passed (pre-merge; no bar moved), just check passed after merging main (lift-metrics 0 over bars). Amazing Mirror (holes applied): casts 41,564 with prim::sext counted -> 40,190, lets_signed 657, name-as-i32 casts 7,998 -> 6,784 (vN 2,257 in compares' text grep, rN 1,132); none of the 657 used unsigned, so the fix moved nothing there. Mirror native route units/kirby-mirror-native.toml: 3,000 frames, 0 differences, audio same. Halving not reached: what holds the rest (5,192 lets with a plain u32 right side, register locals) is in docs/research/mirror-machine-count.md row 8, handed to {unit:native/lift-signed-loads} and {unit:native/lift-signed-registers}.",
-        "branch": "unit/native/lift-signed-values",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T20:48:23Z",
-          "by": "584e83c0",
-          "host": "quack",
-          "pid": 3998997,
-          "start": "125626757",
-          "beats": true,
-          "session": "584e83c0-cae6-4782-bb2e-cbce06967d55",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-27T21:21:00Z"
       },
       "notes": [
         {
@@ -5621,20 +5610,7 @@
           "by": "3411b93a",
           "text": "From {unit:native/lift-cast-types}: typing one let i32 gains little (Mirror: ~1,500 lets used only signed save ~600 casts; 7,100 are mixed-use). prim::sext (5,849) is a cast the count misses: printing it as 'as i16 as u32' raises the metric. codegen::native::casts has the helpers."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-27T20:01:44Z",
-        "findings": "- crates/codegen/src/native/signed.rs:340-358 (the `Use::Other` branch in `sign`) and the cost loop after it: the card's sprint text says \"A value also shifted right or compared unsigned stays u32\", and the pass doesn't enforce that. A use such as `w >> 3`, or an unsigned compare like `w < v2` or `w >= 0x10u32`, ends up as `Use::Other`. That costs only +1, so a let with two signed compares, one logical shift right and a cast-free right side still gets declared `i32` and prints `(w as u32) >> 3`. The output is still correct, but it does exactly what the card rules out. Fix: when a variable has a use followed by `>>` (not inside `as i32`), or is an operand of `<`, `>`, `<=` or `>=` without its `as i32`, mark it as never `i32`. For example, give it a source-side cost no saving can outweigh, or leave it out of `vars`. Add a test next to `other_uses_cast_back`: a let with two `(v1 as i32) < k` compares and one `v1 >> 4`, and another with an unsigned `v1 < v2`, both staying `u32`. Then re-run `just lift-check` and re-base any casts bars that move. Also re-measure Mirror's `casts`, `lets_signed` and the name-as-i32 compares for the evidence and for docs/research/mirror-machine-count.md row 8 and its prose.",
-        "sent": {
-          "evidence": "codegen::native::signed declares lets compared signed i32 by a min cut; casts now counts prim::sext. Amazing Mirror: casts 41,564 (sext counted) -> 40,190, 657 lets i32, name-as-i32 compares 7,998 -> 6,781; its native route passes 3,000 frames, 0 differences. just lift-check passed (46 programs; bars re-based for sext, lowered by the pass). Not halved: what holds the rest (5,513 lets: 5,192 with a plain u32 load right side, 3,371 a tie; register locals untouched) is filed as {unit:native/lift-signed-loads} and {unit:native/lift-signed-registers}. cargo test -p codegen and clippy -D warnings clean; full just check was queued 27 min behind other lanes' memory and stopped at the loop's 2h call, so the loop's own check runs it.",
-          "by": "6f3bca57",
-          "host": "quack",
-          "branch": "unit/native/lift-signed-values",
-          "change": "fd5687b7a67efa86a7d5acd8c35f09b97e34ea1c"
-        }
-      },
-      "round": "2026-11-27T17:43:14Z"
+      ]
     },
     {
       "id": "native/land-emerald-route-lifter",

@@ -4567,3 +4567,5 @@
 {"at":"2026-11-27T21:02:02Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane1-native-lift-signed-values","text":"new unit: Merge main on quack lane 1"}
 {"at":"2026-11-27T21:02:08Z","actor":"loop","tag":"79bbdeae","host":"quack","cmd":"claim","id":"merge/quack-lane1-native-lift-signed-values","text":"Merge main on quack lane 1: claimed"}
 {"at":"2026-11-27T21:10:45Z","actor":"loop","tag":"79bbdeae","host":"quack","cmd":"done","id":"merge/quack-lane1-native-lift-signed-values","text":"Merge main on quack lane 1: done"}
+{"at":"2026-11-27T21:21:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane1-native-lift-signed-values","text":"Merge main on quack lane 1: on main"}
+{"at":"2026-11-27T21:21:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: on main"}
