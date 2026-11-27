@@ -5431,6 +5431,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-27T23:25:10Z",
+          "by": "13420935",
+          "text": "144 [[takes]] now (mods 1974149), just holes: 1 hard, zeroed only through AgbMain. Left: AgbMain's takes once {unit:native/lift-const-call-takes} lands (entry 0x080003b9, crt0 bx r1 0x08000244), then lift, first stop, route ({unit:native/rogue-adventure-route})."
+        },
+        {
           "at": "2026-11-27T22:48:17Z",
           "by": "13420935",
           "text": "chain is ~143 fns, not 29 (named sites make callers takers). 128 [[takes]] in mods holes.toml (validated by just holes: 1 hard, 15 left: AgbMain + 14 listed there). Method, tools: memory/rogue-r11-takers.md. AgbMain needs {unit:native/lift-const-call-takes}."
