@@ -589,7 +589,20 @@ pub fn pointer(
 /// element, the element's own offset. As [`pointer`] returns; `None`
 /// where neither fits or it lands on no field.
 pub fn pointer_indexed(t: &Types, x: &Indexed, w: u32, p: &str, i: &str) -> Option<(String, bool)> {
-    let (mut e, elem, off, _) = element(t, x, p, i)?;
+    pointer_indexed_at(t, x, w, p, i, false)
+}
+
+/// As [`pointer_indexed`], with `p` the start of the base's object where
+/// `start` (a register holding it, [`super::field_base`]), not the base.
+pub fn pointer_indexed_at(
+    t: &Types,
+    x: &Indexed,
+    w: u32,
+    p: &str,
+    i: &str,
+    start: bool,
+) -> Option<(String, bool)> {
+    let (mut e, elem, off, _) = element(t, x, p, i, start)?;
     if off.checked_add(w).is_none_or(|end| end > t.size(&elem)) {
         return None;
     }
@@ -618,7 +631,7 @@ pub fn address_indexed(t: &Types, x: &Indexed, global: bool, p: &str, i: &str) -
     if x.s < 2 {
         return None;
     }
-    let (mut e, elem, off, other) = element(t, x, p, i)?;
+    let (mut e, elem, off, other) = element(t, x, p, i, false)?;
     // A global that isn't an array has no `i`th: an address past it
     // (modern GCC's section anchor plus an offset to another global).
     if global && other {
@@ -673,11 +686,19 @@ fn push_steps(e: &mut String, steps: &[Step]) {
 /// index `i`: its printed `Ref` (an element of the array of `x.s`-byte
 /// elements the base points into, `.idx(i)`, or the `i`th object of the
 /// base's type on from it, `.add(i)`), its type, the offset into it and
-/// whether it is the latter.
-fn element(t: &Types, x: &Indexed, p: &str, i: &str) -> Option<(String, Ty, u32, bool)> {
+/// whether it is the latter. `start`: `p` is the object's start, not the
+/// base.
+fn element(
+    t: &Types,
+    x: &Indexed,
+    p: &str,
+    i: &str,
+    start: bool,
+) -> Option<(String, Ty, u32, bool)> {
     let b = &x.at;
     let ty = rust(t, &b.ty);
     let mut e = match b.off {
+        _ if start => format!("Ref::<{ty}>::new({p})"),
         0 => format!("Ref::<{ty}>::new({p})"),
         k => format!("Ref::<{ty}>::to({p}, {k:#x})"),
     };

@@ -36,7 +36,9 @@
 //! What it counts, apart by where the type came from: `named` (a type of
 //! the names files, `t::…`; [`super::fields`]) and `proven` (a heap run's
 //! type, [`super::heap`]). [`at_use`] counts the `Ref::<T>::new(…)` and
-//! `Ref::<T>::to(…)` left at a use (`ref_new_at_use`, barred).
+//! `Ref::<T>::to(…)` left at a use (`ref_new_at_use`, barred), and
+//! [`to_at_use`] the `::to(…)` alone (`ref_to_at_use`, barred;
+//! [`super::field_base`]).
 
 use std::collections::BTreeMap;
 
@@ -52,6 +54,16 @@ pub struct Bound {
 /// `Ref::<T>::new(` and `Ref::<T>::to(` in `text`: a typed pointer made
 /// at its use.
 pub fn at_use(text: &str) -> u64 {
+    made(text, &["::new(", "::to("])
+}
+
+/// `Ref::<T>::to(` in `text`: a typed pointer made at its use from one
+/// into its object (`ref_to_at_use`; native/lift-field-base).
+pub fn to_at_use(text: &str) -> u64 {
+    made(text, &["::to("])
+}
+
+fn made(text: &str, ends: &[&str]) -> u64 {
     let mut n = 0;
     let mut from = 0;
     while let Some(p) = text[from..].find("Ref::<") {
@@ -68,7 +80,7 @@ pub fn at_use(text: &str) -> u64 {
             }
             j += 1;
         }
-        if depth == 0 && (text[j..].starts_with("::new(") || text[j..].starts_with("::to(")) {
+        if depth == 0 && ends.iter().any(|e| text[j..].starts_with(e)) {
             n += 1;
         }
         from = open;
