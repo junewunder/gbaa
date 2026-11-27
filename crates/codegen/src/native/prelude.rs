@@ -747,31 +747,43 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
 /// be the same object beside `g: &mut Game`, and the offset in it. It is
 /// no number: nothing compares or stores it. An access past its end stops
 /// the program, naming the function. `--shadow-locals` lifts carry its guest address (`addr`;
-/// else 0), whose bytes they keep too.
-#[derive(Clone, Copy)]
-pub struct Lent<'a> {
+/// else 0), whose bytes they keep too. `T`: the C type it points at, a
+/// typed local's (native/lift-stack-typed-locals), else `()`, bytes.
+pub struct Lent<'a, T = ()> {
     b: &'a [std::cell::Cell<u8>],
     at: i32,
     guest: u32,
+    t: std::marker::PhantomData<T>,
 }
 
-impl<'a> Lent<'a> {
+impl<T> Clone for Lent<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Lent<'_, T> {}
+
+impl<'a, T> Lent<'a, T> {
     /// A borrower that reaches nothing of what it is passed.
-    pub const NONE: Lent<'static> = Lent { b: &[], at: 0, guest: 0 };
+    pub const NONE: Lent<'static, T> = Lent { b: &[], at: 0, guest: 0, t: std::marker::PhantomData };
 
     /// Byte `at` of local `l`.
-    pub fn of(l: &'a mut [u8], at: i32) -> Lent<'a> {
-        Lent { b: std::cell::Cell::from_mut(l).as_slice_of_cells(), at, guest: 0 }
+    pub fn of(l: &'a mut [u8], at: i32) -> Lent<'a, T> {
+        Lent::cells(std::cell::Cell::from_mut(l).as_slice_of_cells(), at, 0)
+    }
+
+    fn cells(b: &'a [std::cell::Cell<u8>], at: i32, guest: u32) -> Lent<'a, T> {
+        Lent { b, at, guest, t: std::marker::PhantomData }
     }
 
     /// Byte `at` of local `l`, which the frame's bytes from `guest` shadow.
-    pub fn shadow(l: &'a mut [u8], at: i32, guest: u32) -> Lent<'a> {
+    pub fn shadow(l: &'a mut [u8], at: i32, guest: u32) -> Lent<'a, T> {
         Lent { guest, ..Lent::of(l, at) }
     }
 
     /// `k` bytes on.
-    pub fn at(self, k: i32) -> Lent<'a> {
-        Lent { at: self.at + k, ..self }
+    pub fn at<U>(self, k: i32) -> Lent<'a, U> {
+        Lent::cells(self.b, self.at + k, self.guest)
     }
 
     /// Its guest address (`--shadow-locals`), else 0.
