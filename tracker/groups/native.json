@@ -5200,26 +5200,12 @@
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
       "priority": 74,
-      "record": {
-        "state": "review",
-        "by": "cc1f7d5d",
-        "at": "2026-11-27T14:04:32Z",
-        "evidence": "Branch unit/native/fnref-dense-keys-left (6ee0a11b, merge 0ce35c2c, memory 016bdd65). c-fnptr-gcc fn_keys_left 4 -> 0 (bars lowered): indexed_obj puts gCallbacks[j-1] (anchor+0x54+4j) in gCallbacks, not gNumCallbacks. Metroid 331 -> 152 (addr_only: 80 constants only used as load addresses; a hole's number from a Part/Cmp piece is RomDull: ~100); what holds the 152: 125 words not proven (64 arithmetic on pile reads, 33 never read, 13 used as an address in the IWRAM switch copy at 0x030016ca, 13 stored outside RAM, 2 called in part), 14 code constants, 13 proven words of non-dense functions. Emerald 11146 (main) -> 11141. Pre-merge: just lift-check passed (all programs, packed and dense routes, planted faults). Merged tree: just check passed, lift-metrics 0 over 0 under, Metroid's dense build passes route-check --native --dense on units/metroid-native.toml (2700 frames). The merged lift-check rerun was stopped at the 2-hour mark: rerun it. c-list's 4 and 4: kActs read back through gPool's one object cell; follow-up {unit:native/fnref-struct-fields}. Metroid/Emerald casts, locals_noted, unread_lets (Emerald for_counter_arith) over their private bars on main's lifter too. After merge: lower mods/metroid/lift-bars.toml fn_keys_left to 152.",
-        "branch": "unit/native/fnref-dense-keys-left",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T14:04:32Z",
-          "by": "cc1f7d5d",
-          "host": "quack",
-          "pid": 2118754,
-          "start": "121115208",
-          "beats": true,
-          "session": "cc1f7d5d-c8fb-42b8-90cb-131be267e186",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-27T14:09:25Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - The card requires lift-check to be green, but it was never completed on the tree that would land. The branch includes merge 0ce35c2c, which brought in main's lifter changes ({unit:native/lift-lend-wider}), and…"
+        },
         {
           "at": "2026-11-27T13:22:31Z",
           "by": "cc1f7d5d",
@@ -5229,13 +5215,20 @@
           "at": "2026-11-27T09:21:01Z",
           "by": "bec3cb4c",
           "text": "From {unit:native/lift-proto-r3-align}: main_cb_run's pushed r3 no longer reads a parameter; c-fnptr-gcc fn_keys_left 6->4, fn_ids_dense 7->9, call_fn_four_complete 2->0. Metroid's lift not rerun."
-        },
-        {
-          "at": "2026-11-24T06:58:00Z",
-          "by": "91d18000",
-          "text": "Checker of {unit:native/fnref-dense}: dense_ids' usable doesn't exclude flows with lost ROM reads (Val::lost_rom), whose values may carry an unrecorded key into a compare; none of the C/agb programs or Metroid has any. Before a game that does: no dense IDs then (Flow needs a flag)."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-27T14:09:25Z",
+        "findings": "- The card requires lift-check to be green, but it was never completed on the tree that would land. The branch includes merge 0ce35c2c, which brought in main's lifter changes ({unit:native/lift-lend-wider}), and those touch the same function flow this unit changes. The Evidence says the merged-tree `just lift-check` was stopped at the 2-hour mark and asks for a rerun. The only completed lift-check ran before the merge. `just check` and lift-metrics on the merged tree don't cover lift-check's dense routes or its planted faults. Nothing under work/ shows a later finished run. Fix: on the current branch head (016bdd65 or later), run `just lift-check` to completion as a long job. If it passes, record it in the Evidence. If it fails, fix the cause, or rebase the bars in crates/codegen/lift-check.toml if the merge legitimately moved them, then rerun until green.",
+        "sent": {
+          "evidence": "Branch unit/native/fnref-dense-keys-left (6ee0a11b, merge 0ce35c2c, memory 016bdd65). c-fnptr-gcc fn_keys_left 4 -> 0 (bars lowered): indexed_obj puts gCallbacks[j-1] (anchor+0x54+4j) in gCallbacks, not gNumCallbacks. Metroid 331 -> 152 (addr_only: 80 constants only used as load addresses; a hole's number from a Part/Cmp piece is RomDull: ~100); what holds the 152: 125 words not proven (64 arithmetic on pile reads, 33 never read, 13 used as an address in the IWRAM switch copy at 0x030016ca, 13 stored outside RAM, 2 called in part), 14 code constants, 13 proven words of non-dense functions. Emerald 11146 (main) -> 11141. Pre-merge: just lift-check passed (all programs, packed and dense routes, planted faults). Merged tree: just check passed, lift-metrics 0 over 0 under, Metroid's dense build passes route-check --native --dense on units/metroid-native.toml (2700 frames). The merged lift-check rerun was stopped at the 2-hour mark: rerun it. c-list's 4 and 4: kActs read back through gPool's one object cell; follow-up {unit:native/fnref-struct-fields}. Metroid/Emerald casts, locals_noted, unread_lets (Emerald for_counter_arith) over their private bars on main's lifter too. After merge: lower mods/metroid/lift-bars.toml fn_keys_left to 152.",
+          "by": "cc1f7d5d",
+          "host": "quack",
+          "branch": "unit/native/fnref-dense-keys-left",
+          "change": "f4aa6c981b1b9e2ea66c3f5962b0ea81255065e6"
+        }
+      },
       "round": "2026-11-27T12:01:49Z"
     },
     {
