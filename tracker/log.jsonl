@@ -4441,3 +4441,4 @@
 {"at":"2026-11-27T06:32:35Z","actor":"loop","tag":"e25023a3","host":"quack","cmd":"decide","text":"decided: Lent-frameless lands on bank_sp_calls; escaping slots go on","d":"d/lent-frameless-lands-on-bank-sp-calls-escaping"}
 {"at":"2026-11-27T06:32:44Z","actor":"loop","tag":"e25023a3","host":"quack","cmd":"done","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: done"}
 {"at":"2026-11-27T06:41:50Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: on main"}
+{"at":"2026-11-27T06:41:55Z","actor":"loop","tag":"60eb6360","host":"quack","cmd":"claim","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: claimed"}

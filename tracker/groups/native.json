@@ -5625,7 +5625,19 @@
       "check": "recorded",
       "needs": ["native/lift-pointer-types", "native/lift-lent-print"],
       "uses": ["heavy"],
-      "priority": 82
+      "priority": 82,
+      "record": {
+        "state": "claimed",
+        "by": "60eb6360",
+        "session": "60eb6360-a06d-4d1f-a63e-b90c7ecb9021",
+        "host": "quack",
+        "pid": 2117956,
+        "start": "121114680",
+        "at": "2026-11-27T06:41:55Z",
+        "branch": "unit/native/lift-pointer-signatures",
+        "beats": true
+      },
+      "round": "2026-11-27T06:41:55Z"
     },
     {
       "id": "native/lift-proven-pointer-types",
