@@ -6258,6 +6258,14 @@
       "check": "recorded",
       "uses": ["heavy"],
       "tags": ["slow-check"]
+    },
+    {
+      "id": "native/lift-for-irq-mode-stack",
+      "title": "Emerald's IRQ stores placed: its System-mode push",
+      "detail": "From {unit:native/lift-for-ram-bounds-games}: Emerald's IRQ handlers still store anywhere (native::writes), so 63 loops' RAM bounds fail 'bound's bytes may be stored to in a round'. GBAA_FOR_WHY's 'for-why irq' lines name the one cause: IntrMain's stmdb sp!, {lr} after its msr to System mode (0x0800035c; IWRAM copy 0x03002864), a store at an sp the frame can't place. Below the interrupted code's sp, it holds no object: count it as a fresh frame, then measure Emerald's loops_not_for (bar 3220), 600 of 600 frames, just lift-check, just check.",
+      "check": "recorded",
+      "needs": ["native/lift-for-ram-bounds-games"],
+      "uses": ["heavy"]
     }
   ]
 }
