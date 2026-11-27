@@ -152,7 +152,9 @@ side that is a plain `u32`, mostly a typed 32-bit field's `g.get(…)` or a `u32
 declaring them `i32` moves the cast to the load (3,371 have no other use: a tie), and the uses
 besides compares are copies into register locals (1,307), call arguments (492) and address
 arithmetic (about 270). Register locals (`(rN as i32)` 1,132, and the C programs' loop counters)
-are untouched: the pass types only lets.
+are untouched: the pass types only lets. A let also shifted right or compared unsigned (`w >> 3`,
+`w < v2`) stays `u32` whatever it would save; on the Amazing Mirror none of the 657 was (the same
+40,190 `casts` with that rule, and no `(w as u32) >>` or unsigned compare of a cast in its text).
 
 **9-10, 12, 15-16. The guest stack.** Every call passes sp; every function that keeps a frame moves
 it; a store first tells the IRQ path where sp is:

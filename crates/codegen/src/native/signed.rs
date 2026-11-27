@@ -21,6 +21,10 @@
 //! - anything else: `(w as u32)`, a cast more (`w as u32` where nothing
 //!   binds tighter around it: an argument, a right side).
 //!
+//! A variable shifted right (`w >> 3`) or compared unsigned (`w < v2`,
+//! `w >= 0x10u32`) stays `u32` whatever it would save: it is a `u32` by
+//! what it does.
+//!
 //! Its right side `e` becomes `e as i32`, which costs nothing where `e`
 //! ends in a cast at least 32 bits wide (`x as i16 as u32` is `x as i16 as
 //! i32`, [`casts::cast`]) or is a literal, saves one where `e` is an `i32`
@@ -279,6 +283,23 @@ pub fn sign(text: &str) -> Option<(String, usize)> {
             || (punct(i, b'&') && punct(i + 1, b'&'))
             || (punct(i, b'|') && punct(i + 1, b'|'))
     };
+    // A use shifted right (`w >> 3`) or an operand of `<`, `>`, `<=` or
+    // `>=` without its `as i32`: a `u32` value by what it does, never typed
+    // `i32` (`<<`, `->` and `=>` are not compares).
+    let unsigned = |i: usize| {
+        let after = punct(i + 1, b'>') || (punct(i + 1, b'<') && !punct(i + 2, b'<'));
+        let before = i > 1
+            && ((punct(i - 1, b'<') && !punct(i - 2, b'<'))
+                || (punct(i - 1, b'>')
+                    && !punct(i - 2, b'>')
+                    && !punct(i - 2, b'-')
+                    && !punct(i - 2, b'='))
+                || (punct(i - 1, b'=')
+                    && (punct(i - 2, b'<') || punct(i - 2, b'>'))
+                    && !(i > 2 && (punct(i - 3, b'<') || punct(i - 3, b'>')))));
+        after || before
+    };
+    let mut pinned = vec![false; vars.len()];
     for &(v, i) in &uses {
         let (s, e) = (start(i), end(i));
         let unary = i > 0
@@ -342,6 +363,10 @@ pub fn sign(text: &str) -> Option<(String, usize)> {
                     || punct(i + 1, b')')
                     || punct(i + 1, b';')
                     || punct(i + 1, b'}'));
+            // Shifted right or compared unsigned: it stays `u32`.
+            if unsigned(i) {
+                pinned[v] = true;
+            }
             Use::Other(s, e, !bare)
         };
         vars[v].uses.push(u);
@@ -367,6 +392,10 @@ pub fn sign(text: &str) -> Option<(String, usize)> {
     for (v, var) in vars.iter().enumerate() {
         if !copied[v] {
             cost[v] += rhs_i32(&text[var.rhs.0..var.rhs.1]).1;
+        }
+        if pinned[v] {
+            // More than any saving in a function: on the sink side.
+            cost[v] = 1 << 24;
         }
     }
     let signed = min_cut(&cost, &copies);
@@ -509,6 +538,27 @@ mod tests {
                 "fn f() {\n    let v1: u32 = ld16(g, a) as i16 as u32;\n    h(g, v1);\n    let c: bool = (v1 as i32) <= 3;\n    let d: bool = (v1 as i32) > 7;\n}\n"
             ),
             "fn f() {\n    let v1: i32 = ld16(g, a) as i16 as i32;\n    h(g, v1 as u32);\n    let c: bool = v1 <= 3;\n    let d: bool = v1 > 7;\n}\n"
+        );
+    }
+
+    #[test]
+    fn unsigned_uses_stay_u32() {
+        // Two signed compares and a cast-free right side, but shifted right.
+        let t = "fn f() {\n    let v1: u32 = ld16(g, a) as i16 as u32;\n    let c: bool = (v1 as i32) < 0;\n    let d: bool = (v1 as i32) > 9;\n    let e: u32 = v1 >> 4;\n}\n";
+        assert_eq!(s(t), t);
+        // Compared unsigned, on either side of each compare.
+        for cmp in ["v1 < v2", "v2 > v1", "v1 >= 0x10u32", "v2 <= v1"] {
+            let t = format!(
+                "fn f() {{\n    let v2: u32 = r1;\n    let v1: u32 = ld16(g, a) as i16 as u32;\n    let c: bool = (v1 as i32) < 0;\n    let d: bool = (v1 as i32) > 9;\n    let e: bool = {cmp};\n}}\n"
+            );
+            assert_eq!(s(&t), t, "{cmp}");
+        }
+        // A shift left, a shift amount and a match arm are not.
+        assert_eq!(
+            s(
+                "fn f() {\n    let v1: u32 = ld16(g, a) as i16 as u32;\n    let c: bool = (v1 as i32) < 0;\n    let d: bool = (v1 as i32) > 9;\n    let e: u32 = v1 << 4;\n}\n"
+            ),
+            "fn f() {\n    let v1: i32 = ld16(g, a) as i16 as i32;\n    let c: bool = v1 < 0;\n    let d: bool = v1 > 9;\n    let e: u32 = (v1 as u32) << 4;\n}\n"
         );
     }
 
