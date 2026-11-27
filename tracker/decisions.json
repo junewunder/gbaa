@@ -1667,6 +1667,14 @@
       "at": "2026-11-27T22:03:28Z",
       "scope": ["native/fnref-dense-keys-left"],
       "until": "2026-11-27T23:59:59Z"
+    },
+    {
+      "id": "d/the-interpreter-check-takes-a-popped-lr-as-the",
+      "title": "The interpreter check takes a popped lr as the return address",
+      "why": "From {unit:native/fn-check-interp-pop-r0}. The lift is right: a register of r0-r3 holding only the entry lr on every return (Summary::lr_left, pop {r0}; bx r0) is given back as passed ({unit:native/lift-frame-gone}) and callers are lifted on that, so the replacement compare keeps it. The interpreter compare instead requires the sentinel return address there (Spec::lr_left). Mirror, 193 four-register functions: 38 of 38 runs differed on it before, 0 after.",
+      "by": "96b9b809",
+      "at": "2026-11-27T23:00:51Z",
+      "scope": ["native/*"]
     }
   ]
 }
