@@ -5954,6 +5954,13 @@
           "text": "Split from {unit:native/lift-pointer-signatures} (params only). ref_params::lift is the place: c-chain-gcc memcpy ends return dst.addr() (dst: Ref<u8>); its caller assigns r0 = memcpy(..). Check: lift-check, Metroid route, a returns_addr metric."
         }
       ]
+    },
+    {
+      "id": "native/summary-paired-guards",
+      "title": "A guarded write and its opposite write on every path",
+      "detail": "Found by {unit:native/lift-libgcc-div}. The summaries take a guarded write as maybe: modern GCC's __udivsi3 (ARM) sets r3 by moveq r3,#8 then movne r3,#1, then lslcc r3,r3,#4 reads it, so r3 counts as read as it came (report: 'read at 0x0800046c, in 0x08000434' in c-div-gcc). Every __aeabi_* division then passes r3 and returns it, the prototypes of c-div-gcc's sdiv, smod, udiv, umod and consts are refused, and 3 of its 9 division calls stay calls (libgcc_div_calls 3). Two adjacent writes of one register under opposite conditions of the same flags, nothing setting flags between, write it on every path. Done when: c-div-gcc's libgcc_div_calls falls to 0 and its proto_shapes_refused falls, lift-check passes, Mirror's and Metroid's native routes 0 differences.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
