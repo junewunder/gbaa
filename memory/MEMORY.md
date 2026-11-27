@@ -20,6 +20,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [SDL3's static build, and testing a window under gamescope](sdl-build-and-gamescope.md) — spotting SDL's X11 driver; gamescope in a lane needs WAYLAND_DISPLAY unset; cu type can overtake cu key
 - [The C test ROMs in $GBAA_DATA are shared by every lane](shared-c-roms.md) — another lane's `just c-tests` from an older branch swaps them under you; build main's into a symlinked private data dir (2026-11-24)
 - [Timing a hand-patched generated build, and testing a value](variant-builds-and-mirror-runs.md) — patch call sites, not call!; a copied crate needs its own --target-dir; use a positive control
+- [Tracing why a dense build leaves a function's key](fnref-keys-left-trace.md) — the report's "not proven … at ADDR", then GBAA_FNREF_WATCH=WORD; a constant's site may be arithmetic on junk, not a Const (2026-11-27)
 - [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
 - [Where a generated crate's build time goes](generated-build-cost.md) — LLVM, not rustc's front end: p07 checks in 4.7 s of a 60 s build; how to measure one part (2026-10-24)
 - [Where mGBA's beam is at the hand-over, and what matching it took](mgba-boot-beam.md) — line 126, H-blank 91 cycles off; ours too, so each V-blank of a long DMA ends a frame
