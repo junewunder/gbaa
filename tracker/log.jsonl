@@ -4475,3 +4475,4 @@
 {"at":"2026-11-27T09:34:26Z","actor":"loop","tag":"6ae9bbdc","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-proto-r3-align","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-27T09:38:50Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-proto-r3-align","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-27T09:38:50Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-proto-r3-align","text":"GCC's push of r3 to align the stack reads no parameter: on main"}
+{"at":"2026-11-27T09:38:54Z","actor":"loop","tag":"099043e1","host":"quack","cmd":"claim","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: claimed"}

@@ -5545,7 +5545,19 @@
       "detail": "frame::lend ({unit:native/lift-stack-arrays}) takes a parameter out on any compare that reaches a branch (26 of the C programs' pointer parameters), a store of it (19), arithmetic past a constant offset (10: a pointer walk, an index) and a return (8: a struct return's hidden pointer, also a summary hole in agbcc's rect_union). GBAA_LEND_DEBUG=1 lists each. Widen it: a null check of a borrowed pointer (never null), an index checked against the Lent's length, a struct return's pointer returned unread. Check: lent accesses up on the C rows; just lift-check 0 differences, every planted fault caught; just check. Sprint 2026-11-24: bars are maxima and 'lent accesses' is only a report line, so: sp_accesses_escaping_slot bars lowered on the C rows that gain a borrower, the evidence giving each row's 'lent slots' line before and after. 'Returned unread' needs {unit:native/lift-returns-read} landed.",
       "needs": ["native/lift-lent-print", "native/lift-returns-read"],
       "uses": ["heavy"],
-      "priority": 78
+      "priority": 78,
+      "record": {
+        "state": "claimed",
+        "by": "099043e1",
+        "session": "099043e1-82fa-435a-9c0d-4e225afd9d61",
+        "host": "quack",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T09:38:54Z",
+        "branch": "unit/native/lift-lend-wider",
+        "beats": true
+      },
+      "round": "2026-11-27T09:38:54Z"
     },
     {
       "id": "native/lift-lent-print",
