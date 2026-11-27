@@ -12,7 +12,11 @@
 //! variables; `values_named` of `[values]`' names; `named_field_accesses`
 //! of the computed accesses (it plus `computed_unknown_unnamed`);
 //! `text_statics` and `texts_left`; `loops_for` and `loops_not_for`;
-//! `fn_words_proven` of the fn words; the built lift's run (`[run]`, which
+//! `fn_words_proven` of the fn words; the pointer parameters the lift
+//! proves a type of with no names file's type (`proven_types_agree`,
+//! `_disagree`, `_unproven`: their accesses all fields of the
+//! prototype's DWARF type or not, or none; native/lift-proven-pointer-
+//! types, the share agreeing of all three); the built lift's run (`[run]`, which
 //! `just lift` writes; `not run` without it). And one direct measure from
 //! the printed source ([`fn_lines`]): each function's printed lines (not
 //! blank, not a comment) per distinct `// file:line` note in it; the
@@ -414,7 +418,7 @@ fn pct(n: u64, of: u64) -> String {
 /// brackets. Then each game's note and its worst functions.
 pub fn table(now: &Summary, against: Option<&Summary>) -> String {
     type Row = (&'static str, fn(&Score, Option<&Score>) -> String);
-    let rows: [Row; 13] = [
+    let rows: [Row; 14] = [
         ("functions named / map's functions", |s, w| {
             format!(
                 "{} / {}{}",
@@ -493,6 +497,16 @@ pub fn table(now: &Summary, against: Option<&Summary>) -> String {
                 a + b,
                 pct(a, a + b)
             )
+        }),
+        ("proven ptr types: agree/not/none", |s, w| {
+            let k = [
+                "proven_types_agree",
+                "proven_types_disagree",
+                "proven_types_unproven",
+            ];
+            let [a, d, u] = k.map(|k| with(get(s, k), w.map(|w| get(w, k))));
+            let all: u64 = k.iter().map(|k| get(s, k)).sum();
+            format!("{a}, {d}, {u}{}", pct(get(s, k[0]), all))
         }),
         ("results void, one / prototypes", |s, w| {
             let r = &s.results;
