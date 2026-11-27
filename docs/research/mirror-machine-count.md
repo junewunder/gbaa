@@ -51,10 +51,10 @@ are a line or two.
 | 2 | Register names `r0`-`r14` | `\br([0-9]\|1[0-4])\b` | 359,948 | 3,377 | Mirror's names map has DWARF types, locals and lines (`native/mirror-dwarf-map`, ready): katam's locals name what's left |
 | 3 | A u32 as an address: typed pointer built from a bare u32 | `Ref::<…>::new(` | 62,289 | 572 | Mirror's DWARF map (types of parameters and locals), then stage B's typed pointers; none filed for the u32 itself |
 | 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | done (`native/lift-pc-markers`, 2026-11-24): 0, kept in the crate's `pcs.txt` and put back by its build script in a `guest-pc` build |
-| 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | `native/lift-aligned-loads` (2026-11-24): 12,090 left, raw `ld32`/`ld16` through untyped pointers; `load_rotates_left` 13,040 |
+| 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | `native/lift-aligned-loads` (2026-11-24): 12,090 left, raw `ld32`/`ld16` through untyped pointers; `load_rotates_left` 13,040; `native/lift-aligned-params` (2026-11-27): 10,814 (11,291 on main before it) |
 | 6 | Adds of zero (Thumb's `adds rd, rs, #0` as a move) | `wrapping_add\(0x0\)` | 41,107 | 367 | done (`native/lift-add-zero`, 2026-11-24): 0 |
 | 7 | A u32 as an address: byte loads and stores through a computed value | `\b(ld\|st)(8\|16\|32)\(g,` | 40,309 | 238 | Mirror's DWARF map and `native/lift-index-names` (merging); `load_computed_unknown` 48,412, `store_computed_unknown` 33,281 |
-| 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | `native/lift-cast-types` (2026-11-24): 35,531, a value printed at a width compared, narrowed and shifted in it; `casts` (barred on the lift-check programs). Left: signed compares of `u32` values (`(vN as i32)` 6,521, `(rN as i32)` 1,166), which want whole-function signedness; `prim::sext` (5,849) is a cast the count doesn't see; `narrowing_casts` 7,265 |
+| 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | `native/lift-cast-types` (2026-11-24): 35,531, a value printed at a width compared, narrowed and shifted in it; `casts` (barred on the lift-check programs). `native/lift-signed-values` (2026-11-27): `casts` counts `prim::sext` too (5,849, so 41,564 on the same lift), and 657 lets compared signed are declared `i32`: 40,190 (`lets_signed`), the signed compares of a name 7,998 to 6,781. Left: lets whose cast only moves to their load (`native/lift-signed-loads`), register locals (`native/lift-signed-registers`); `narrowing_casts` 7,264 |
 | 9 | sp passed to a callee | `\(g, (r13\|sp)[,)]` | 29,362 | 311 | Exact sp passed only where a stack address reaches RAM (`native/lift-frame-exact-narrow`, ready); stage A keeps sp a parameter by decision |
 | 10 | `bank_sp` before a store | `bank_sp\(` | 14,068 | 127 | `native/lift-frame-exact-narrow`; `bank_sp_calls` 14,068 |
 | 11 | Bare addresses | see above | 18,562 (RAM 7,545, ROM 11,017) | 198 (129, 69) | RAM: Mirror's DWARF map, `native/lift-global-bitfields` (ready); ROM: function words are `native/fnref-dense` and `native/rom-statics` (both waiting) |
@@ -118,6 +118,13 @@ object's, a stack local's and one at an address proven aligned (constants,
 sp and the arithmetic between) print without it: 44,881 to 12,090 on the
 Amazing Mirror. What's left reads a pointer parameter or a loaded pointer
 plus an offset with no type, aligned only as its callers make it.
+Since `native/lift-aligned-params` (2026-11-27) a register's low bits known
+0 carry across a function's blocks and, into a function only direct calls
+of its own code context enter, from all its callers' arguments:
+`load_rotates_left` 11,291 to 10,814 (10,482 to 10,077 `ShiftType::Ror`),
+1,341 functions entered knowing some. What's left is mostly loaded
+pointers and the parameters of functions a pointer reaches (the objects'
+callbacks), which no caller's fact may cover.
 
 **6. Adds of zero.** agbcc moves registers with `adds rd, rs, #0`:
 
@@ -139,6 +146,22 @@ it (`codegen::native::casts`): `((v13 as i16 as u32) as i32) <= 3` is `(v13 as i
 compare's constant is an `i32` literal (`-0xe00000`, not `(0xff200000u32 as i32)`). What is left is
 mostly `u32` values compared signed, which a local typed `i32` would print bare only if its other
 uses (wrapping arithmetic, stores, calls) were `i32` too.
+
+Since `native/lift-signed-values` a `let` is declared `i32` where that saves casts over its
+function (`codegen::native::signed`, a pass over the printed text): `let v1: i32 = g.ram.x as i16
+as i32;` then `v1 < 0`, `v1.wrapping_sub(1) < 0`, `v1 == -1`, a narrowing store `v1 as u16` as it
+was, any other use `v1 as u32`; the right side `((x as i32) >> 16) as u32` is `(x as i32) >> 16`.
+Lets copied into one another go together (a minimum cut over the function). On the Amazing Mirror
+(lift at 31b453ec's main with the change, holes applied, flow on) 657 lets: `casts` 41,564 (with
+`prim::sext` now counted) to 40,190; its native route passes 3,000 frames. What holds the rest,
+measured over the 5,513 lets still compared through a cast (5,641 compares): 5,192 have a right
+side that is a plain `u32`, mostly a typed 32-bit field's `g.get(…)` or a `u32` global field, so
+declaring them `i32` moves the cast to the load (3,371 have no other use: a tie), and the uses
+besides compares are copies into register locals (1,307), call arguments (492) and address
+arithmetic (about 270). Register locals (`(rN as i32)` 1,132, and the C programs' loop counters)
+are untouched: the pass types only lets. A let also shifted right or compared unsigned (`w >> 3`,
+`w < v2`) stays `u32` whatever it would save; on the Amazing Mirror none of the 657 was (the same
+40,190 `casts` with that rule, and no `(w as u32) >>` or unsigned compare of a cast in its text).
 
 **9-10, 12, 15-16. The guest stack.** Every call passes sp; every function that keeps a frame moves
 it; a store first tells the IRQ path where sp is:
@@ -194,6 +217,10 @@ units do):
   bar 58,170 (done 2026-11-24: 0; `pcs.txt` holds the 58,170).
 - `native/lift-cast-types`: values typed by width so the casts go; bar
   39,068 (`narrowing_casts` 7,265); 35,531 after it (row 8).
+- `native/lift-signed-values`: lets compared signed declared `i32`; 40,190
+  of 41,564 once `prim::sext` counts (row 8). Its two follow-ups:
+  `native/lift-signed-loads` (a signed C field's load gives `i32`) and
+  `native/lift-signed-registers` (register locals too).
 - `native/lift-let-names`: a value read twice is named for what it
   holds; bar 606,337 `vN` (`value_lets` 208,204). (Done 2026-11-24:
   305,363, from 524,112 with `--no-let-names`; the rest are compares,

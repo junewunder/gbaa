@@ -361,7 +361,7 @@ fn narrow_side(
 fn side(s: &Side, signed: bool, left: bool, val: &dyn Fn(ValueId) -> String) -> String {
     match (s, signed) {
         (Side::Val(x), false) => val(*x),
-        (Side::Val(x), true) => format!("({})", casts::cast(&val(*x), "i32")),
+        (Side::Val(x), true) => format!("({})", casts::to_i32(&val(*x))),
         (Side::And(a, b), false) => format!("({} & {})", and(a, val), and(b, val)),
         (Side::And(..), true) => format!("({} as i32)", side(s, false, false, val)),
         (&Side::Const(k), false) if left => format!("{k:#x}u32"),

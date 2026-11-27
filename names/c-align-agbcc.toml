@@ -1,0 +1,150 @@
+# Names for c-align-agbcc.gba (c/align/, built by `just c-tests`), from its ELF's symbols and DWARF.
+# Written by `just c-names` (crates/pret-names). Don't edit.
+
+[map]
+rom_sha1 = "8e1c12fce81f68c609007dfafafb27b7abb906b8"
+source = "gbaa c/align/ (c-align-agbcc.elf, just c-tests)"
+format = 1
+#
+# Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
+# run address, with `rom` its source) or data addresses.
+
+# Our entries with a pret function symbol (`label`: an asm label) here.
+[functions]
+0x08000000 = { name = "_start", size = 0, file = "crt0.o" }
+0x08000160 = { name = "irq_handler", size = 0, file = "crt0.o" }
+0x0800018d = { name = "VBlankIntrWait", size = 0, file = "crt0.o" }
+0x08000191 = { name = "rd32", size = 0, file = "align-align.o" }
+0x08000195 = { name = "rd16", size = 0, file = "align-align.o" }
+0x08000199 = { name = "rd_pair", size = 0, file = "align-align.o" }
+0x080001a1 = { name = "fill_rect", size = 102, file = "common-draw.o", src = "c/common/draw.c", proto = "void fill_rect(s32 x, s32 y, s32 w, s32 h, u16 color)" }
+0x08000281 = { name = "sum_pairs", size = 36, file = "align-main.o", src = "c/align/main.c", proto = "u32 sum_pairs(const u32 *p, u32 n)" }
+0x080002a5 = { name = "step", size = 68, file = "align-main.o", src = "c/align/main.c", proto = "void step(void)" }
+0x080002e9 = { name = "AgbMain", size = 212, file = "align-main.o", src = "c/align/main.c", proto = "void AgbMain(void)" }
+
+# Our entries pret has no symbol for, inside one of its functions.
+[inside]
+
+# Our entries with no function name: a pret function in the other mode,
+# pret data (discovery took it for code), or nothing.
+[unnamed]
+
+# pret functions that aren't our entries, and why.
+[missed]
+0x08000209 = { name = "plot", size = 42, why = "unreached; no ROM word points at it" }
+0x08000235 = { name = "memcpy", size = 40, why = "unreached; no ROM word points at it" }
+0x0800025d = { name = "memset", size = 34, why = "unreached; no ROM word points at it" }
+
+# Code copied out of ROM to run in RAM (BIOS copies discovery found), by
+# destination: the pret functions in it, keyed by run address.
+[copies]
+
+# pret's data: variables, tables and buffers in RAM and ROM.
+[data]
+0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
+0x03000000 = { name = "gBytes", size = 8, aliases = ["__data_start"], type = "u32 [2]" }
+0x03000008 = { name = "gDx", size = 4, type = "s32" }
+0x0300000c = { name = "gDy", size = 4, type = "s32" }
+0x03000010 = { name = "gY", size = 4, aliases = ["__data_end", "__bss_start"], type = "s32" }
+0x03000014 = { name = "gFrame", size = 4, type = "u32" }
+0x03000018 = { name = "gSum", size = 4, type = "u32" }
+0x0300001c = { name = "gX", size = 4, type = "s32" }
+0x03000020 = { name = "__bss_end", size = 0 }
+0x080003bc = { name = "kPairs", size = 32, file = "align-main.o", type = "const const u32 [8]" }
+
+# Each function's parameters and variables from DWARF: a register (`reg`)
+# or a stack slot (`slot`, an offset from sp after the prologue), over
+# [from, to). Variables agbcc gave no location are left out.
+[locals]
+0x080001a1 = [
+  { name = "x", reg = 6, from = 0x080001a0, to = 0x08000206, type = "s32", param = true },
+  { name = "y", reg = 5, from = 0x080001a0, to = 0x08000206, type = "s32", param = true },
+  { name = "w", reg = 4, from = 0x080001a0, to = 0x08000206, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x080001a0, to = 0x08000206, type = "s32", param = true },
+  { name = "color", reg = 7, from = 0x080001a0, to = 0x08000206, type = "u16", param = true },
+  { name = "i", reg = 1, from = 0x080001a0, to = 0x08000206, type = "s32" },
+  { name = "j", reg = 2, from = 0x080001a0, to = 0x08000206, type = "s32" },
+  { name = "row", reg = 0, from = 0x080001a0, to = 0x08000206, type = "volatile u16 *" },
+]
+0x08000281 = [
+  { name = "p", reg = 5, from = 0x08000280, to = 0x080002a4, type = "const u32 *", param = true },
+  { name = "n", reg = 4, from = 0x08000280, to = 0x080002a4, type = "u32", param = true },
+  { name = "s", reg = 6, from = 0x08000280, to = 0x080002a4, type = "u32" },
+]
+0x080002e9 = [
+  { name = "r", reg = 5, from = 0x080002e8, to = 0x080003bc, type = "u32" },
+  { name = "g", reg = 4, from = 0x080002e8, to = 0x080003bc, type = "u32" },
+  { name = "b", reg = 0, from = 0x080002e8, to = 0x080003bc, type = "u32" },
+]
+
+# The line table: each row's address and its line, in the `src` of the
+# function holding it, else "file:line".
+[lines]
+0x080001a0 = 7
+0x080001ae = 11
+0x080001b6 = 12
+0x080001be = 13
+0x080001c8 = 14
+0x080001d2 = 15
+0x080001e0 = 16
+0x080001ea = 17
+0x080001f2 = 18
+0x080001f4 = 17
+0x080001fc = 15
+0x08000200 = 20
+0x08000208 = 23
+0x08000210 = 24
+0x0800021c = 25
+0x0800022e = 26
+0x08000234 = 8
+0x08000238 = 9
+0x0800023a = 12
+0x08000246 = 13
+0x08000254 = 14
+0x08000256 = 15
+0x0800025c = 18
+0x08000260 = 19
+0x08000262 = 21
+0x0800026c = 22
+0x08000276 = 23
+0x08000278 = 24
+0x08000280 = 28
+0x08000286 = 29
+0x08000288 = 31
+0x0800028c = 32
+0x08000294 = 33
+0x08000296 = 34
+0x08000298 = 35
+0x0800029c = 36
+0x0800029e = 37
+0x080002a4 = 40
+0x080002a6 = 41
+0x080002b2 = 42
+0x080002be = 43
+0x080002c4 = 44
+0x080002c8 = 45
+0x080002ce = 46
+0x080002d2 = 47
+0x080002e8 = 50
+0x080002f4 = 53
+0x0800030e = 54
+0x0800031e = 55
+0x08000322 = 56
+0x08000336 = 57
+0x0800033a = 58
+0x08000346 = 59
+0x08000354 = 60
+0x08000362 = 61
+0x08000370 = 62
+0x08000394 = 63
+0x0800039a = 54
+0x080003bc = "c/align/main.c:65"
+
+# Structs, unions and enums by C name (a typedef's for an anonymous one):
+# fields with byte offset, size, type and bitfield bits [lowest, width].
+
+# #define families of pret's include/constants/ that a field takes, by
+# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*),
+# and enums a field or global takes by its type (`GameMode`):
+# each value's one name, the fields, as `type.field`, the globals,
+# and the parameters pret's calls pass them to, as `function:index`.

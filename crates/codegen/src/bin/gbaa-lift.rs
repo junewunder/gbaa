@@ -1,6 +1,6 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
-//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--plant-lent=AT] [--plant-div=AT]
+//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--plant-lent=AT] [--plant-div=AT] [--plant-aligned=KEY]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
@@ -92,7 +92,11 @@
 //! `native/lift-lent-print`); `--plant-div=AT` makes the call of libgcc's
 //! division at AT (the call's last instruction: a Thumb `bl`'s second
 //! half), which must print as `/` or `%`, give its value plus one,
-//! which it must catch on `c-div` (unit `native/lift-libgcc-div`).
+//! which it must catch on `c-div` (unit `native/lift-libgcc-div`);
+//! `--plant-aligned=KEY` takes the function at KEY to be passed r0-r3
+//! word-aligned whatever its callers pass, so its loads through them drop
+//! their rotates, which a guest-pc build's `ld32`/`ld16` must stop on
+//! where one isn't, on `c-align` (unit `native/lift-aligned-params`).
 //!
 //! Where the names files give a function's prototype, its parameters and
 //! result are the prototype's, hole or not, unless its summary proves
@@ -217,7 +221,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--plant-lent=AT] [--plant-div=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--plant-lent=AT] [--plant-div=AT] [--plant-aligned=KEY] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -245,6 +249,7 @@ fn main() -> ExitCode {
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let mut plant_lent = None;
     let mut plant_div = None;
+    let mut plant_aligned = None;
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
     let (mut interp_every, mut plant_reference) = (8, false);
     let mut fn_check_cuts = false;
@@ -346,6 +351,13 @@ fn main() -> ExitCode {
         if let Some(k) = a.strip_prefix("--plant-proto=") {
             match hex(k) {
                 Some(k) => plant_proto = Some(k),
+                None => return usage(),
+            }
+            continue;
+        }
+        if let Some(k) = a.strip_prefix("--plant-aligned=") {
+            match hex(k) {
+                Some(k) => plant_aligned = Some(k),
                 None => return usage(),
             }
             continue;
@@ -504,6 +516,7 @@ fn main() -> ExitCode {
     holes.plant_slot = plant_slot;
     holes.plant_lent = plant_lent;
     holes.plant_div = plant_div;
+    holes.plant_aligned = plant_aligned;
     holes.shadow_locals = shadow;
     holes.copies = copies;
     holes.layout = layout;
