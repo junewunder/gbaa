@@ -915,15 +915,22 @@
       "lane": "quack/1",
       "branch": "unit/native/lift-signed-values",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "79bbdeae",
-        "session": "79bbdeae-50e8-44c7-bb40-fe4ce9b563ee",
-        "host": "quack",
-        "pid": 3998997,
-        "start": "125626757",
-        "at": "2026-11-27T21:02:08Z",
+        "at": "2026-11-27T21:10:45Z",
+        "evidence": "Merged origin/main into the branch (e783fcd5). lift-check.toml conflict settled keeping both comments; c-loops-agbcc takes main's lines_prelude 1522 and the branch's casts 79. just lift-metrics: 0 over, 0 under their bars; just check passed (exit 0).",
         "branch": "unit/native/lift-signed-values",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T21:10:45Z",
+          "by": "79bbdeae",
+          "host": "quack",
+          "pid": 3998997,
+          "start": "125626757",
+          "beats": true,
+          "session": "79bbdeae-50e8-44c7-bb40-fe4ce9b563ee",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-27T21:02:08Z"
     }
