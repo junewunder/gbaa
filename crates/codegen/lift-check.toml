@@ -113,6 +113,7 @@ route = "units/affine-600.toml"
 [program.affine.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18579
 lines_prelude = 1482
@@ -206,6 +207,7 @@ route = "units/mosaic-modes-600.toml"
 [program.mosaic-modes.bars]
 results_several = 11
 tuple_calls = 20
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 13462
 lines_prelude = 1482
@@ -307,6 +309,7 @@ planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002
 [program.native-spike.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 19565
 lines_prelude = 1482
@@ -404,6 +407,7 @@ planted_flags = ["--fall-as-tail-call"]
 [program.native-fallthrough.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18146
 lines_prelude = 1482
@@ -502,6 +506,7 @@ planted_flags = ["--irq-at-waits"]
 [program.native-irq-hold.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18336
 lines_prelude = 1482
@@ -602,6 +607,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 [program.native-frame-locals.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18120
 lines_prelude = 1482
@@ -699,6 +705,7 @@ planted_flags = ["--ime-at-waits"]
 [program.native-ime-release.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18296
 lines_prelude = 1482
@@ -800,6 +807,7 @@ route = "units/native-bios-calls-600.toml"
 [program.native-bios-calls.bars]
 results_several = 10
 tuple_calls = 19
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18488
 lines_prelude = 1482
@@ -901,6 +909,7 @@ route = "units/native-bios-more-600.toml"
 [program.native-bios-more.bars]
 results_several = 16
 tuple_calls = 34
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 20032
 lines_prelude = 1482
@@ -1007,6 +1016,7 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 [program.native-tasks.bars]
 results_several = 7
 tuple_calls = 14
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18529
 lines_prelude = 1482
@@ -1118,6 +1128,7 @@ planted_store = 0x08000180
 [program.native-dma.bars]
 results_several = 11
 tuple_calls = 20
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 13237
 lines_prelude = 1482
@@ -1220,6 +1231,7 @@ planted_store = 0x080002ac
 [program.native-save.bars]
 results_several = 11
 tuple_calls = 20
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18355
 lines_prelude = 1482
@@ -1318,6 +1330,7 @@ route = "units/native-bios-region-601.toml"
 [program.native-bios-region.bars]
 results_several = 11
 tuple_calls = 20
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18274
 lines_prelude = 1482
@@ -1417,6 +1430,7 @@ route = "units/native-bios-affine-600.toml"
 [program.native-bios-affine.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18563
 lines_prelude = 1482
@@ -1518,6 +1532,7 @@ planted_store = 0x0800017c
 [program.native-serial.bars]
 results_several = 11
 tuple_calls = 20
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18962
 lines_prelude = 1482
@@ -1621,6 +1636,7 @@ planted_store = 0x080001f4
 [program.native-irq-wrapper.bars]
 results_several = 12
 tuple_calls = 20
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18568
 lines_prelude = 1482
@@ -1719,6 +1735,7 @@ planted_flags = ["--takes-zeroed"]
 [program.native-takes.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18146
 lines_prelude = 1482
@@ -1818,6 +1835,7 @@ planted_flags = ["--takes-zeroed"]
 [program.native-ram-jump.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18129
 lines_prelude = 1482
@@ -1918,6 +1936,7 @@ planted_flags = ["--takes-zeroed"]
 io_unnamed = 19
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 lines = 18141
 lines_prelude = 1482
 ref_new_at_use = 0
@@ -2015,6 +2034,7 @@ planted_flags = ["--gives-kept"]
 [program.native-gives.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18130
 lines_prelude = 1482
@@ -2113,6 +2133,7 @@ planted_store = 0x080005d4
 [program.c-fnptr-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 10
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2216,6 +2237,7 @@ planted_store = 0x08000390
 [program.c-fnptr-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 26
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2324,6 +2346,7 @@ planted_store = 0x080005ca
 [program.c-switch-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 4
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2429,6 +2452,7 @@ planted_store = 0x080005a0
 [program.c-switch-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 32
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2535,6 +2559,7 @@ planted_flags = ["--plant-proto=0x08000271"]
 [program.c-chain-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 7
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2642,6 +2667,7 @@ planted_flags = ["--plant-lent=0x080003b2"]
 [program.c-chain-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 37
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2748,6 +2774,7 @@ planted_store = 0x0800031a
 [program.c-lent-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 4
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2854,6 +2881,7 @@ planted_store = 0x08000310
 [program.c-lent-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 9
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2958,6 +2986,7 @@ planted_store = 0x08000692
 [program.c-heap-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 15
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -3062,6 +3091,7 @@ planted_store = 0x0800060e
 [program.c-heap-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 locals_noted = 32
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -3170,6 +3200,7 @@ planted_store = 0x08000292
 [program.c-bits-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 lines = 446
 io_unnamed = 0
 texts_left = 0
@@ -3280,6 +3311,7 @@ planted_store = 0x080002a2
 [program.c-bits-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 lines = 497
 io_unnamed = 0
 texts_left = 0
@@ -3388,6 +3420,7 @@ planted_store = 0x0800081e
 [program.c-loops-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 lines = 781
 io_unnamed = 0
 texts_left = 0
@@ -3498,6 +3531,7 @@ planted_store = 0x080007f6
 [program.c-loops-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 lines = 846
 io_unnamed = 0
 texts_left = 0
@@ -3603,6 +3637,7 @@ planted_store = 0x080005f8
 [program.c-list-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 rom_refs = 0
 sp_arith_exact = 0
 rom_static_fn_keys = 4
@@ -3708,6 +3743,7 @@ planted_store = 0x08000612
 [program.c-list-gcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 rom_refs = 0
 sp_arith_exact = 0
 rom_static_fn_keys = 4
@@ -3812,6 +3848,7 @@ planted_store = 0x080004ae
 [program.c-jump-agbcc.bars]
 results_several = 0
 tuple_calls = 0
+libgcc_div_calls = 0
 lines = 626
 locals_noted = 4
 io_unnamed = 0
@@ -3913,7 +3950,8 @@ planted_store = 0x0800047c
 [program.c-jump-gcc.bars]
 results_several = 1
 tuple_calls = 2
-lines = 763
+libgcc_div_calls = 0
+lines = 761
 locals_noted = 21
 io_unnamed = 0
 texts_left = 0
@@ -3947,7 +3985,7 @@ sp_arith_unescaped = 0
 sp_arith_exact = 2
 lr_returned = 0
 value_lets = 168
-reg_local_writes = 80
+reg_local_writes = 79
 unpacked_unread = 0
 regs_call_entries = 4
 proto_shapes_refused = 0
@@ -4014,6 +4052,7 @@ planted_flags = ["--fall-as-tail-call"]
 [program.native-entry-jump.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 io_unnamed = 19
 lines = 18235
 lines_prelude = 1482
@@ -4112,6 +4151,7 @@ planted_flags = ["--irq-at-waits"]
 [program.native-ime-i-set.bars]
 results_several = 10
 tuple_calls = 18
+libgcc_div_calls = 0
 rom_refs = 17
 sp_arith_exact = 33
 rom_static_fn_keys = 3
@@ -4213,6 +4253,7 @@ planted_store = 0x080004d6
 [program.c-resume-agbcc.bars]
 results_several = 1
 tuple_calls = 2
+libgcc_div_calls = 0
 lines = 510
 locals_noted = 4
 io_unnamed = 0
@@ -4316,6 +4357,7 @@ planted_store = 0x080004e4
 [program.c-resume-gcc.bars]
 results_several = 1
 tuple_calls = 2
+libgcc_div_calls = 0
 lines = 593
 locals_noted = 23
 io_unnamed = 0
@@ -4402,4 +4444,212 @@ fn_words_not_proven = 0
 fn_keys_left = 0
 rom_static_fn_keys = 0
 data_constants_unnamed = 0
+gap_targets = 0
+
+[program.c-div-agbcc]
+rom = "c/c-div-agbcc.gba"
+route = "units/c-div-agbcc-600.toml"
+# A C program (native/lift-libgcc-div; c/README.md, c/div/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: signed and unsigned / and %, calls of
+# libgcc's division, by constants, by divisors that may be -1 and by ones
+# not proven nonzero, each printed as / or % where only the result it gives
+# is read after it. The planted store is AgbMain's gSum += …; the planted
+# control makes sdiv's a / b, `__divsi3`'s call (`bl` at 0x08000272) one more.
+planted_store = 0x080003f6
+planted_flags = ["--plant-div=0x08000274"]
+
+[program.c-div-agbcc.bars]
+results_several = 0
+tuple_calls = 0
+libgcc_div_calls = 0
+locals_noted = 9
+data_constants_unnamed = 0
+io_unnamed = 0
+lines = 730
+lines_prelude = 1482
+ref_new_at_use = 0
+ref_to_at_use = 0
+casts = 27
+texts_left = 0
+functions = 16
+functions_iwram = 0
+functions_lifted = 16
+functions_unrecognised = 16
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+entries_beyond_one = 18
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 107
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 1
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 1
+value_lets = 183
+reg_local_writes = 140
+unpacked_unread = 0
+regs_call_entries = 0
+proto_shapes_refused = 0
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 4
+sp_arith_unescaped = 0
+sp_arith_exact = 0
+lr_returned = 0
+loops_not_for = 15
+for_counter_arith = 0
+labelled_blocks = 0
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 1
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 2
+store_computed_ram = 1
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 2
+pointer_unexplained = 1
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 2
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
+gap_targets = 0
+
+[program.c-div-gcc]
+rom = "c/c-div-gcc.gba"
+route = "units/c-div-gcc-600.toml"
+# A C program (native/lift-libgcc-div; c/README.md, c/div/SCENE.md), built
+# by modern GCC with `just c-tests`: signed and unsigned / and %, calls of
+# libgcc's division, by constants, by divisors that may be -1 and by ones
+# not proven nonzero, each printed as / or % where only the result it gives
+# is read after it. The planted store is AgbMain's gSum += …; the planted
+# control makes consts' c / 7, `__aeabi_idiv`'s call through its Thumb veneer (`bl` at 0x080002c0) one more.
+planted_store = 0x080003e0
+planted_flags = ["--plant-div=0x080002c2"]
+
+[program.c-div-gcc.bars]
+results_several = 12
+tuple_calls = 15
+libgcc_div_calls = 3
+locals_noted = 16
+data_constants_unnamed = 0
+io_unnamed = 0
+lines = 769
+lines_prelude = 1482
+ref_new_at_use = 0
+ref_to_at_use = 0
+casts = 30
+texts_left = 0
+functions = 21
+functions_iwram = 0
+functions_lifted = 21
+functions_unrecognised = 21
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+entries_beyond_one = 30
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 86
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 1
+value_lets = 205
+reg_local_writes = 109
+unpacked_unread = 0
+regs_call_entries = 7
+proto_shapes_refused = 5
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 4
+sp_arith_unescaped = 0
+sp_arith_exact = 0
+lr_returned = 0
+loops_not_for = 11
+for_counter_arith = 0
+labelled_blocks = 4
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 1
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 2
+store_computed_ram = 1
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 2
+pointer_unexplained = 1
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 2
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 12
+branches_on_raw_flags = 27
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0

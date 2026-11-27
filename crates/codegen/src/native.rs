@@ -485,6 +485,12 @@ pub struct Holes {
     /// this address, which must be through a borrowed parameter (a
     /// `Lent`), stores its value plus one; the native check must catch it.
     pub plant_lent: Option<u32>,
+    /// The division check's planted control (`gbaa-lift --plant-div=AT`,
+    /// `native/lift-libgcc-div`): the call of libgcc's division at this
+    /// address (its last instruction: a Thumb `bl`'s second half), which
+    /// must print as `/` or `%` ([`FnPrinter::division`]),
+    /// gives its value plus one; the native check must catch it.
+    pub plant_div: Option<u32>,
     /// Shadow every stack local in the frame's bytes (`gbaa-lift
     /// --shadow-locals`): a local starts as its bytes, every store to it
     /// writes them too, and every load reads them and prints a line to
@@ -1657,6 +1663,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
                     live_in: BTreeMap::new(),
+                    divs: BTreeMap::new(),
                     field_in: FieldFacts::default(),
                     local: BTreeMap::new(),
                     bound: Default::default(),
@@ -2464,6 +2471,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             hard.push(h);
         }
     }
+    if let Some(at) = holes.plant_div
+        && !soft.planted_div
+    {
+        let h = Hole {
+            func: at,
+            at,
+            kind: HoleKind::HolesFile,
+            what: "--plant-div: no call of libgcc's division printed as / or % there".into(),
+        };
+        writeln!(report, "  {h}").unwrap();
+        hard.push(h);
+    }
     if let Some(at) = holes.plant_lent
         && !soft.planted_lent
     {
@@ -2688,6 +2707,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .sum(),
     );
     m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
+    // libgcc's division (native/lift-libgcc-div): the calls printed as
+    // `/` or `%` (no bar: it should rise) and those left as calls (barred).
+    m.push("libgcc_divisions", soft.divisions);
+    m.push("libgcc_div_calls", soft.div_calls);
     // A field's address in a register, on its base (native/lift-field-base):
     // the accesses printed so (no bar: it should rise), and the `::to(` left.
     m.push("field_bases", soft.field_bases);
@@ -3440,6 +3463,7 @@ fn fn_check_texts(
             plant: None,
             plant_slot: None,
             plant_lent: None,
+            plant_div: None,
             ..holes.clone()
         }
     };
@@ -3497,7 +3521,10 @@ fn fn_check_texts(
         t.push_str("// The replacement: the lift again (with --plant's store, if one is in it).\n");
         t.push_str(&prefix_fn(&nt, k, "new_"));
         if holes.plant_reference
-            && (holes.plant.is_some() || holes.plant_slot.is_some() || holes.plant_lent.is_some())
+            && (holes.plant.is_some()
+                || holes.plant_slot.is_some()
+                || holes.plant_lent.is_some()
+                || holes.plant_div.is_some())
         {
             "the lift with --plant's store, as the reference is (--plant-reference)".to_string()
         } else if holes.plant.is_some() || holes.plant_slot.is_some() || holes.plant_lent.is_some()
@@ -4483,6 +4510,13 @@ struct Soft {
     planted_slot: bool,
     /// The `--plant-lent` store printed.
     planted_lent: bool,
+    /// The `--plant-div` division printed.
+    planted_div: bool,
+    /// Calls of libgcc's division (by their names-file symbol,
+    /// [`division_of`]) printed as `/` or `%`, and those left as calls
+    /// (native/lift-libgcc-div).
+    divisions: u64,
+    div_calls: u64,
     /// The loads and stores printed through a borrowed parameter, a
     /// `Lent`'s (native/lift-lent-print).
     lent_accesses: usize,
@@ -4770,6 +4804,8 @@ struct FnPrinter<'a, 'b> {
     dead: BTreeMap<u32, Vec<bool>>,
     /// What is live at each block's start, as `dead` has it.
     live_in: BTreeMap<u32, live::Live>,
+    /// The calls of libgcc's division printed as `/` or `%` ([`DivSites`]).
+    divs: DivSites,
     /// The facts `rN == rM + k` at each block's start ([`field_base`]):
     /// a field's address in a register printed on its base's. Empty in a
     /// function printed in the `match` form for a save or restore, or with
@@ -5101,7 +5137,27 @@ impl FnPrinter<'_, '_> {
                 .collect()
         };
         let catch = catch || !resume.is_empty();
-        (self.dead, self.live_in, self.local) = self.dead_writes();
+        // libgcc's division calls printed as `/` or `%` read r0 and r1
+        // alone ([`FnPrinter::division`]): those whose other results are
+        // live after them stay calls, and read all they pass, until none
+        // changes.
+        self.divs = self.div_candidates();
+        loop {
+            (self.dead, self.live_in, self.local) = self.dead_writes();
+            let before = self.divs.len();
+            let live_in = std::mem::take(&mut self.live_in);
+            self.divs = std::mem::take(&mut self.divs)
+                .into_iter()
+                .filter_map(|(at, (k, ret, div, _))| {
+                    let (w, rem) = self.div_pick(k, ret, div, &live_in)?;
+                    Some((at, (k, ret, div, Some((w, rem)))))
+                })
+                .collect();
+            self.live_in = live_in;
+            if self.divs.len() == before {
+                break;
+            }
+        }
         self.field_in = if catch || self.restoring || !f.variants.is_empty() {
             FieldFacts {
                 off: true,
@@ -5985,6 +6041,7 @@ impl FnPrinter<'_, '_> {
                 }
                 // A shaped callee's call prints its parameters only, and
                 // a `Lent` for each it borrows (native/lift-lent-print).
+                Plan::Call { ret, .. } if self.divs.contains_key(&x.at) => then(ret, live::low(3)),
                 Plan::Call { target, ret } => match self.shape(target) {
                     Some(c) if plain(target) => {
                         then(ret, live::low(c.params & !self.lent_regs(keys[b], i)))
@@ -10038,6 +10095,145 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// A direct call of `k` at `at`: a call of libgcc's
+    /// division printed as `/` or `%` where it can be ([`FnPrinter::division`]),
+    /// else the call statement.
+    fn call_or_division(&mut self, k: u32, at: u32) -> String {
+        if let Some(d) = self.division(k, at) {
+            self.soft.divisions += 1;
+            return d;
+        }
+        self.soft.div_calls += u64::from(self.div_routine(k).is_some());
+        self.call_stmt(k)
+    }
+
+    /// Whether `k` is one of libgcc's division routines, by its
+    /// names-file symbol ([`division_of`]).
+    fn div_routine(&self, k: u32) -> Option<Div> {
+        division_of(self.holes.fn_names.get(&k)?)
+    }
+
+    /// The direct calls of libgcc's division that may print as `/` or `%`
+    /// ([`FnPrinter::division`]), before liveness: `k` is shaped, takes
+    /// r0 and r1, takes nothing past r0-r3 and gives nothing back, and
+    /// returns to a block of this function.
+    fn div_candidates(&self) -> DivSites {
+        let mut out = BTreeMap::new();
+        for gb in self.f.blocks.values() {
+            for x in exits(self.ctx, gb) {
+                let Plan::Call { target: k, ret } = x.plan else {
+                    continue;
+                };
+                let Some(div) = self.div_routine(k) else {
+                    continue;
+                };
+                let Some(c) = self.shape(k) else { continue };
+                if self.passed(k) | self.echoes(k) | self.gives(k) != 0
+                    || self.ip(k)
+                    || c.params & 3 != 3
+                    || !self.labels.contains_key(&ret)
+                {
+                    continue;
+                }
+                out.insert(x.at, (k, ret, div, None));
+            }
+        }
+        out
+    }
+
+    /// What a division call of `k` returning to `ret` prints, with
+    /// `live_in` live at each block: the register (a quotient's or a
+    /// remainder's, of those the routine gives: `__aeabi_idivmod` gives
+    /// both) and whether it is a remainder; `None` where another result
+    /// of `k` is live at `ret`, so the call stays.
+    fn div_pick(
+        &self,
+        k: u32,
+        ret: u32,
+        div: Div,
+        live_in: &BTreeMap<u32, live::Live>,
+    ) -> Option<(usize, bool)> {
+        let c = self.shape(k)?;
+        let live = live_in.get(&ret).copied().unwrap_or(live::ALL) & 0xf;
+        let (w, rem) = match div.rem {
+            Some(r) if live & 1 << r != 0 || (live & 1 == 0 && c.results & 1 == 0) => (r, true),
+            _ => (0, div.mod_r0),
+        };
+        let others = u32::from(c.results) & !(1u32 << w);
+        (c.results & 1 << w != 0 && live & others == 0).then_some((w, rem))
+    }
+
+    /// A call of libgcc's division `k` (native/lift-libgcc-div; the
+    /// callee known by its names-file symbol, [`division_of`]) as C's
+    /// `/` or `%`, truncating, as `i32` or `u32`: one of
+    /// [`FnPrinter::div_candidates`] where, of the results `k` gives,
+    /// only the one printed is live at its return ([`FnPrinter::div_pick`]).
+    /// Its liveness takes it to read r0 and r1 alone: what else the
+    /// routine takes it only passes back, on its divide-by-0 path. A
+    /// divisor that may be 0 keeps the call on that path (`if d != 0 {
+    /// … } else { k(…)? }`: what the routine gives then is its own; its
+    /// other parameters 0, as their values reach only results no one
+    /// reads); a signed one that may be -1 divides by `wrapping_div`, as
+    /// libgcc gives `i32::MIN` for `i32::MIN / -1`.
+    fn division(&mut self, k: u32, at: u32) -> Option<String> {
+        let &(dk, _, div, Some((w, rem))) = self.divs.get(&at)? else {
+            return None;
+        };
+        if dk != k {
+            return None;
+        }
+        let c = self.shape(k)?;
+        let (n0, d0) = (self.reg(0), self.reg(1));
+        let dc = const_text(&d0);
+        // A dividend and divisor read once each, in order.
+        let bind = dc.is_none() && !is_name(&d0);
+        let (n, d) = if bind {
+            ("n".to_string(), "d".to_string())
+        } else {
+            (n0.clone(), d0.clone())
+        };
+        let n = if one_term(&n) { n } else { format!("({n})") };
+        let sym = if rem { "%" } else { "/" };
+        let plant = self.holes.plant_div == Some(at) && dc != Some(0);
+        self.soft.planted_div |= plant;
+        let e = match (div.signed, dc) {
+            (false, Some(dv)) => format!("{n} {sym} {dv:#x}"),
+            (false, None) => format!("{n} {sym} {d}"),
+            (true, Some(dv)) if dv as i32 != -1 => {
+                format!("({n} as i32 {sym} {}) as u32", dv as i32)
+            }
+            (true, _) => format!(
+                "({n} as i32).wrapping_{}({d} as i32) as u32",
+                if rem { "rem" } else { "div" }
+            ),
+        };
+        let e = if plant {
+            format!("({e}).wrapping_add(1)")
+        } else {
+            e
+        };
+        let args: String = shape::regs(c.params)
+            .map(|r| match r {
+                0 => format!(", {n}"),
+                1 => format!(", {d}"),
+                _ => ", 0u32".to_string(),
+            })
+            .collect();
+        let pick = match shape::regs(c.results).position(|r| r == w) {
+            Some(i) if c.results.count_ones() > 1 => format!(".{i}"),
+            _ => String::new(),
+        };
+        let call = format!("f_{k:08x}(g, r13{args})?{pick}");
+        Some(match dc {
+            Some(0) => format!("r{w} = {call};"),
+            Some(_) => format!("r{w} = {e};"),
+            None if bind => format!(
+                "r{w} = {{ let (n, d) = ({n0}, {d0}); if d != 0 {{ {e} }} else {{ {call} }} }};"
+            ),
+            None => format!("r{w} = if {d} != 0 {{ {e} }} else {{ {call} }};"),
+        })
+    }
+
     /// The call statement: `lhs call?;`.
     fn call_stmt(&mut self, k: u32) -> String {
         let (lhs, call) = self.call(k);
@@ -10347,7 +10543,7 @@ impl FnPrinter<'_, '_> {
                     )
                     .unwrap();
                 }
-                let c = self.call_stmt(target);
+                let c = self.call_or_division(target, at);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
             }
@@ -10390,7 +10586,7 @@ impl FnPrinter<'_, '_> {
                     // an indirect call, so what it would pass went unread.)
                     let c = match target {
                         Some(tk) if self.all.contains(&tk) && !self.takers.contains(&tk) => {
-                            self.call_stmt(tk)
+                            self.call_or_division(tk, at)
                         }
                         Some(tk) if self.all.contains(&tk) => {
                             if !self
@@ -11388,6 +11584,57 @@ fn reg_list(m: u16) -> String {
         .join(", ")
 }
 
+/// The calls of libgcc's division printed as `/` or `%`, by the exit's
+/// address ([`FnPrinter::division`]): callee, return site, routine, and
+/// the register printed and whether it is a remainder (`None` until the
+/// liveness settles).
+type DivSites = BTreeMap<u32, (u32, u32, Div, Option<(usize, bool)>)>;
+
+/// One of libgcc's division routines (native/lift-libgcc-div): signed or
+/// unsigned, and what it gives: the quotient in r0, the remainder in r0
+/// (`mod_r0`: agbcc's `__modsi3`), or the quotient in r0 and the remainder
+/// in `rem` (GCC's `__aeabi_idivmod`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Div {
+    signed: bool,
+    mod_r0: bool,
+    rem: Option<usize>,
+}
+
+/// The division routine a names-file symbol names: agbcc's four
+/// (`__divsi3`, `__udivsi3`, `__modsi3`, `__umodsi3`) and GCC's
+/// `__aeabi_idiv`, `__aeabi_uidiv`, `__aeabi_idivmod` and
+/// `__aeabi_uidivmod`, or a linker's Thumb veneer of one
+/// (`____aeabi_uidivmod_from_thumb`). By name, not code (the owner's
+/// decision of 2026-11-24: naming, not the parked library recognition).
+fn division_of(name: &str) -> Option<Div> {
+    let n = name.trim_start_matches('_');
+    let n = n.strip_suffix("_from_thumb").unwrap_or(n);
+    let d = |signed, mod_r0, rem| {
+        Some(Div {
+            signed,
+            mod_r0,
+            rem,
+        })
+    };
+    match n {
+        "divsi3" | "aeabi_idiv" => d(true, false, None),
+        "udivsi3" | "aeabi_uidiv" => d(false, false, None),
+        "modsi3" => d(true, true, None),
+        "umodsi3" => d(false, true, None),
+        "aeabi_idivmod" => d(true, false, Some(1)),
+        "aeabi_uidivmod" => d(false, false, Some(1)),
+        _ => None,
+    }
+}
+
+/// Whether `e` is a plain name (a local, a register): read twice, it
+/// reads the same.
+fn is_name(e: &str) -> bool {
+    e.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && e.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 /// Whether expression `e` is one term, needing no parentheses as an
 /// operand: no space outside brackets, and no prefix operator.
 fn one_term(e: &str) -> bool {
@@ -11943,6 +12190,34 @@ fn counter_arith(body: &str, reg: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn libgcc_division_is_known_by_its_symbol() {
+        let d = |signed, mod_r0, rem| {
+            Some(Div {
+                signed,
+                mod_r0,
+                rem,
+            })
+        };
+        assert_eq!(division_of("__divsi3"), d(true, false, None));
+        assert_eq!(division_of("__udivsi3"), d(false, false, None));
+        assert_eq!(division_of("__modsi3"), d(true, true, None));
+        assert_eq!(division_of("__umodsi3"), d(false, true, None));
+        assert_eq!(division_of("__aeabi_idiv"), d(true, false, None));
+        assert_eq!(division_of("__aeabi_uidiv"), d(false, false, None));
+        assert_eq!(division_of("__aeabi_idivmod"), d(true, false, Some(1)));
+        // A linker's Thumb veneer of one.
+        assert_eq!(
+            division_of("____aeabi_uidivmod_from_thumb"),
+            d(false, false, Some(1))
+        );
+        for other in ["__div0", "__aeabi_idiv0", "__aeabi_ldiv0", "divide", "Div"] {
+            assert_eq!(division_of(other), None, "{other}");
+        }
+        assert!(is_name("v21") && is_name("unk_be3") && is_name("r1"));
+        assert!(!is_name("0x5u32") && !is_name("r4 << 8") && !is_name("ld32(g, r1)"));
+    }
 
     #[test]
     fn a_taken_register_the_printed_code_never_reads_is_counted() {
