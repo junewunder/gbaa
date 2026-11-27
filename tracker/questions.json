@@ -2060,7 +2060,12 @@
         "by": "6056824b",
         "host": "quack"
       },
-      "answer": null
+      "answer": null,
+      "withdrawn": {
+        "at": "2026-11-27T05:43:52Z",
+        "by": "1c8e564b",
+        "why": "Asked before the helpers design; folded into the re-asked call-forms question, at the owner's ask"
+      }
     },
     {
       "id": "q/may-minish-cap-s-cross",
