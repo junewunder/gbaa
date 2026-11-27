@@ -5696,15 +5696,22 @@
       "uses": ["heavy"],
       "priority": 77,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e3bfa97a",
-        "session": "e3bfa97a-c93a-4136-8645-541880052589",
-        "host": "quack",
-        "pid": 2117956,
-        "start": "121114680",
-        "at": "2026-11-27T13:11:26Z",
+        "at": "2026-11-27T14:27:11Z",
+        "evidence": "At main c35506d4 (no repo change; private bars in mods 96ec8d7). Metroid 'lent slots': 14 slots in 8 fns, 12 of 767 ptr params borrowed, 42 sp accesses, 14 host locals, 29 Lent accesses. Emerald: 275 slots in 133 fns, 115 of 10096 borrowed, 400 sp accesses, 173 host locals (137 typed), 373 Lent accesses. Both 600/600 frames, no stop. Bars set to the lift (mods/<game>/lift-bars.toml, verified equal to report): sp_accesses_escaping_slot Metroid 2410->2368, Emerald 14516->14109; bank_sp_calls 2475->2323, 18410->18205. Raised (main's, no code here): lent_locals_untyped 0->1 / 13->34, unread_lets 0->28 / 6->45 (filed {unit:native/lift-unread-addr-sums}), casts, lines_prelude 1506, Metroid locals_noted 1916. Metroid native route 2700 f 0 differences, and its --shadow-locals lift's route 0 differences with no shadow-local report in 601 frames. Emerald native route 5400 f 0 differences, audio too. RAM-copy callers not needed: GBAA_LEND_DEBUG shows no borrower skipped (code_lends already skips a fn another context calls) on either game. just lift-check passed (full) and just check passed at this head.",
         "branch": "unit/native/lift-lent-games",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T14:27:11Z",
+          "by": "e3bfa97a",
+          "host": "quack",
+          "pid": 2117956,
+          "start": "121114680",
+          "beats": true,
+          "session": "e3bfa97a-c93a-4136-8645-541880052589",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {

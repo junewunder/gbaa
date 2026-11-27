@@ -4514,3 +4514,4 @@
 {"at":"2026-11-27T14:04:32Z","actor":"loop","tag":"cc1f7d5d","host":"quack","cmd":"review","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: waiting for a second check"}
 {"at":"2026-11-27T14:09:25Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-27T14:09:31Z","actor":"loop","tag":"31b3c691","host":"quack","cmd":"claim","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: claimed"}
+{"at":"2026-11-27T14:27:11Z","actor":"loop","tag":"e3bfa97a","host":"quack","cmd":"done","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: done"}
