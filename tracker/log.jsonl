@@ -4583,3 +4583,4 @@
 {"at":"2026-11-27T22:35:15Z","actor":"loop","tag":"3f97f4d2","host":"quack","cmd":"done","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: done"}
 {"at":"2026-11-27T22:41:23Z","actor":"loop","tag":"13420935","host":"quack","cmd":"add-unit","id":"native/lift-const-call-takes","text":"new unit: A constant call through a register passes what it takes"}
 {"at":"2026-11-27T22:41:34Z","actor":"loop","tag":"13420935","host":"quack","cmd":"edit","id":"native/rogue-build","text":"Rogue's lift builds: GenerateFloorLayout's r11 passed: edited (add-needs)"}
+{"at":"2026-11-27T22:42:14Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: back to ready: the loop's review asked for fixes"}
