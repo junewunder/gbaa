@@ -5705,19 +5705,8 @@
         "by": "e08f2de2",
         "at": "2026-11-27T07:39:56Z",
         "evidence": "Branch bd15122a (origin/main dc0bef53 merged): just lift-check passed, 0 differences on every program, every planted fault and hard hole caught; just check passes. Bars (mods cc50187): Metroid results_several 68->57, tuple_calls 872->661, native route 0 differences 2700 frames; Emerald 287->285, 17862->17468, 600 frames; both games run 600/600 headless.",
-        "branch": "unit/native/lift-returns-past-holes",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T07:39:56Z",
-          "by": "e08f2de2",
-          "host": "quack",
-          "pid": 2118754,
-          "start": "121115208",
-          "beats": true,
-          "session": "e08f2de2-bd97-4126-98e5-8dbcb86deb3e",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-27T07:45:07Z"
       },
       "notes": [
         {
@@ -5730,8 +5719,7 @@
           "by": "874a3e9d",
           "text": "Branch 9e5659e3: stopped callers demand only hidden_after. Emerald 287->285, 17862->17468; Metroid unmoved (68/872): by-value demand from IWRAM 0x030016c5, fed by 0x0805d5bd's passed-on r2/r3 (indirect-call params) and 0x080010c5's forwarded r1. Fix that next."
         }
-      ],
-      "round": "2026-11-25T05:42:07Z"
+      ]
     },
     {
       "id": "native/lift-proto-r3-align",
