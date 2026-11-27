@@ -5310,6 +5310,13 @@
           "lane": "quack/2"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-27T19:50:30Z",
+          "by": "0a34a83d",
+          "text": "Fold is FnPrinter::mask_link (native.rs): links per block in self.links, folded only over an inlined (one-use) link. GBAA_MASK_WHY=1 prints chains left. Global part stores skip their width mask for a fitting & link (globals::store_fitting). Mirror lift ~80 s, route ~15 min."
+        }
+      ],
       "round": "2026-11-27T17:43:04Z"
     },
     {
