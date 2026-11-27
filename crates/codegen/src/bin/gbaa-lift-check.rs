@@ -24,6 +24,11 @@
 //!    with that stand-in dropped, from a fresh OUT: the lift and the
 //!    crate's build must both fail, the build naming the hole.
 //!
+//! A program failing step 2 or 3 doesn't stop the others; the last lines
+//! group the failures by cause ([`cause`]: the step and the first
+//! difference, the program's own name, frames, addresses and values taken
+//! out), so one lifter bug in many programs reads as one line.
+//!
 //! `--only NAME` (repeatable) runs those programs' steps.
 //!
 //! `--metrics-only [--metric REGEX] [--lower-bars] [--write-doc FILE]` (`just
@@ -390,9 +395,15 @@ impl Run {
             "the play build's build",
         )?;
         println!("lift-check: {n}: route-check --native on {}", p.route);
-        let st = route.status().map_err(|e| format!("route-check: {e}"))?;
-        if !st.success() {
-            return Err(format!("{n}: the native check failed"));
+        let rlog = log(&format!("lift-{n}.route.txt"));
+        let (ok, text) = run(&mut route, &rlog)?;
+        print!("{text}");
+        if !ok {
+            let why = route_failure(&text);
+            return Err(format!(
+                "the native check failed ({}): {why}",
+                rlog.display()
+            ));
         }
         if let Some((key, names)) = &p.planted_hole {
             // From a fresh OUT, so an old run's crate can't answer for it.
@@ -545,15 +556,90 @@ fn main() -> ExitCode {
             .collect::<Vec<_>>()
             .join(", ")
     );
-    // 2 and 3.
+    // 2 and 3, every program even past a failing one: one lifter bug
+    // usually breaks several, and the summary groups them by cause.
+    let mut failed = Vec::new();
     for p in &ps {
         if let Err(e) = r.native(p) {
-            eprintln!("lift-check: failed: {e}");
-            return ExitCode::FAILURE;
+            eprintln!("lift-check: {}: failed: {e}", p.name);
+            failed.push((p.name.as_str(), e));
         }
     }
-    println!("lift-check: passed");
-    ExitCode::SUCCESS
+    if failed.is_empty() {
+        println!("lift-check: passed");
+        return ExitCode::SUCCESS;
+    }
+    let groups = by_cause(&failed);
+    eprintln!(
+        "lift-check: failed: {} of {} programs, {} by cause:",
+        failed.len(),
+        ps.len(),
+        match groups.len() {
+            1 => "one cause".to_string(),
+            n => format!("{n} causes"),
+        }
+    );
+    for (cause, names) in &groups {
+        eprintln!("  {} ({}): {cause}", names.len(), names.join(", "));
+    }
+    ExitCode::FAILURE
+}
+
+/// route-check's `native N: FAIL: WHY` line's WHY, or its whole `could
+/// not run` line.
+fn route_failure(text: &str) -> &str {
+    text.lines()
+        .find_map(|l| {
+            l.split_once(": FAIL: ")
+                .map(|(_, w)| w)
+                .or_else(|| l.contains(": could not run: ").then_some(l))
+        })
+        .unwrap_or("no FAIL line")
+}
+
+/// What a program's failure says once what is its own is taken out: its
+/// name, frame numbers, addresses, byte values and counts. Two programs
+/// broken by one lifter bug usually fail the same step at the same region
+/// (or I/O register) and so share it. A failed build or lift keeps its
+/// first `error` line from the log's tail, the rustc code with it.
+fn cause(name: &str, err: &str) -> String {
+    let mut lines = err.lines();
+    let first = lines.next().unwrap_or_default();
+    // must()'s `WHAT failed (LOG):` then the log's tail.
+    let mut s = match first.strip_suffix(':').and_then(|f| f.rsplit_once(" (")) {
+        Some((what, _log)) if what.ends_with(" failed") => {
+            let error = lines.map(str::trim).find(|l| l.starts_with("error"));
+            match error {
+                Some(e) => format!("{what}: {e}"),
+                None => what.to_string(),
+            }
+        }
+        _ => first.to_string(),
+    };
+    s = s.replace(name, "<program>");
+    // Log paths in parentheses carry nothing the step's name doesn't.
+    let paths = regex::Regex::new(r" \((?:out|target)/[^)]*\)").expect("a valid regex");
+    let hex = regex::Regex::new(r"\b0x[0-9a-fA-F]+\b").expect("a valid regex");
+    let dec = regex::Regex::new(r"\b\d+\b").expect("a valid regex");
+    let s = paths.replace_all(&s, "");
+    let s = hex.replace_all(&s, "0x…");
+    dec.replace_all(&s, "N").into_owned()
+}
+
+/// The failures grouped by [`cause`], most programs first, then in the
+/// order they ran.
+fn by_cause<'a>(failed: &[(&'a str, String)]) -> Vec<(String, Vec<&'a str>)> {
+    let mut groups: Vec<(String, Vec<&str>)> = Vec::new();
+    for (name, err) in failed {
+        let c = cause(name, err);
+        match groups.iter_mut().find(|(g, _)| *g == c) {
+            Some((_, names)) => names.push(name),
+            None => groups.push((c, vec![name])),
+        }
+    }
+    // Stable: ties keep the order they ran in.
+    groups.sort_by_key(|(_, names)| std::cmp::Reverse(names.len()));
+    groups
 }
 
 /// A program's column of the metrics table.
@@ -669,5 +755,85 @@ mod tests {
         let re = regex::Regex::new("^bl").unwrap();
         let (t, over, lower) = metrics_table(&cols, &|n| re.is_match(n));
         assert_eq!((t.lines().count(), over, lower.len()), (3, 1, 0), "{t}");
+    }
+
+    #[test]
+    fn one_bug_in_several_programs_is_one_cause() {
+        let route = |n: &str, frame: u32, addr: u32, count: u32| {
+            format!(
+                "the native check failed (out/lift-{n}.route.txt): native differs from play: \
+                 frame {frame}: IWRAM byte {addr:#010x}: play 0x05, native 0x06; {count} bytes \
+                 differ in IWRAM"
+            )
+        };
+        let build = |n: &str| {
+            format!(
+                "the packed layout's build failed (out/lift-{n}-packed.build.txt):\n\
+                 warning: unused\n  error[E0308]: mismatched types\n --> out/lift-{n}-packed/src/f.rs:3:1"
+            )
+        };
+        let failed = vec![
+            ("affine", route("affine", 12, 0x0300_1530, 3)),
+            ("native-dma", build("native-dma")),
+            ("native-spike", route("native-spike", 40, 0x0300_0010, 1)),
+            (
+                "c-jump-gcc",
+                "the native check failed (out/lift-c-jump-gcc.route.txt): native differs from \
+                 play: frame 2: I/O byte 0x04000000: play 0x40, native 0x00 (DISPCNT); 1 bytes \
+                 differ in I/O"
+                    .to_string(),
+            ),
+            ("c-list-agbcc", route("c-list-agbcc", 7, 0x0300_7f00, 12)),
+        ];
+        let g = by_cause(&failed);
+        let names: Vec<&[&str]> = g.iter().map(|(_, n)| n.as_slice()).collect();
+        assert_eq!(
+            names,
+            [
+                &["affine", "native-spike", "c-list-agbcc"][..],
+                &["native-dma"],
+                &["c-jump-gcc"]
+            ]
+        );
+        assert_eq!(
+            g[0].0,
+            "the native check failed: native differs from play: frame N: IWRAM byte 0x…: play \
+             0x…, native 0x…; N bytes differ in IWRAM"
+        );
+        assert_eq!(
+            g[1].0,
+            "the packed layout's build failed: error[E0308]: mismatched types"
+        );
+        // The I/O register's name is kept: DISPCNT and BG0CNT are two causes.
+        assert!(g[2].0.contains("(DISPCNT)"), "{}", g[2].0);
+    }
+
+    #[test]
+    fn route_checks_fail_line_is_the_reason() {
+        let text = "native native-spike: not compared 0x03007e00..0x03008000: the guest stack\n\
+                    native native-spike: FAIL: native differs from play: frame 2: EWRAM byte \
+                    0x020000c0: play 0x01, native 0x02; 1 bytes differ in EWRAM\n";
+        assert_eq!(
+            route_failure(text),
+            "native differs from play: frame 2: EWRAM byte 0x020000c0: play 0x01, native 0x02; \
+             1 bytes differ in EWRAM"
+        );
+        let unrun = "native x: could not run: out/x/play.rec: missing\n";
+        assert_eq!(route_failure(unrun), unrun.trim_end());
+        assert_eq!(route_failure("route-check: usage\n"), "no FAIL line");
+    }
+
+    #[test]
+    fn a_planted_control_names_its_program_once() {
+        let c = cause(
+            "native-spike",
+            "native-spike: the planted hard hole's build didn't name it (\"f_08002728\"; \
+             out/lift-native-spike-planted-hole.build.txt)",
+        );
+        assert_eq!(
+            c,
+            "<program>: the planted hard hole's build didn't name it (\"f_08002728\"; \
+             out/lift-<program>-planted-hole.build.txt)"
+        );
     }
 }

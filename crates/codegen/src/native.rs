@@ -9649,7 +9649,7 @@ impl FnPrinter<'_, '_> {
                 format!("f_{k:08x}(g, r13, [{four}])"),
             ),
             Some(c) => {
-                let (lent, q) = self.lent_args();
+                let (lent, q) = self.lent_args(k);
                 let args: String = shape::regs(c.params)
                     .map(|r| match lent.iter().find(|(x, _)| *x == r) {
                         Some((_, e)) => format!(", {e}"),
@@ -9671,8 +9671,13 @@ impl FnPrinter<'_, '_> {
     /// frame (`Lent::of(&mut lN, offset)`, with `--shadow-locals` its
     /// guest address too), or this function's borrowed parameter plus a
     /// constant (`pN.at(k)`). An object passed in two registers is one
-    /// borrow, `q`, given second: its `Lent` at its start.
-    fn lent_args(&self) -> (Vec<(usize, String)>, Option<String>) {
+    /// borrow, `q`, given second: its `Lent` at its start. The object
+    /// is the one holding the bytes callee `k`'s parameter reaches from
+    /// the address, which needn't hold the address itself (a struct
+    /// whose callee reads only a field past its start: the `Lent` is
+    /// then at a negative offset); one reaching nothing gets
+    /// `Lent::NONE`.
+    fn lent_args(&self, k: u32) -> (Vec<(usize, String)>, Option<String>) {
         let Some(i) = self.exit_i else {
             return (Vec::new(), None);
         };
@@ -9699,16 +9704,27 @@ impl FnPrinter<'_, '_> {
             .lent_passes
             .get(&self.f.entry)
             .and_then(|m| m.get(&at));
+        // The lent object address `o` passed in callee register `r` is
+        // in: the one holding the first byte its borrower reaches.
+        let local = |r: u8, o: i32| {
+            let (lo, hi) = self.lends.reach.get(&(k, r)).copied()?;
+            if lo >= hi {
+                return None;
+            }
+            self.locals
+                .iter()
+                .find(|l| l.lent && l.holds(o + lo))
+                .copied()
+        };
         for &(r, o) in lent.into_iter().flatten() {
-            let local = |o: i32| self.locals.iter().find(|l| l.lent && l.holds(o)).copied();
             let twice = |l: &Local| {
                 lent.into_iter()
                     .flatten()
-                    .filter(|&&(_, o)| local(o).as_ref() == Some(l))
+                    .filter(|&&(r, o)| local(r, o).as_ref() == Some(l))
                     .count()
                     > 1
             };
-            let e = match local(o) {
+            let e = match local(r, o) {
                 Some(l) if twice(&l) => {
                     assert!(
                         q.as_ref().is_none_or(|(x, _)| *x == l.lo),
