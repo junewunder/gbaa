@@ -355,6 +355,11 @@ pub struct Holes {
     /// true`): each call sets `Game::lr` to it (the `bl`'s `r14`) first,
     /// as a task switcher's yield stores it for the task's resume.
     pub lr: BTreeSet<u32>,
+    /// The stand-ins that say what they pass sp on to (`sp_to = [0x…]`):
+    /// they keep no frame, and their code calls only these with sp, as it
+    /// came, so they need sp exactly only where these do (`exact_sp`;
+    /// native/lift-frame-exact-irq-reach). Any other stand-in needs it.
+    pub sp_to: BTreeMap<u32, Vec<u32>>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
     /// Function starts only data reaches (`[[roots]] keys = [0x…], why =
@@ -652,7 +657,8 @@ impl Default for FnCheck {
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
+    /// '''…'''` (and `lr = true` for [`Holes::lr`], `sp_to = [0x…]` for
+    /// [`Holes::sp_to`], `check = { seed, runs,
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[roots]]` ([`Holes::roots`]), `[[copy]]` ([`Holes::copies_seen`]),
     /// `[[stack]]` ([`Holes::stacks`]), `[[garbage]]` ([`Holes::garbage`]), `[[open_bus]] at = 0x…, why = "…"`
@@ -728,6 +734,15 @@ impl Holes {
                                     digest,
                                 },
                             );
+                        }
+                        if let Some(v) = e.get("sp_to") {
+                            let ks = v
+                                .as_array()
+                                .ok_or("standin: sp_to: not a list of keys")?
+                                .iter()
+                                .map(|v| int(v, "sp_to"))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            h.sp_to.insert(entry, ks);
                         }
                         match e.get("lr") {
                             None => {}
@@ -1139,11 +1154,19 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             continue;
         }
         let image = rom[(c.src - 0x0800_0000) as usize..][..c.len as usize].to_vec();
+        let mut o_disc = discovery::discover_at(c.dst, image, &c.roots);
+        // The IRQ handlers the ROM's code installs in the copy: its own
+        // run's, for the summaries' run of an IRQ wrapper (`saves`).
+        o_disc.irq_handlers.extend(
+            disc.irq_handlers
+                .iter()
+                .filter(|&&h| (c.dst..c.dst + c.len).contains(&h)),
+        );
         overlays.push(discovery::Overlay {
             src: c.src,
             dst: c.dst,
             len: c.len,
-            disc: discovery::discover_at(c.dst, image, &c.roots),
+            disc: o_disc,
         });
     }
     let overlays = overlays;
@@ -1603,7 +1626,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .map(|(c, l)| lent_types::of_code(l, &c.frames, &c.funcs, holes.fields.as_deref()))
         .collect();
     let field_types = holes.fields.as_deref().map(|m| &m.types);
-    let sp_exact = exact_sp(&codes, &lends, &all, holes, &sets, &psr_fns);
+    let sp_exact = exact_sp(rom, &codes, &lends, &all, holes, &sets, &psr_fns);
     // What RAM each function may store to (native/lift-for-ram-bounds).
     let ram_writes = writes::ram_writes(
         codes.iter().map(|c| (&c.ctx, &c.funcs[..], &c.frames)),
@@ -1614,7 +1637,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
     let mut hard = bad_copies;
-    let mut soft = Soft::default();
+    let mut soft = Soft {
+        irq_holders: sp_exact.holders.clone(),
+        irq_rule: sp_exact.irq,
+        ..Soft::default()
+    };
     let mut fns = Vec::new();
     let entry = key(0x0800_0000, false);
     for ((c, lends), lent_types) in codes.iter().zip(&lends).zip(&lent_types) {
@@ -1710,7 +1737,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     links: Vec::new(),
                     uses_now: Vec::new(),
                     frameless: false,
-                    sp_exact: sp_exact.contains(&f.entry),
+                    sp_exact: sp_exact.set.contains(&f.entry),
                     ram_writes: &ram_writes,
                     load_values: BTreeMap::new(),
                     arg_sums: BTreeMap::new(),
@@ -2465,6 +2492,20 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .collect::<String>(),
     )
     .unwrap();
+    writeln!(
+        report,
+        "IRQ rule of exact sp (native/lift-frame-exact-irq-reach): {}; {} functions the IRQ wrappers reach need sp exactly themselves{}",
+        if soft.irq_rule { "on" } else { "off" },
+        soft.irq_holders.len(),
+        soft.irq_holders
+            .iter()
+            .map(|(k, (why, way))| {
+                let way: String = way.iter().map(|w| format!(" from {w:#010x}")).collect();
+                format!("\n  {k:#010x}{way}: {why}")
+            })
+            .collect::<String>(),
+    )
+    .unwrap();
     if !soft.traps.is_empty() {
         let at: BTreeSet<u32> = soft.traps.iter().copied().collect();
         let at: Vec<String> = at.iter().map(|a| format!("{a:#010x}")).collect();
@@ -2756,6 +2797,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // store a stack address outside the stack or that runs on their frame
     // (native/lift-frame-exact-narrow).
     m.push("sp_arith_exact", n(soft.sp_arith_exact));
+    // The functions the IRQ wrappers reach that need sp exactly
+    // themselves, each turning the IRQ rule on (barred, at 0 the rule is
+    // off; native/lift-frame-exact-irq-reach).
+    m.push("sp_irq_holders", n(soft.irq_holders.len()));
     m.push("lr_returned", n(soft.lr_returned.len()));
     // The `let`s of IR values printed (native/lift-inline-temps): a pure
     // value used once, or a constant, prints inside its use instead.
@@ -3892,13 +3937,14 @@ fn lr_entries(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> BTreeSet<u3
 /// may run them ([`may_release_irq`]: to `IME` or `HALTCNT`;
 /// native/lift-frame-exact-narrow).
 fn exact_sp(
+    rom: &[u8],
     codes: &[Code],
     lends: &[frame::lend::Lends],
     all: &BTreeSet<u32>,
     holes: &Holes,
     sets: &Sets,
     psr: &PsrFns,
-) -> BTreeSet<u32> {
+) -> ExactSp {
     // Whether each function's frame addresses may be stored outside the
     // stack, where the native check holds them to the guest's
     // (native/lift-frame-exact-narrow).
@@ -3985,17 +4031,37 @@ fn exact_sp(
         unknown: bool,
         irq: bool,
         own: bool,
+        why: Vec<String>,
     }
     let mut fns: BTreeMap<u32, Passes> = BTreeMap::new();
     for (c, lend) in codes.iter().zip(lends) {
         for f in &c.funcs {
             let mut p = Passes::default();
+            // A stand-in saying what it passes sp on to: those, and
+            // nothing of the guest's code it replaces.
+            if let Some(ts) = holes.sp_to.get(&f.entry)
+                && holes.standins.contains_key(&f.entry)
+            {
+                p.to.extend(ts);
+                fns.insert(f.entry, p);
+                continue;
+            }
             let frame = c.frames.get(&f.entry);
             // Its frame's addresses may be stored outside the stack, or
             // sp isn't the frame's.
-            p.own = holes.standins.contains_key(&f.entry)
-                || stores.get(&f.entry).is_none_or(|m| m & frame::SP != 0)
-                || frame.is_none_or(|fr| !fr.switches.is_empty() || !fr.fresh.is_empty());
+            if holes.standins.contains_key(&f.entry) {
+                p.why
+                    .push("a stand-in (its holes entry has no sp_to)".into());
+            }
+            if stores.get(&f.entry).is_none_or(|m| m & frame::SP != 0) {
+                p.why
+                    .push("its frame's address may be stored outside the stack".into());
+            }
+            if frame.is_none_or(|fr| !fr.switches.is_empty() || !fr.fresh.is_empty()) {
+                p.why
+                    .push("sp isn't its frame's (a stack switch, or no frame)".into());
+            }
+            p.own = !p.why.is_empty();
             let sum = c.sums.get(f.entry);
             for (&k, gb) in &f.blocks {
                 for x in exits(&c.ctx, gb) {
@@ -4009,7 +4075,10 @@ fn exact_sp(
                             if all.contains(&t) {
                                 p.to.insert(t);
                             } else {
-                                p.unknown = true;
+                                {
+                                    p.unknown = true;
+                                    p.why.push(format!("a callee not lifted at {:#010x}", x.at));
+                                }
                             }
                         }
                     };
@@ -4032,10 +4101,22 @@ fn exact_sp(
                             target: Some(t),
                             ..
                         } if all.contains(&t) => callee(t),
+                        Plan::Dynamic { ret: Some(_), .. }
+                            if let Some(ts) =
+                                rom_table_callees(&c.ctx, &gb.block.insts, &x, rom, all) =>
+                        {
+                            ts.into_iter().for_each(&mut callee)
+                        }
                         Plan::CallVia { .. } | Plan::Dynamic { ret: Some(_), .. } => {
                             match sets.get(&x.at) {
                                 Some(cs) => cs.iter().for_each(|&t| callee(t)),
-                                None => p.unknown = true,
+                                None => {
+                                    p.unknown = true;
+                                    p.why.push(format!(
+                                        "a call by value with no complete callee set at {:#010x}",
+                                        x.at
+                                    ));
+                                }
                             }
                         }
                         Plan::Dynamic {
@@ -4047,16 +4128,28 @@ fn exact_sp(
                             let thumb = gb.block.thumb;
                             match dyn_targets(&c.ctx, holes, x.at, thumb, target) {
                                 Ok(ts) => ts.into_iter().for_each(&mut callee),
-                                Err(_) => p.unknown = true,
+                                Err(_) => {
+                                    p.unknown = true;
+                                    p.why.push(format!(
+                                        "a jump by value not resolved at {:#010x}",
+                                        x.at
+                                    ));
+                                }
                             }
                             if !closed_jump(&c.ctx, x.at, thumb) {
-                                p.unknown = true;
+                                {
+                                    p.unknown = true;
+                                    p.why.push(format!("a jump by value, not a proven return nor a closed table, at {:#010x}", x.at));
+                                }
                             }
                         }
                         Plan::Swi { .. } => p.irq = true,
                         Plan::Undefined { .. } => {}
                         // Into another frame, on the sp it loaded.
-                        Plan::Unwind => p.unknown = true,
+                        Plan::Unwind => {
+                            p.unknown = true;
+                            p.why.push(format!("an unwind at {:#010x}", x.at));
+                        }
                     }
                     if x.idle != Idle::No {
                         p.irq = true;
@@ -4109,6 +4202,45 @@ fn exact_sp(
             set.extend(more);
         }
     };
+    // What turns the IRQ rule on: the functions the IRQ wrappers reach
+    // (passing sp on, by the edges above, the wrappers themselves too)
+    // that need sp exactly themselves, each with why and the way from a
+    // wrapper (native/lift-frame-exact-irq-reach; barred).
+    let mut holders: BTreeMap<u32, (String, Vec<u32>)> = BTreeMap::new();
+    let mut seen: BTreeSet<u32> = BTreeSet::new();
+    let mut by: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut work: std::collections::VecDeque<u32> = psr.wrappers.iter().copied().collect();
+    while let Some(k) = work.pop_front() {
+        if !seen.insert(k) {
+            continue;
+        }
+        let p = fns.get(&k);
+        let why = match p {
+            None => Some("not lifted".to_string()),
+            Some(p) if p.own || p.unknown => Some(p.why.join("; ")),
+            Some(_) => None,
+        };
+        if let Some(why) = why {
+            let mut way = Vec::new();
+            let mut c = k;
+            while let Some(&q) = by.get(&c) {
+                if way.contains(&q) || q == k {
+                    break;
+                }
+                way.push(q);
+                c = q;
+            }
+            holders.insert(k, (why, way));
+        }
+        if let Some(p) = p {
+            for &t in &p.to {
+                if !seen.contains(&t) {
+                    by.entry(t).or_insert(k);
+                    work.push_back(t);
+                }
+            }
+        }
+    }
     let mut irq = false;
     loop {
         let set = exact(irq);
@@ -4116,7 +4248,7 @@ fn exact_sp(
         if now == irq {
             // Those that pass it on: all but the ones needing it for their
             // own frame alone.
-            return fns
+            let set = fns
                 .iter()
                 .filter(|(_, p)| {
                     p.unknown
@@ -4125,9 +4257,22 @@ fn exact_sp(
                 })
                 .map(|(&k, _)| k)
                 .collect();
+            return ExactSp { set, irq, holders };
         }
         irq = now;
     }
+}
+
+/// What [`exact_sp`] finds.
+struct ExactSp {
+    /// The functions passing sp on to code needing the guest's exactly.
+    set: BTreeSet<u32>,
+    /// Whether the IRQ rule is on: an IRQ wrapper needs it.
+    irq: bool,
+    /// The functions the IRQ wrappers reach that need sp exactly
+    /// themselves, turning the rule on: why, and the way from a wrapper
+    /// (the caller first).
+    holders: BTreeMap<u32, (String, Vec<u32>)>,
 }
 
 /// What each function of every context takes of r4-r11 from its callers
@@ -4658,6 +4803,10 @@ struct Soft {
     /// Functions no slot of whose frame escapes that print sp arithmetic
     /// to pass sp on exactly ([`exact_sp`]).
     sp_arith_exact: usize,
+    /// The functions turning the IRQ rule of [`exact_sp`] on, and whether
+    /// it is on (native/lift-frame-exact-irq-reach).
+    irq_holders: BTreeMap<u32, (String, Vec<u32>)>,
+    irq_rule: bool,
     lr_returned: Vec<u32>,
     /// Stack locals left out: written, never read (a callee-saved
     /// register's or lr's save whose restore nothing reads).
@@ -12267,6 +12416,66 @@ fn dyn_targets(
     Ok(targets)
 }
 
+/// The callees of a call by value whose target is a word loaded from the
+/// cartridge ROM at addresses Recovery bounds (`rom`, the ROM's bytes from
+/// 0x08000000): each word there, if every one is a function's key in
+/// `all`. The IRQ dispatcher's `ldr r0, [r1]` from its handler table, r1
+/// the table plus 4 times the flag's index (native/lift-frame-exact-irq-reach).
+fn rom_table_callees(
+    ctx: &Ctx,
+    insts: &[Inst],
+    x: &ExitInfo,
+    rom: &[u8],
+    all: &BTreeSet<u32>,
+) -> Option<Vec<u32>> {
+    let Op::Exit(Exit::Jump(t) | Exit::JumpExchange(t)) = insts.get(x.index)?.op else {
+        return None;
+    };
+    // An `ldr`'s rotate by its address's low bits: none, the addresses
+    // below all word-aligned.
+    let t = match insts[t.index()].op {
+        Op::Shift {
+            kind: ShiftType::Ror,
+            v,
+            ..
+        } => v,
+        _ => t,
+    };
+    let Op::Load {
+        width: Width::Word, ..
+    } = insts[t.index()].op
+    else {
+        return None;
+    };
+    let at = insts[..t.index()].iter().rev().find_map(|i| match i.op {
+        Op::Insn(a) => Some(a),
+        _ => None,
+    })?;
+    let acc = ctx.disc.rec.accesses.get(&at)?;
+    if acc.sp || acc.top {
+        return None;
+    }
+    let (lo, hi) = acc.hull?;
+    let step = if lo == hi { 4 } else { acc.stride };
+    if step == 0 || step % 4 != 0 || lo % 4 != 0 || lo < 0x0800_0000 || hi - lo > 0x400 {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut a = lo;
+    while a <= hi {
+        let o = (a - 0x0800_0000) as usize;
+        let w = u32::from_le_bytes(rom.get(o..o + 4)?.try_into().ok()?);
+        if !all.contains(&w) {
+            return None;
+        }
+        out.push(w);
+        a += step;
+    }
+    out.sort_unstable();
+    out.dedup();
+    Some(out)
+}
+
 /// Whether the indirect jump at `at` goes only to the targets
 /// [`dyn_targets`] gives: a table Recovery resolved (its index bounded by
 /// the compare before it), so neither a return nor another function's
@@ -14102,6 +14311,15 @@ why = "a table"
         );
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
         assert!(Holes::parse("[[standin]]\nwhy = \"no entry\"\n").is_err());
+        // What a stand-in passes sp on to (native/lift-frame-exact-irq-reach).
+        let hs = Holes::parse(
+            "[[standin]]\nentry = 0x030016c5\nwhy = \"w\"\ncode = \"\"\nsp_to = [0x08057f7d]\n",
+        )
+        .unwrap();
+        assert_eq!(hs.sp_to.get(&0x030016c5), Some(&vec![0x08057f7d]));
+        assert!(
+            Holes::parse("[[standin]]\nentry = 1\nwhy = \"w\"\ncode = \"\"\nsp_to = 2\n").is_err()
+        );
         assert_eq!(h.skip_fn_flow, None);
         let h = Holes::parse("skip_fn_flow = \"too slow\"\n").unwrap();
         assert_eq!(h.skip_fn_flow.as_deref(), Some("too slow"));
