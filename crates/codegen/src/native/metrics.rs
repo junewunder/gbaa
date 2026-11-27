@@ -73,11 +73,25 @@
 //! in, a shift by a register): barred. The rest print as comparisons and
 //! bit tests over the operands.
 //!
+//! Mask chains (`native/lift-mask-fold`): a chain of `&` with constants
+//! (or of `|`) whose links are each used once prints as one mask;
+//! `masks_folded` (no bar) counts the links folded away, and
+//! `mask_chains` (barred) the chains left, a link used once that still
+//! printed as a `let` (the report lists them by address). A link used
+//! again is a value of its own, not a chain.
+//!
 //! Joins (`native/lift-join-shape`): `labelled_blocks` counts the
 //! labelled blocks printed (a `break` leaves each: a join that isn't an
 //! `if`, a `match` or a loop's), and `blocks_printed_again` the times a
 //! guest block's code printed where it had already: both barred, the
-//! second at 0 on the C programs.
+//! second at 0 on the C programs. Of the labelled blocks the plan has
+//! (native/lift-arm-values, `super::joins`), `joins_to_return` print
+//! each break as the return the code after them only is and
+//! `joins_to_else` their code after an `if` as its other arm (no bars:
+//! they should rise); `joins_left_*` count those still printed, by where
+//! the first break left is (`in_if`, `in_match`, `in_loop`,
+//! `in_labelled`, `other`, `marked`: no bars, `labelled_blocks` is their
+//! sum's).
 //!
 //! Casts (`super::casts`, native/lift-cast-types): `casts`, the integer
 //! casts (` as u8` to ` as i64`, and each `prim::sext(`: native/lift-signed-values)
@@ -414,6 +428,7 @@ pub const UNBARRED: &[&str] = &[
     "loops_for",
     "for_stepped_elements",
     "narrowing_casts",
+    "masks_folded",
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",
@@ -431,6 +446,14 @@ pub const UNBARRED: &[&str] = &[
     "proven_types_unproven",
     "field_bases",
     "libgcc_divisions",
+    "joins_to_return",
+    "joins_to_else",
+    "joins_left_in_if",
+    "joins_left_in_match",
+    "joins_left_in_loop",
+    "joins_left_in_labelled",
+    "joins_left_other",
+    "joins_left_marked",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

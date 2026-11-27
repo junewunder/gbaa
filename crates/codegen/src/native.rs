@@ -236,6 +236,7 @@ pub mod frame;
 pub mod globals;
 pub mod heap;
 pub mod indent;
+pub mod joins;
 pub mod lent_types;
 pub mod lift_check;
 pub mod live;
@@ -1694,6 +1695,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     field_idx: BTreeMap::new(),
                     elem_addr: BTreeMap::new(),
                     inl: Vec::new(),
+                    links: Vec::new(),
+                    uses_now: Vec::new(),
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
                     ram_writes: &ram_writes,
@@ -2465,6 +2468,20 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         left.join(" "),
     )
     .unwrap();
+    let chains: Vec<String> = soft
+        .mask_chains
+        .iter()
+        .map(|a| format!("{a:#010x}"))
+        .collect();
+    writeln!(
+        report,
+        "mask chains (native/lift-mask-fold): {} links of `&` or `|` with constants folded into the next one's mask; {} chains left, their inner link used once but a `let` (it reads what is written before its use), by the outer link's instruction{}{}",
+        soft.masks_folded,
+        chains.len(),
+        if chains.is_empty() { "" } else { ": " },
+        chains.join(" "),
+    )
+    .unwrap();
     let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
     writeln!(
         report,
@@ -2681,6 +2698,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // printed (no bar: they should rise).
     m.push("shift_pairs_left", n(soft.pairs_left.len()));
     m.push("narrowing_casts", n(soft.narrowings.len()));
+    // Chains of `&` or `|` with constants (native/lift-mask-fold): the
+    // links folded into one mask (no bar), and the chains left, each a
+    // link whose inner link is used once but prints as a `let` (barred).
+    m.push("masks_folded", soft.masks_folded);
+    m.push("mask_chains", n(soft.mask_chains.len()));
     // Loads' rotates by their address's low bits still printed, the
     // address not proven aligned (native/lift-aligned-loads; barred).
     m.push("load_rotates_left", n(soft.rotates_left.len()));
@@ -2798,6 +2820,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // whose code printed more than once (both barred).
     m.push("labelled_blocks", soft.labelled_blocks);
     m.push("blocks_printed_again", soft.blocks_printed_again);
+    // Arm values (native/lift-arm-values): labelled blocks printed as the
+    // return after them or as an `if`'s other arm (no bar: they should
+    // rise), and those left, by why (no bar: labelled_blocks is theirs).
+    m.push("joins_to_return", soft.joins_to_return);
+    m.push("joins_to_else", soft.joins_to_else);
+    for w in joins::Left::ALL {
+        m.push(w.metric(), soft.joins_left.get(&w).copied().unwrap_or(0));
+    }
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -4667,6 +4697,14 @@ struct Soft {
     /// design, a guest address here; native/rom-statics).
     rom_refs: BTreeSet<u32>,
     narrowings: BTreeSet<(u32, u32, usize)>,
+    /// Chains of `&` (or of `|`) with constants printed as one mask
+    /// (native/lift-mask-fold): the links folded away, and the chains
+    /// left, by the guest address of their outer link's instruction: its
+    /// inner link is used once but a `let` (it reads what is written
+    /// before its use). A link used again isn't a chain: it stays a value
+    /// of its own.
+    masks_folded: u64,
+    mask_chains: BTreeSet<u32>,
     /// Values printed as an element's (or its field's) address by name
     /// (native/lift-element-address): (function, block, inst).
     elem_addrs: BTreeSet<(u32, u32, usize)>,
@@ -4752,6 +4790,12 @@ struct Soft {
     /// (unit `native/lift-join-shape`).
     labelled_blocks: u64,
     blocks_printed_again: u64,
+    /// Labelled blocks printed without one: their breaks the return the
+    /// code after them is, or their code an `if`'s other arm; those left,
+    /// by why (native/lift-arm-values).
+    joins_to_return: u64,
+    joins_to_else: u64,
+    joins_left: BTreeMap<joins::Left, u64>,
 }
 
 /// The facts `rN == rM + k` of one function ([`field_base::facts`]), by
@@ -4952,6 +4996,14 @@ struct FnPrinter<'a, 'b> {
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
+    /// The current block's values that are a plain `x & c` or `x | c`
+    /// with a constant `c` (native/lift-mask-fold), by value: the op, the
+    /// value `x` it masks once a chain of inlined links is folded, and the
+    /// mask ([`FnPrinter::mask_link`]).
+    links: Vec<Option<(BinOp, ValueId, u32)>>,
+    /// How many times something printed uses each of the current block's
+    /// values ([`FnPrinter::uses`]).
+    uses_now: Vec<u32>,
     /// Nothing of its frame is in memory ([`FnPrinter::is_frameless`]):
     /// set as the function starts printing.
     frameless: bool,
@@ -7620,12 +7672,14 @@ impl FnPrinter<'_, '_> {
             let last = i + 1 == seq.len();
             self.fall = if last { outer } else { None };
             self.direct = if last { direct } else { None };
-            let n = self.node(&seq[i]);
-            i += 1;
-            let plan::Node::Labeled { label, .. } = &seq[i - 1] else {
+            let plan::Node::Labeled { label, body } = &seq[i] else {
+                let n = self.node(&seq[i]);
+                i += 1;
                 s.push_str(&n);
                 continue;
             };
+            i += 1;
+            let (n, mut rest) = self.labeled(*label, body, &seq[i..], (outer, direct));
             let (mark, end) = (fall_mark(*label), arm_end(*label));
             if n.matches(&mark).count() == 1
                 && !n.contains(&format!("break 'b{label};"))
@@ -7633,7 +7687,10 @@ impl FnPrinter<'_, '_> {
             {
                 self.fall = outer;
                 self.direct = direct;
-                let rest = self.seq(&seq[i..]);
+                let rest = match rest.take() {
+                    Some(r) => r,
+                    None => self.seq(&seq[i..]),
+                };
                 let n = n.replacen(&mark, &format!("\n{rest}"), 1);
                 // Its `match` now ends the sequence: an arm's `break` to
                 // where falling off it goes is its end.
@@ -7663,9 +7720,73 @@ impl FnPrinter<'_, '_> {
                 break;
             }
             s.push_str(&n.replace(&mark, "").replace(&end, ""));
+            // The code after it, printed already to see if it only returns.
+            if let Some(r) = rest {
+                s.push_str(&r);
+                break;
+            }
         }
         (self.fall, self.direct) = (outer, direct);
         s
+    }
+
+    /// Labelled block `label`'s code (`body`), and the code after it
+    /// (`after`, if printed here). Its `break`s go where the code
+    /// after it only returns, or where each ends an `if`'s arm at the top
+    /// of what falls to its end ([`joins`], native/lift-arm-values); it is
+    /// printed bare when none is left. `outer` is the sequence's fall and
+    /// direct, which its last node takes.
+    fn labeled(
+        &mut self,
+        label: usize,
+        body: &[plan::Node],
+        after: &[plan::Node],
+        outer: (Option<usize>, Option<usize>),
+    ) -> (String, Option<String>) {
+        let last = after.is_empty();
+        self.fall = if last { outer.0 } else { None };
+        self.direct = if last { outer.1 } else { None };
+        let saved = (self.fall.replace(label), self.direct.replace(label));
+        let mut b = self.seq(body);
+        (self.fall, self.direct) = saved;
+        self.tail_for = false;
+        let brk = format!("break 'b{label};");
+        // `GBAA_JOINS=off` prints every one labelled, to measure against.
+        let off = std::env::var_os("GBAA_JOINS").is_some_and(|v| v == "off");
+        if !b.contains(&brk) || off {
+            if off && b.contains(&brk) {
+                self.soft.labelled_blocks += 1;
+                b = format!("    'b{label}: {{\n{b}    }}\n");
+            }
+            return (b, None);
+        }
+        let mut rest = None;
+        if !after.is_empty() {
+            (self.fall, self.direct) = outer;
+            let r = self.seq(after);
+            if let Some(ret) = joins::return_only(&r, &b) {
+                self.soft.joins_to_return += 1;
+                b = b.replace(&brk, &format!("\n{ret}\n"));
+            }
+            rest = Some(r);
+        }
+        // A `match` arm's marks for the code after it stay where they are.
+        if b.contains(&brk) && !b.contains(['\u{1}', '\u{2}']) {
+            match joins::else_join(&b, &brk) {
+                Ok(t) => {
+                    self.soft.joins_to_else += 1;
+                    b = t;
+                }
+                Err(why) => *self.soft.joins_left.entry(why).or_default() += 1,
+            }
+        } else if b.contains(&brk) {
+            *self.soft.joins_left.entry(joins::Left::Marked).or_default() += 1;
+        }
+        if b.contains(&brk) {
+            self.soft.labelled_blocks += 1;
+            b = format!("    'b{label}: {{\n{b}    }}\n");
+        }
+        (b, rest)
     }
 
     fn node(&mut self, n: &plan::Node) -> String {
@@ -7720,21 +7841,8 @@ impl FnPrinter<'_, '_> {
                 self.tail_for = is_for;
                 s
             }
-            // Printed bare where nothing breaks out of it: its body
-            // falls to the code after it at every way out (an `if`'s,
-            // a `match`'s arms').
-            plan::Node::Labeled { label, body } => {
-                let outer = (self.fall.replace(*label), self.direct.replace(*label));
-                let b = self.seq(body);
-                (self.fall, self.direct) = outer;
-                self.tail_for = false;
-                if b.contains(&format!("break 'b{label};")) {
-                    self.soft.labelled_blocks += 1;
-                    format!("    'b{label}: {{\n{b}    }}\n")
-                } else {
-                    b
-                }
-            }
+            // Printed bare where nothing breaks out of it ([`Self::labeled`]).
+            plan::Node::Labeled { .. } => unreachable!("FnPrinter::seq prints a labelled block"),
             // v1's `loop { match b }` over the region's blocks, entered at
             // the label the edge into it set; leaving it, `match b` picks
             // the edge on.
@@ -8310,6 +8418,8 @@ impl FnPrinter<'_, '_> {
         self.quiet = Vec::new();
         self.scrutinee = None;
         let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
+        let outer_links = std::mem::replace(&mut self.links, vec![None; insts.len()]);
+        let outer_uses = std::mem::replace(&mut self.uses_now, uses.clone());
         // A register value only this block reads prints as a `let`
         // ([`live::block_local`]), but in a block printed in pieces (a
         // compare tree's, a `for`'s): its reads go by `bound`.
@@ -8401,7 +8511,7 @@ impl FnPrinter<'_, '_> {
                 self.soft.rotates_left.insert((self.f.entry, self.cur, i));
             }
             if inline[i] {
-                let e = self.value_at(i, &inst.op, &conds[i], forms[i]);
+                let e = self.value_or_mask(insts, i, at, &conds[i], forms[i]);
                 self.inl[i] = Some(e);
                 self.soft.inlined += 1;
                 continue;
@@ -8707,6 +8817,11 @@ impl FnPrinter<'_, '_> {
                     // literal of its type (native/lift-equipment-words).
                     let lit = konst(insts, value).filter(|_| named.is_none() && plant.is_empty());
                     let val = format!("{}{plant}", named.unwrap_or_else(|| self.val(value)));
+                    // An `&` with a mask the store's width holds needs
+                    // no other where a global's part takes it
+                    // (native/lift-mask-fold).
+                    let fits = plant.is_empty()
+                        && matches!(self.links.get(value.index()), Some(Some((BinOp::And, _, k))) if k & !globals::mask(bytes(width)) == 0);
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         _ if let Some(o) = self.callers_off(i) => {
                             format!("{f}(g, {}{m}, {val});", callers_addr(o))
@@ -8725,12 +8840,14 @@ impl FnPrinter<'_, '_> {
                             }
                             _ => lit
                                 .and_then(|c| globals::store_const(p, bytes(width), c))
-                                .unwrap_or_else(|| globals::store(p, bytes(width), &val)),
+                                .unwrap_or_else(|| {
+                                    globals::store_fitting(p, bytes(width), &val, fits)
+                                }),
                         },
                         (None, Some(o), _) => {
                             let a = format!("{}{m}", self.val(addr));
                             lit.and_then(|c| o.store_const(&a, bytes(width), c))
-                                .unwrap_or_else(|| o.store(&a, bytes(width), &val))
+                                .unwrap_or_else(|| o.store_fitting(&a, bytes(width), &val, fits))
                         }
                         (None, None, Some(r)) if r.named => match r.fold {
                             Some(f) => {
@@ -8866,7 +8983,7 @@ impl FnPrinter<'_, '_> {
                 }
                 ref op => {
                     let ty = if is_bit(op) { "bool" } else { "u32" };
-                    let e = self.value_at(i, op, &conds[i], forms[i]);
+                    let e = self.value_or_mask(insts, i, at, &conds[i], forms[i]);
                     self.soft.value_lets += 1;
                     writeln!(s, "{ind}let {}: {ty} = {e};", v(id)).unwrap();
                 }
@@ -8889,6 +9006,8 @@ impl FnPrinter<'_, '_> {
             s.push_str(c);
         }
         self.inl = outer;
+        self.links = outer_links;
+        self.uses_now = outer_uses;
         self.bound = outer_bound;
         s
     }
@@ -9474,6 +9593,90 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// Inst `i`'s value ([`FnPrinter::value_at`]), or where it is a
+    /// plain mask its chain folded ([`FnPrinter::mask_link`]); `at` is the
+    /// guest instruction it is in.
+    fn value_or_mask(
+        &mut self,
+        insts: &[Inst],
+        i: usize,
+        at: u32,
+        cond: &Option<cond::Form>,
+        form: Option<(ValueId, narrow::Form)>,
+    ) -> String {
+        match self.mask_link(insts, i, at, cond, form) {
+            Some(e) => e,
+            None => self.value_at(i, &insts[i].op, cond, form),
+        }
+    }
+
+    /// A chain of `&` with constants, or of `|`, as one mask
+    /// (native/lift-mask-fold; `docs/research/llm-pilot.md`, "Mask
+    /// chains"): clearing flags bit by bit compiles to one `and` each, and
+    /// `((x & 0xfffffffd) & 0xffffef8f)` prints as `x & !0x1072u32`.
+    /// Inst `i`, `x op c` with `c` a constant within the block and `x`
+    /// not, is a link (recorded in [`FnPrinter::links`]); where `x` is a
+    /// link of the same op printed inside it (an inlined value: used once,
+    /// nothing between writing what it reads), it prints over that link's
+    /// value with the masks joined. An `&` then an `|` doesn't fold. An
+    /// `&` mask with more bits set than clear prints as `!` its clear
+    /// bits. A value printed some other way (a condition's form, a
+    /// narrowing's, a dense ID, an element's address) is no link.
+    fn mask_link(
+        &mut self,
+        insts: &[Inst],
+        i: usize,
+        at: u32,
+        cond: &Option<cond::Form>,
+        form: Option<(ValueId, narrow::Form)>,
+    ) -> Option<String> {
+        let Op::Bin(o @ (BinOp::And | BinOp::Or), a, b) = insts[i].op else {
+            return None;
+        };
+        if cond.is_some()
+            || form.is_some()
+            || self.dense.contains_key(&(self.cur, i as u32))
+            || self.ptr_reads.contains_key(&(self.cur, i))
+            || self.elem_addr.contains_key(&(self.cur, i))
+        {
+            return None;
+        }
+        let (x, c) = match (konst(insts, a), konst(insts, b)) {
+            (None, Some(c)) => (a, c),
+            (Some(c), None) => (b, c),
+            _ => return None,
+        };
+        let join = |m: u32| if o == BinOp::And { m & c } else { m | c };
+        let (base, mask) = match self.links.get(x.index()).copied().flatten() {
+            Some((o2, y, m)) if o2 == o && matches!(self.inl.get(x.index()), Some(Some(_))) => {
+                self.soft.masks_folded += 1;
+                (y, join(m))
+            }
+            Some((o2, _, _)) if o2 == o && self.uses_now.get(x.index()) == Some(&1) => {
+                // GBAA_MASK_WHY=1 prints each chain left with its links.
+                if std::env::var_os("GBAA_MASK_WHY").is_some() {
+                    eprintln!(
+                        "mask chain left at {at:#010x} in {:#x}: {:?} over {:?}",
+                        self.f.entry,
+                        insts[i].op,
+                        insts[x.index()].op
+                    );
+                }
+                self.soft.mask_chains.insert(at);
+                (x, c)
+            }
+            _ => (x, c),
+        };
+        self.links[i] = Some((o, base, mask));
+        Some(match o {
+            BinOp::And if mask.count_ones() > 16 => {
+                format!("{} & !{:#x}u32", self.val(base), !mask)
+            }
+            BinOp::And => format!("{} & {mask:#x}u32", self.val(base)),
+            _ => format!("{} | {mask:#x}u32", self.val(base)),
+        })
+    }
+
     /// Whether the access at inst `i` is an element through a pointer
     /// stepped beside a `for`'s variable ([`FnPrinter::stepped_ptrs`]).
     fn stepped_access(&self, i: usize) -> bool {
@@ -9795,11 +9998,15 @@ impl FnPrinter<'_, '_> {
                     // block, if any, in its arm; its values print as their
                     // `let`s there.
                     let outer = std::mem::replace(&mut self.inl, vec![None; n.len()]);
+                    let outer_links = std::mem::replace(&mut self.links, vec![None; n.len()]);
+                    let outer_uses = std::mem::take(&mut self.uses_now);
                     for b in self.switch_bodies(nt, n, &nxs, nthumb, &nskip, k, Some(exits), false)
                     {
                         out.push(format!("{pre}{b}"));
                     }
                     self.inl = outer;
+                    self.links = outer_links;
+                    self.uses_now = outer_uses;
                 }
             }
         }
@@ -12641,6 +12848,53 @@ mod tests {
         .unwrap();
         holes.holes_only = true;
         lift(&rom, "t", &holes).holes
+    }
+
+    /// Chains of `&` with constants print as one mask, `!` its clear bits
+    /// where it has more set than clear, and chains of `|` as one; an `&`
+    /// then an `|` doesn't fold, nor a chain whose inner link is used
+    /// again; one past a write of the register it masks folds, the value
+    /// read before the write (native/lift-mask-fold).
+    #[test]
+    fn mask_chains_print_as_one_mask() {
+        let mut words = [0xE1A0_0000u32; 0x18];
+        words[0] = 0xE3C1_0002; // bic r0, r1, #2
+        words[1] = 0xE3C0_0070; // bic r0, r0, #0x70
+        words[2] = 0xE3C0_0A01; // bic r0, r0, #0x1000
+        words[3] = 0xE581_0000; // str r0, [r1]
+        words[4] = 0xE381_2001; // orr r2, r1, #1
+        words[5] = 0xE382_2004; // orr r2, r2, #4
+        words[6] = 0xE581_2004; // str r2, [r1, #4]
+        words[7] = 0xE201_30F0; // and r3, r1, #0xf0
+        words[8] = 0xE383_3001; // orr r3, r3, #1
+        words[9] = 0xE581_3008; // str r3, [r1, #8]
+        words[10] = 0xE201_40F0; // and r4, r1, #0xf0
+        words[11] = 0xE204_5030; // and r5, r4, #0x30
+        words[12] = 0xE581_400C; // str r4, [r1, #12]
+        words[13] = 0xE581_5010; // str r5, [r1, #16]
+        words[14] = 0xE201_60F0; // and r6, r1, #0xf0
+        words[15] = 0xE3A0_1000; // mov r1, #0
+        words[16] = 0xE206_7030; // and r7, r6, #0x30
+        words[17] = 0xE581_7000; // str r7, [r1]
+        words[18] = 0xEAFF_FFFE; // b .
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let l = lift(&rom, "t", &Holes::parse("").unwrap());
+        let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+        let reset = &text[text.find("pub fn f_08000000(").expect("the reset")..];
+        let reset = &reset[..reset.find("\n}\n").unwrap()];
+        assert!(reset.contains("(v1 & !0x1072u32)"), "{reset}");
+        assert!(reset.contains("(v1 | 0x5u32)"), "{reset}");
+        assert!(reset.contains("((v1 & 0xf0u32) | 0x1u32)"), "{reset}");
+        assert!(reset.contains("(v37 & 0x30u32)"), "{reset}");
+        assert!(reset.contains("(v1 & 0x30u32)"), "{reset}");
+        assert_eq!(l.metrics.get("masks_folded"), Some(4));
+        assert_eq!(l.metrics.get("mask_chains"), Some(0));
+        assert!(
+            l.report
+                .contains("4 links of `&` or `|` with constants folded into the next one's mask; 0 chains left"),
+            "{}",
+            l.report
+        );
     }
 
     /// A shift pair prints as a cast, and an `and` with a register a block
