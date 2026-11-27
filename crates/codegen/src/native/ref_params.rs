@@ -31,6 +31,8 @@
 //!
 //! [`rebound`] counts the parameters still bound again in their bodies
 //! (`params_rebound`, barred).
+//!
+//! Results that hold a pointer are [`super::ref_results`]'s, after this.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -52,7 +54,7 @@ struct Param {
 
 /// `[from, to)` of `t` split at its top-level commas: each piece's bytes,
 /// as written (spaces kept).
-fn split_top(t: &str, from: usize, to: usize) -> Vec<(usize, usize)> {
+pub(super) fn split_top(t: &str, from: usize, to: usize) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut d = 0i32;
     let mut s = from;
@@ -75,7 +77,7 @@ fn split_top(t: &str, from: usize, to: usize) -> Vec<(usize, usize)> {
 }
 
 /// The byte of the `)` closing the `(` at `open`.
-fn close_paren(t: &str, open: usize) -> Option<usize> {
+pub(super) fn close_paren(t: &str, open: usize) -> Option<usize> {
     let mut d = 0usize;
     for (i, c) in t.bytes().enumerate().skip(open) {
         match c {
@@ -92,16 +94,16 @@ fn close_paren(t: &str, open: usize) -> Option<usize> {
     None
 }
 
-fn is_word(c: u8) -> bool {
+pub(super) fn is_word(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_'
 }
 
-fn ident(s: &str) -> bool {
+pub(super) fn ident(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(is_word) && !s.as_bytes()[0].is_ascii_digit()
 }
 
 /// Whether `w` is a whole word anywhere in `t`.
-fn has_word(t: &str, w: &str) -> bool {
+pub(super) fn has_word(t: &str, w: &str) -> bool {
     let b = t.as_bytes();
     t.match_indices(w).any(|(i, _)| {
         (i == 0 || !is_word(b[i - 1])) && b.get(i + w.len()).is_none_or(|&c| !is_word(c))
@@ -139,7 +141,7 @@ fn rebind_line(l: &str) -> Option<(&str, bool, &str)> {
 /// The function `f_<key>`'s definition in `t`: the bytes of its
 /// parameter list (inside the parens) and of its body (after the `{`
 /// line, to its closing `}` line).
-fn definition(t: &str, k: u32) -> Option<((usize, usize), (usize, usize))> {
+pub(super) fn definition(t: &str, k: u32) -> Option<((usize, usize), (usize, usize))> {
     let head = format!("pub fn f_{k:08x}(");
     let at = t
         .match_indices(&head)
@@ -165,7 +167,7 @@ fn definition(t: &str, k: u32) -> Option<((usize, usize), (usize, usize))> {
 /// The `Ref` types `t` declares `name` with (`name: Ref<T>` as a
 /// parameter or a `let`'s), and whether it declares it anything else
 /// typed.
-fn declared_refs(t: &str, name: &str) -> (BTreeSet<String>, bool) {
+pub(super) fn declared_refs(t: &str, name: &str) -> (BTreeSet<String>, bool) {
     let b = t.as_bytes();
     let pat = format!("{name}: ");
     let mut refs = BTreeSet::new();

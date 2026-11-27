@@ -246,6 +246,7 @@ pub mod narrow;
 pub mod pc_marks;
 pub mod ref_binds;
 pub mod ref_params;
+pub mod ref_results;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -1865,6 +1866,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }))
         .collect();
     ref_params::lift(&mut out, &ref_skip);
+    // And results that hold a pointer, after the parameters (one it
+    // typed counts as held).
+    ref_results::lift(&mut out, &ref_skip);
     let plain = |k: u32| plain(&shapes.shaped, &never, k);
     let fns_reached: Vec<u32> = fns.iter().copied().filter(|k| reach.contains(k)).collect();
     let mut table = String::new();
