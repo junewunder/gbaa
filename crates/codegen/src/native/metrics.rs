@@ -155,7 +155,11 @@
 //! declared the `Ref<T>` their accesses make of them, by where `T` came
 //! from (the names files', a heap run's; no bars: they should rise), and
 //! `ref_new_at_use`, the `Ref::<T>::new(…)` and `Ref::<T>::to(…)` still
-//! printed at a use (barred).
+//! printed at a use (barred). `params_rebound`
+//! (`native/lift-pointer-signatures`, [`super::ref_params`]): the `u32`
+//! parameters still bound again in their body (`let n: Ref<T> =
+//! Ref::new(n);`), not typed in the signature (barred, at 0 on the C
+//! programs).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,

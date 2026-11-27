@@ -13,7 +13,9 @@
 //! - a parameter `w: u32` keeps its type in the signature (callers and
 //!   adapters pass the guest's word) and is bound again as the body's
 //!   first line, `let w: Ref<T> = Ref::new(w);`, after the `{` line the
-//!   function's entries end with;
+//!   function's entries end with (the whole program's pass
+//!   [`super::ref_params`] then moves the type into the signature where
+//!   its callers agree);
 //! - each `Ref::<T>::new(w)` prints `w`, and every other use `w.addr()`
 //!   (C's pointer as an integer: a compare, arithmetic, an argument).
 //!
