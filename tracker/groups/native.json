@@ -6296,6 +6296,11 @@
       "id": "native/fn-check-hole-demand",
       "title": "fn-check compares a hole function's r0-r3 callers read",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/llm-pilot-standins-stale",
+      "title": "Mirror's pilot stand-ins call keys the lift no longer has",
+      "uses": ["heavy"]
     }
   ]
 }
