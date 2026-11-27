@@ -1239,11 +1239,11 @@ doc comments of `frame::lend` and `native::code_lends`).
   call's (`call_fn`), whose value the callee only adds constants to,
   loads and stores through (at a constant offset, or at an index: a
   checked one), and passes on in r0-r3 to another borrowed parameter. A
-  store of it, a return of it, a compare, a BIOS call or a pointer call
-  with it, a join with another value: it isn't borrowed. Every caller
-  must pass a lent slot or a borrowed parameter of its own there (one
-  type a parameter), and by a call, not `x_`'s `Regs` (a tail call, a
-  taker's call). The greatest such set, over the call graph.
+  store, a return in a result its shape gives back (not a struct return's
+  unread hidden pointer), a compare, a BIOS or pointer call, a join with
+  another value: it isn't borrowed. Every caller passes a lent slot or a
+  borrowed parameter of its own (one type a parameter), by a call, not
+  `x_`'s `Regs` (a tail call, a taker's, an echo read): the greatest set.
 - **A lent slot** is an escaping one whose only escapes are passes of an
   exact frame address to borrowed parameters. Its object (the lent slots
   and what their borrowers reach) is one local, `[u8; N]` of its bytes;

@@ -5,7 +5,10 @@
 //! A **borrowed parameter** is one of a direct callee's r0-r3 whose value
 //! the callee only adds constants to, loads and stores through at a
 //! constant offset, and passes in r0-r3 to another borrowed parameter: no
-//! store of it, no return of it, no compare or other arithmetic that
+//! store of it, no return of it in a register a caller may read after
+//! ([`LendEnv::read_after`]: for the lift, what the callee's shape gives
+//! back, so a struct return's hidden pointer, left in r0 and read by no
+//! caller, is no use; `native/lift-lend-wider`), no compare or other arithmetic that
 //! reaches an effect, no BIOS or pointer call with it, no two values met
 //! at a join that something then uses. A function whose address is a word
 //! of the ROM (a pointer call may reach it) borrows nothing, and nor does
@@ -32,8 +35,10 @@
 //! `GBAA_LEND_DEBUG=1` prints, per function, its pointer parameters and
 //! why each escaped (`guard`: a compare that reaches a branch; `store
 //! value`; `load addr`/`store addr`: arithmetic past a constant offset;
-//! `return`), and each parameter the program's rules take out; the lift,
-//! each borrower `native::code_lends` skips, and why.
+//! `return`), each frame address passed to a callee (`lends … to`, or
+//! `otherwise`), and each parameter the program's rules take out (by its
+//! callers or passes, or a spill a lent address reaches); the lift, each
+//! borrower `native::code_lends` skips, and why.
 //!
 //! As printed (`native/lift-lent-print`): an object is a local `lN: [u8;
 //! N]`, lent as `Lent::of(&mut lN, offset)`; a borrowed parameter is `pN:
@@ -702,6 +707,17 @@ pub fn lends(
             callers.entry(*t).or_default().push((*f, *at));
         }
     }
+    if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
+        for (f, fr) in frames {
+            for (at, ps) in &fr.lends {
+                let t = runs.get(f).and_then(|r| r.passes.get(at)).map(|(t, _)| *t);
+                eprintln!("lend {f:#x}: lends {ps:?} to {t:x?} at {at:x?}");
+            }
+            if !fr.passed_else.is_empty() {
+                eprintln!("lend {f:#x}: passes {:?} otherwise", fr.passed_else);
+            }
+        }
+    }
     let mut pointers = 0;
     let mut borrowed: BTreeMap<u32, u8> = BTreeMap::new();
     for (f, r) in &runs {
@@ -753,6 +769,11 @@ pub fn lends(
                     })
                 });
                 if let Some(b) = borrowed.get_mut(f).filter(|b| **b & m != 0 && hit) {
+                    if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
+                        eprintln!(
+                            "lend {f:#x}: {m:#x} unborrowed: spilled at sp{k:+} a lent address reaches"
+                        );
+                    }
                     *b &= !m;
                     changed = true;
                 }
@@ -884,17 +905,27 @@ pub fn lends(
     }
 }
 
-/// The lift's [`LendEnv`]: from the summaries; a function's address is
-/// taken as for the frames ([`super::FromSummaries`]), and a stand-in
-/// (`skip`) borrows nothing.
+/// The lift's [`LendEnv`]: from the summaries and the shapes; a
+/// function's address is taken as for the frames
+/// ([`super::FromSummaries`]), and a stand-in (`skip`) borrows nothing.
+/// A shaped function's parameters are its shape's, known (the lift passes
+/// those alone, whatever holes its summary has that don't touch them:
+/// agbcc's `rect_union` masks a saved r8), and what a caller may read
+/// after it is what its shape gives back (`native/lift-returns-read`): a
+/// struct return's hidden pointer, returned in r0 and read by no caller,
+/// prints as no result, so returning it is no use of it.
 struct FromSummaries<'a> {
     sums: &'a crate::saves::Summaries,
+    shapes: &'a BTreeMap<u32, crate::native::shape::Shape>,
     taken: BTreeSet<u32>,
     skip: &'a BTreeSet<u32>,
 }
 
 impl LendEnv for FromSummaries<'_> {
     fn params(&self, f: u32) -> (u8, bool) {
+        if let Some(c) = self.shapes.get(&f) {
+            return (c.params & 0xf, true);
+        }
         match self.sums.get(f) {
             Some(s) => (s.params & 0xf, s.holes.is_empty() && !s.stopped),
             None => (0xf, false),
@@ -909,6 +940,9 @@ impl LendEnv for FromSummaries<'_> {
     }
 
     fn read_after(&self, f: u32) -> u8 {
+        if let Some(c) = self.shapes.get(&f) {
+            return c.results & 0xf;
+        }
         match self.sums.get(f) {
             Some(s) if s.holes.is_empty() => ((s.read_after | s.results) & 0xf) as u8,
             _ => 0xf,
@@ -921,11 +955,12 @@ impl LendEnv for FromSummaries<'_> {
 }
 
 /// The lends of one lifted context's functions, whose `frames` are
-/// [`super::of_code`]'s; `skip`: the stand-ins.
+/// [`super::of_code`]'s; `shapes`: the lift's; `skip`: the stand-ins.
 pub fn of_code(
     ctx: &crate::func::Ctx,
     funcs: &[crate::func::Func],
     sums: &crate::saves::Summaries,
+    shapes: &BTreeMap<u32, crate::native::shape::Shape>,
     frames: &BTreeMap<u32, Frame>,
     skip: &BTreeSet<u32>,
 ) -> Lends {
@@ -936,6 +971,7 @@ pub fn of_code(
         .collect();
     let env = FromSummaries {
         sums,
+        shapes,
         taken: super::taken(&all, ctx.rom),
         skip,
     };
