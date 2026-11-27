@@ -1321,16 +1321,16 @@ them.
   writing one register, a macro's case.
 
 **Signatures.** Callers print from the callee's shape, and since
-`native/lift-signature-holes` a names-file prototype sets that shape,
-refused only on a proven read. A changed signature is a prototype in
-`mods/<game>/protos.toml` (`[[proto]] fn, proto, why`), written by the LLM
-and winning over the names files (`native/lift-proto-overrides`). The next
-lift prints every direct caller in the new shape, and pointer calls keep
-the adapter (`a_`). A refused override fails the lift and names the read,
-because someone asked for that shape. A `[[standin]]` with `proto = true`
-prints in that shape, and only then can a rewrite drop parameters. A
-hand-written caller using the old shape by name fails at rustc and is fixed
-at the call, as `native/cut-callee-shapes` is.
+`native/lift-signature-holes` a names-file prototype sets that shape, refused
+only on a proven read (GCC's `push {r3}` to align sp is none). A changed
+signature is a prototype in `mods/<game>/protos.toml` (`[[proto]] fn, proto,
+why`), written by the LLM and winning over the names files
+(`native/lift-proto-overrides`). The next lift prints every direct caller in
+the new shape, and pointer calls keep the adapter (`a_`). A refused override
+fails the lift and names the read, because someone asked for that shape. A
+`[[standin]]` with `proto = true` prints in that shape, and only then can a
+rewrite drop parameters. A hand-written caller using the old shape by name
+fails at rustc and is fixed at the call, as `native/cut-callee-shapes` is.
 
 **Per-call-site forms** (`native/lift-call-forms`). The three-argument
 GetMonData passes each caller's r2 (exact, but it prints a junk argument).

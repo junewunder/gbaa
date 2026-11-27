@@ -25,7 +25,8 @@
 //! `let q: Ref<T> = f_<key>(…);`; a call standing as its own statement
 //! is left as it is (its result unused); anywhere else the call takes
 //! `.addr()`, the word the guest's r0 held (the adapters `x_` and `a_`
-//! so). **No byte changes**: `Ref::new` and `addr` are the same word.
+//! so), or `.map(Ref::addr)` where it is a `Result` no `?` takes the
+//! `Ref` out of (an adapter passing it back whole). **No byte changes**: `Ref::new` and `addr` are the same word.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -77,6 +78,9 @@ struct Plan {
     ret: (usize, usize),
     lines: Vec<(usize, usize, String)>,
     ty: String,
+    /// It returns `Result<Ref<T>, Exit>`: a call it isn't taken out of
+    /// by `?` (an adapter's, passing it back) maps it to the word.
+    result: bool,
 }
 
 /// The function `f_<k>` in `t` if its result is typed (see the module's
@@ -140,6 +144,7 @@ fn plan(t: &str, k: u32, text: usize) -> Option<Plan> {
         ret,
         lines,
         ty: ty?,
+        result,
     })
 }
 
@@ -203,6 +208,9 @@ pub fn lift(out: &mut [(u32, String)], skip: &BTreeSet<u32>) -> Typed {
                 && after.starts_with(';')
             {
                 // Its own statement: the result goes unused.
+            } else if p.result && !t[close + 1..].starts_with('?') {
+                typed.words += 1;
+                e.push((end, end, ".map(Ref::addr)".into()));
             } else {
                 typed.words += 1;
                 e.push((end, end, ".addr()".into()));
@@ -263,6 +271,21 @@ mod tests {
         assert!(o[0].contains(") -> Result<Ref<t::Obj>, Exit> {\n"));
         assert!(o[0].contains("return Ok(data);"));
         assert!(o[1].contains("f_00000010(g, 0)?.addr();"));
+    }
+
+    #[test]
+    fn a_result_passed_back_whole_maps_to_the_word() {
+        // An adapter giving the callee's `Result` back as it is (the
+        // Amazing Mirror's x_08019f29): no `?` to take the `Ref` out of.
+        let callee = "pub fn f_00000010(g: &mut Game, _: u32) -> Result<u32, Exit> {\n    let mut data: Ref<t::Obj> = Ref::new(0x0u32);\n    'l1: loop {\n        if g.get(data.x()) == 0 {\n            return Ok(data.addr());\n        }\n        data = Ref::new(data.addr().wrapping_add(4));\n    }\n}\n";
+        let adapter = "pub fn x_00000011(g: &mut Game, s: Regs) -> Result<u32, Exit> { f_00000010(g, s.r[13]) }\n";
+        let (o, n) = run(&[(0x10, callee), (0x11, adapter)]);
+        assert_eq!(n.results, 1);
+        assert!(
+            o[1].contains("f_00000010(g, s.r[13]).map(Ref::addr) }"),
+            "{}",
+            o[1]
+        );
     }
 
     #[test]
