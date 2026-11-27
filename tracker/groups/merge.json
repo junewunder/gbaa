@@ -896,19 +896,8 @@
         "by": "2e273413",
         "at": "2026-11-27T20:42:03Z",
         "evidence": "Merged origin/main into the branch (2211e874): lift-check.toml conflicts settled with both comments kept and main's mask_chains bar on all 48 tables (c-align's added); just lift-metrics: 0 over bars, lowered back to measured values; just check passed (exit 0).",
-        "branch": "unit/native/lift-aligned-params",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T20:42:03Z",
-          "by": "2e273413",
-          "host": "quack",
-          "pid": 4000180,
-          "start": "125627797",
-          "beats": true,
-          "session": "2e273413-7d10-4144-a65c-9d090349e167",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-27T20:55:31Z"
       },
       "notes": [
         {
@@ -916,8 +905,7 @@
           "by": "manual",
           "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
         }
-      ],
-      "round": "2026-11-27T20:08:05Z"
+      ]
     }
   ]
 }
