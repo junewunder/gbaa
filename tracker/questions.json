@@ -2291,7 +2291,14 @@
         "by": "1c8e564b",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "c",
+        "note": "june, 2026-11-27: Emerald is the focus; take the easiest path that gets it working. We already trust pret.",
+        "by": "owner",
+        "via": "1c8e564b",
+        "at": "2026-11-27T05:50:30Z",
+        "decision": "d/getmondata-narrow-calls"
+      }
     }
   ]
 }

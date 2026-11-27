@@ -1617,6 +1617,15 @@
       "at": "2026-11-27T05:47:47Z",
       "question": "q/helpers-shared-by-many-functions",
       "via": "1c8e564b"
+    },
+    {
+      "id": "d/getmondata-narrow-calls",
+      "title": "GetMonData's two-argument calls: prove, test, or trust pret: Trust pret's two-argument prototype",
+      "why": "june, 2026-11-27: Emerald is the focus; take the easiest path that gets it working. We already trust pret.",
+      "by": "owner",
+      "at": "2026-11-27T05:50:30Z",
+      "question": "q/getmondata-narrow-calls",
+      "via": "1c8e564b"
     }
   ]
 }

@@ -5866,7 +5866,13 @@
       "title": "A function's second form at chosen calls, tested unread",
       "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', sections 3-4: [[form]] fn, proto, when = constant values of an argument (or sites); at those calls the lifter prints the narrower form, a wrapper passing 0 for the dropped argument; fn-check's new variants run each such call with it as passed and random, which must give the same ends. Check: a C program with a two-form function, a form planted where the argument is read caught; lift-check; just check.",
       "needs": ["native/lift-proto-overrides"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "the owner's answer to \"GetMonData's two-argument calls: prove, test, or trust pret?\": Trust pret's two-argument prototype",
+        "by": "1c8e564b",
+        "at": "2026-11-27T05:50:30Z"
+      }
     },
     {
       "id": "native/minish-stop-eeprom-wait",
