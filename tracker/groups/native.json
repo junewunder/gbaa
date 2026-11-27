@@ -5581,19 +5581,8 @@
         "by": "0ae44a23",
         "at": "2026-11-27T13:04:19Z",
         "evidence": "A null check of a borrowed pointer (Lent::addr gives the nonzero NOWHERE), an index checked against the Lent's length (pN.idx(x)), and a struct return's unread pointer keep a parameter borrowed. 'lent slots' lines, origin/main 5138865e -> this branch: c-borrow-agbcc and -gcc 0 slots, 0 of 2 pointer params, 0 host locals -> 2 slots, 3 of 4, 2 host locals (rerun on main per the review; lift-check.toml comments now say the same); c-chain-agbcc 0 slots, 0 of 14 -> 10 slots, 5 of 14, 2 host locals; c-chain-gcc 5 slots, 4 of 15, 1 host local -> 6 slots, 6 of 15, 2 host locals. sp_accesses_escaping_slot bars lowered: c-chain-agbcc 35->20, native-tasks 657->656, native-save 657->656, native-bios-region 651->650, native-serial 664->663; c-borrow rows new at 2. Review fixes: c/README twelve programs (twenty-four ROMs). Merged origin/main 5138865e (typed Lent: an indexed access stays bytes; lines_prelude 1506; lent_locals_untyped +1 on six rows the wider lend newly lends). On b07b9394: just check passed; just lift-check passed (0 differences on every route, every planted fault caught, c-borrow's --plant-lent on both builds). Not handled (noted): a bare-parameter index, a p++ walk.",
-        "branch": "unit/native/lift-lend-wider",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T13:04:19Z",
-          "by": "0ae44a23",
-          "host": "quack",
-          "pid": 2117956,
-          "start": "121114680",
-          "beats": true,
-          "session": "0ae44a23-a652-4d3c-a437-d2a510cdbb69",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-27T13:11:20Z"
       },
       "notes": [
         {
@@ -5611,13 +5600,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - Two of the card's three widenings are missing, and the session moved them into a new unit the card never asked for. The card's What says 'Widen it: a null check of a borrowed pointer (never null), an index che…"
         }
-      ],
-      "review": {
-        "fixes": 0,
-        "at": "2026-11-27T12:01:42Z",
-        "findings": "- c/README.md:64 still says \"The eleven programs (twenty-two ROMs) are in the lifter's check\". This branch adds c/borrow to the table above that line and adds c-borrow-agbcc and c-borrow-gcc to crates/codegen/lift-check.toml, so the count is now twelve programs (twenty-four ROMs). docs/tools/commands.md already says twenty-four. Update the sentence.\n- crates/codegen/lift-check.toml, the comments on [program.c-borrow-agbcc] and [program.c-borrow-gcc] (about lines 4713-4719 and 4822-4828 on the branch), say that before this unit \"the compare and the sum took both pointers out (1 of 4 pointer parameters borrowed, 1 host local)\". The unit's evidence gives different before-numbers for the same rows: \"0 slots, 0 of 2 pointer params, 0 host locals -> 2 slots, 3 of 4, 2 host locals\". At most one of these is right. Re-run the lift of c-borrow on origin/main with GBAA_LEND_DEBUG=1, or read its 'lent slots' line, and make both comments match what it reports. If the evidence's numbers turn out to be the wrong ones, correct them in the evidence when recording the unit."
-      },
-      "round": "2026-11-27T09:38:54Z"
+      ]
     },
     {
       "id": "native/lift-lent-print",
