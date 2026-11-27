@@ -4520,3 +4520,4 @@
 {"at":"2026-11-27T14:33:18Z","actor":"loop","tag":"6b36b822","host":"quack","cmd":"done","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: done"}
 {"at":"2026-11-27T14:39:24Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: on main"}
 {"at":"2026-11-27T14:41:32Z","actor":"loop","tag":"31b3c691","host":"quack","cmd":"done","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: done, checked by verifier-3e9a71c4"}
+{"at":"2026-11-27T14:41:45Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-fnref-dense-keys-left","text":"new unit: Merge main on quack lane 3"}
