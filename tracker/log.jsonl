@@ -4569,3 +4569,4 @@
 {"at":"2026-11-27T21:10:45Z","actor":"loop","tag":"79bbdeae","host":"quack","cmd":"done","id":"merge/quack-lane1-native-lift-signed-values","text":"Merge main on quack lane 1: done"}
 {"at":"2026-11-27T21:21:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane1-native-lift-signed-values","text":"Merge main on quack lane 1: on main"}
 {"at":"2026-11-27T21:21:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: on main"}
+{"at":"2026-11-27T21:21:07Z","actor":"loop","tag":"13420935","host":"quack","cmd":"claim","id":"native/rogue-build","text":"Rogue's lift builds: GenerateFloorLayout's r11 passed: claimed"}
