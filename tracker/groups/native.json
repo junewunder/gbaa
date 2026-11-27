@@ -5553,6 +5553,13 @@
           "lane": "quack/3"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-27T22:49:12Z",
+          "by": "76d60dff",
+          "text": "mods/metroid/lift-bars.toml was already over its bars at main 21828077 on 8 metrics unrelated to this unit (casts, lines_prelude, rom_refs, loops_not_for, load/store_computed_ram, pointer_unexplained, bitfield_arith): measured by main's own lift."
+        }
+      ],
       "round": "2026-11-27T20:55:37Z"
     },
     {
