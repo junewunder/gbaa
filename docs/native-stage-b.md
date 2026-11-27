@@ -108,7 +108,7 @@ any real game.
   to `IME`; the lift's `hw::write_ime` runs what's pending, and the lift
   sets `bank_sp(g, r13);` (the current mode's bank) before every store that may reach I/O so the
   handler runs on the right stack (once per run of such stores at one sp,
-  native/lift-bank-sp-once). Control `--ime-at-waits`; program
+  native/lift-bank-sp-once; none frameless: native/lift-lent-frameless). Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
 - **`IME` set again while I is set** (`native/ime-i-set-test-program`).
   Done: the `msr` that clears I takes it, as mGBA and the lift do
