@@ -51,7 +51,9 @@
 //! Lent<'_>`, its accesses `pN.ld16(k, F)`, passed on as `pN.at(k)`; where
 //! the body still reads rN as it came (a copy kept across a call, a null
 //! check), rN is `pN.addr()`, the guest address under `--shadow-locals`,
-//! else `Lent::NOWHERE` (nonzero, so a null check prints as it came).
+//! else `Lent::NOWHERE` (nonzero, so a null check prints as it came). An
+//! object of its DWARF variable's type, and the parameters it reaches, are
+//! typed instead (`native/lift-stack-typed-locals`, `native::lent_types`).
 
 use super::{Edge, FBlock, Frame, Kind};
 use analysis::ir::{BinOp, Op};
@@ -575,6 +577,9 @@ pub struct Lends {
     /// parameter, by its call's exit: (the callee's register, its own
     /// parameter, the constant added).
     pub passes: BTreeMap<u32, BTreeMap<At, Vec<Pass>>>,
+    /// The callee of each call in `lent_passes` and `passes`, by
+    /// (function, its call's exit).
+    pub callee: BTreeMap<(u32, At), u32>,
 }
 
 impl Lends {
@@ -976,6 +981,7 @@ pub fn lends(
                 .collect();
             let borrows = |t: u32, r: u8| borrowed.get(&t).is_some_and(|m| m & 1 << r != 0);
             let mut lent_passes: BTreeMap<u32, BTreeMap<At, Vec<(u8, i32)>>> = BTreeMap::new();
+            let mut callee: BTreeMap<(u32, At), u32> = BTreeMap::new();
             for (f, l) in &fl {
                 for (at, ps) in &frames[f].lends {
                     let Some((t, _)) = runs.get(f).and_then(|r| r.passes.get(at)) else {
@@ -988,6 +994,7 @@ pub fn lends(
                         .collect();
                     if !v.is_empty() {
                         lent_passes.entry(*f).or_default().insert(*at, v);
+                        callee.insert((*f, *at), *t);
                     }
                 }
             }
@@ -1005,6 +1012,7 @@ pub fn lends(
                         .collect();
                     if !v.is_empty() {
                         passes.entry(*f).or_default().insert(*at, v);
+                        callee.insert((*f, *at), *t);
                     }
                 }
             }
@@ -1028,6 +1036,7 @@ pub fn lends(
                 objects,
                 lent_passes,
                 passes,
+                callee,
             };
         }
     }

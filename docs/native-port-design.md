@@ -1246,9 +1246,9 @@ doc comments of `frame::lend` and `native::code_lends`).
   call, a taker's, an echo read): the greatest such set.
 - **A lent slot** is an escaping one whose only escapes are passes of an
   exact frame address to borrowed parameters. Its object (the lent slots
-  and what their borrowers reach) is one local, `[u8; N]` of its bytes;
-  DWARF's type where a names file has one is a later step
-  (`native/lift-stack-typed-locals`).
+  and what their borrowers reach) is one local, `[u8; N]` of its bytes, or
+  its names-file variable's type where every access is one field of it
+  (`native/lift-stack-typed-locals`, `codegen::native::lent_types`).
 - **A pointer to a host local** is a `Lent<'_>`, the prelude's
   `&[Cell<u8>]` and an offset in it (copyable, aliasable: two arguments
   may be one object, as `rect_union(&a, &a)`, beside `g: &mut Game`).

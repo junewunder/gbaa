@@ -472,6 +472,52 @@ impl Types {
         self.read(to, &enums)
     }
 
+    /// `c`, a C type as the map writes it (a DWARF variable's, `struct
+    /// Ctx`), if the map lays it out: not a function's type.
+    pub fn of_c(&self, c: &str) -> Option<Ty> {
+        let text = normal(c);
+        let enums: BTreeMap<&str, u32> = self.enums.iter().map(|(n, s)| (n.as_str(), *s)).collect();
+        self.read(&text, &enums).filter(|t| self.size(t) > 0)
+    }
+
+    /// The steps to the one scalar field (an integer or a pointer, of a
+    /// struct, union or array) an access of `w` bytes at `off` into `ty`
+    /// is whole: not part of a bitfield's bytes, nor bytes of no type
+    /// (native/lift-stack-typed-locals).
+    pub fn scalar_at(&self, ty: &Ty, off: u32, w: u32) -> Option<Vec<Step>> {
+        let (steps, leaf) = self.walk(ty, off, w, None)?;
+        let scalar = matches!(leaf, Ty::U8 | Ty::U16 | Ty::U32 | Ty::Ptr(_));
+        (scalar && self.size(&leaf) == w && self.bits_at(ty, off, w).is_empty()).then_some(steps)
+    }
+
+    /// The objects of `ty` that start `off` bytes in, outermost first:
+    /// `ty` itself at 0, then the fields and elements starting there,
+    /// through those holding it (a bitfield is none).
+    pub fn objects_at(&self, ty: &Ty, off: u32) -> Vec<Ty> {
+        let mut v = Vec::new();
+        if off == 0 {
+            v.push(ty.clone());
+        }
+        let inner = match ty {
+            Ty::Array(e, n) => {
+                let es = self.size(e);
+                (es > 0 && off / es < *n).then(|| ((**e).clone(), off % es))
+            }
+            Ty::Named(n) => self.defs.get(n).and_then(|d| {
+                d.fields
+                    .iter()
+                    .filter(|f| f.bits.is_none())
+                    .find(|f| f.off <= off && off < f.off + self.size(&f.ty))
+                    .map(|f| (f.ty.clone(), off - f.off))
+            }),
+            _ => None,
+        };
+        if let Some((e, o)) = inner {
+            v.extend(self.objects_at(&e, o));
+        }
+        v
+    }
+
     /// `c`, a C type as the map writes it, of `size` bytes if known: its
     /// layout, or bytes of that size where it can't be read or its size
     /// isn't `size`.
@@ -1299,6 +1345,31 @@ fields = [
 "#
         );
         SourceMap::from_texts(SHA, &[&text]).unwrap()
+    }
+
+    #[test]
+    fn a_scalar_field_is_one_access_whole() {
+        let t = Types::new(&map());
+        let task = t.of_c("struct Task").unwrap();
+        let data = vec![Step::Field("data".into()), Step::Idx(3)];
+        assert_eq!(t.scalar_at(&task, 14, 2), Some(data));
+        // Two elements at once, half of one, or padding: no field.
+        assert_eq!(t.scalar_at(&task, 8, 4), None);
+        assert_eq!(t.scalar_at(&task, 9, 1), None);
+        assert_eq!(t.scalar_at(&task, 4, 1), None);
+        // A bitfield's bytes are no scalar field.
+        let obj = t.of_c("struct Obj").unwrap();
+        assert_eq!(t.scalar_at(&obj, 0, 2), None);
+    }
+
+    #[test]
+    fn the_objects_at_an_offset_run_outermost_first() {
+        let t = Types::new(&map());
+        let task = t.of_c("struct Task").unwrap();
+        let s16x16 = Ty::Array(Box::new(Ty::U16), 16);
+        assert_eq!(t.objects_at(&task, 8), vec![s16x16.clone(), Ty::U16]);
+        assert_eq!(t.objects_at(&task, 0), vec![task.clone(), Ty::U32]);
+        assert_eq!(t.objects_at(&task, 9), Vec::<Ty>::new());
     }
 
     #[test]

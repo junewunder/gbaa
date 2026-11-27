@@ -160,6 +160,11 @@
 //! parameters still bound again in their body (`let n: Ref<T> =
 //! Ref::new(n);`), not typed in the signature (barred, at 0 on the C
 //! programs).
+//! Lent locals (`native/lift-stack-typed-locals`, [`super::lent_types`]):
+//! `lent_locals_typed`, the stack objects lent to callees printed as
+//! their DWARF variable's type, `Local<t::Ctx, N>`, their accesses and
+//! their borrowers' its fields (no bar: it should rise), and
+//! `lent_locals_untyped`, those left bytes (barred).
 //! Proven pointer types (`native/lift-proven-pointer-types`,
 //! [`super::proven_types`]): `proven_types_agree`, `_disagree` and
 //! `_unproven`, the prototypes' struct and union pointer parameters whose
@@ -375,6 +380,7 @@ pub fn lower_bars(
 /// The metrics with no bar: they are meant to rise.
 pub const UNBARRED: &[&str] = &[
     "proto_shapes",
+    "lent_locals_typed",
     "functions_recognised",
     "ram_globals",
     "load_ram_global",
