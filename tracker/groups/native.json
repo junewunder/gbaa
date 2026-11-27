@@ -5889,7 +5889,14 @@
       "id": "native/lift-returns-cross-context",
       "title": "Results read by callers in another code context or cut short",
       "needs": ["native/lift-returns-past-holes"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-27T07:13:42Z",
+          "by": "4569bc3e",
+          "text": "Left by {unit:native/lift-returns-past-holes}: shape::shapes still gives 0xf to a callee of a caller in another code context (ROM vs IWRAM copy) or one whose run was cut short (blind). Measure results_several, tuple_calls on Metroid, Emerald; judged as that unit."
+        }
+      ]
     }
   ]
 }
