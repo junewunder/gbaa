@@ -1104,3 +1104,154 @@ fn a_callee_another_caller_passes_ram_borrows_nothing() {
     assert!(l.borrowed.is_empty());
     assert!(l.lent.is_empty());
 }
+
+/// `native/lift-stack-typed-locals`: function 1 lends its frame from -16
+/// (sp after the prologue, slot 0) in r0 to function 2, then loads the
+/// word at -12; function 2 loads and stores the word at r0 + 4, or
+/// passes r0 plus `on` on to function 3, which does.
+fn typed_lender(on: Option<u32>) -> Fns {
+    let mut a = B::default();
+    a.prologue();
+    let l = a.sp(0);
+    a.set(0, l);
+    let mut b = B::default();
+    let l = b.sp(4);
+    b.ld(l);
+    let access = |c: &mut B, k: u32| {
+        let p = c.get(0);
+        let four = c.k(4 - k);
+        let q = c.add(p, four);
+        let x = c.ld(q);
+        c.st(q, x);
+    };
+    let mut fns = vec![func(
+        1,
+        vec![
+            (
+                1,
+                a,
+                Edge::Call {
+                    target: Some(2),
+                    ret: 3,
+                },
+            ),
+            (3, b, Edge::Return),
+        ],
+    )];
+    match on {
+        None => {
+            let mut c = B::default();
+            access(&mut c, 0);
+            fns.push(func(2, vec![(2, c, Edge::Return)]));
+        }
+        Some(k) => {
+            let mut c = B::default();
+            let p = c.get(0);
+            let kk = c.k(k);
+            let q = c.add(p, kk);
+            c.set(0, q);
+            fns.push(func(
+                2,
+                vec![
+                    (
+                        2,
+                        c,
+                        Edge::Call {
+                            target: Some(3),
+                            ret: 4,
+                        },
+                    ),
+                    (4, B::default(), Edge::Return),
+                ],
+            ));
+            let mut d = B::default();
+            access(&mut d, k);
+            fns.push(func(3, vec![(3, d, Edge::Return)]));
+        }
+    }
+    fns
+}
+
+/// The names: function 1's `p`, a `struct P` at slot 0, whose field at 4
+/// is `b_ty`.
+fn typed_maps(b_ty: &str) -> crate::native::fields::Maps {
+    let text = format!(
+        r#"
+[map]
+rom_sha1 = "0000000000000000000000000000000000000000"
+source = "test"
+format = 1
+
+[functions]
+0x00000001 = {{ name = "Lender", size = 16 }}
+
+[locals]
+0x00000001 = [
+  {{ name = "p", slot = 0, from = 0x00000000, to = 0x00000100, type = "struct P" }},
+]
+
+[types."struct P"]
+kind = "struct"
+size = 8
+fields = [
+  {{ name = "a", off = 0, size = 4, type = "u32" }},
+  {{ name = "b", off = 4, size = 4, type = "{b_ty}" }},
+]
+"#
+    );
+    let m =
+        crate::names::SourceMap::from_texts("0000000000000000000000000000000000000000", &[&text])
+            .unwrap();
+    crate::native::fields::Maps {
+        types: m.typed.clone(),
+        locals: m.locals.clone(),
+    }
+}
+
+fn typed_of(fns: &Fns, b_ty: &str) -> crate::native::lent_types::LentTypes {
+    let l = lends_of(fns);
+    let maps = typed_maps(b_ty);
+    let bases = BTreeMap::from([(1, -16)]);
+    crate::native::lent_types::of_lends(&l, &frames_of(fns), &bases, Some(&maps))
+}
+
+#[test]
+fn a_lent_local_takes_its_variables_type_where_every_access_fits() {
+    let fns = typed_lender(None);
+    let t = typed_of(&fns, "u32");
+    assert_eq!(t.untyped, 0);
+    let x = &t.objects[&1][&-16];
+    assert_eq!((x.var.as_str(), x.c.as_str()), ("p", "struct P"));
+    assert_eq!(t.params.keys().copied().collect::<Vec<_>>(), vec![(2, 0)]);
+    // As Frame::locals takes it: the variable's bytes, not the object's.
+    assert_eq!(
+        t.spans(&lends_of(&fns), 1, Some(&typed_maps("u32").types)),
+        vec![(-16, -8)]
+    );
+}
+
+#[test]
+fn a_lent_local_an_access_doesnt_fit_stays_bytes() {
+    // Field b is two halfwords: the word accesses at 4 are no one field.
+    let t = typed_of(&typed_lender(None), "u16 [2]");
+    assert_eq!(t.untyped, 1);
+    assert!(t.objects.is_empty() && t.params.is_empty());
+}
+
+#[test]
+fn a_typed_lent_local_passes_on_as_what_its_pointer_points_at() {
+    let t = typed_of(&typed_lender(Some(0)), "u32");
+    assert_eq!(t.untyped, 0);
+    assert_eq!(
+        t.params.keys().copied().collect::<Vec<_>>(),
+        vec![(2, 0), (3, 0)]
+    );
+    // Passed on 4 bytes in, the pointer is to field b, a u32.
+    let t = typed_of(&typed_lender(Some(4)), "u32");
+    assert_eq!(t.untyped, 0);
+    assert_eq!(t.params[&(3, 0)], crate::types::Ty::U32);
+    // Passed on 2 bytes in, it points into field a, at no object: bytes.
+    let t = typed_of(&typed_lender(Some(2)), "u32");
+    assert_eq!(t.untyped, 1);
+    assert!(t.params.is_empty());
+}

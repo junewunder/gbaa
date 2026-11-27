@@ -254,6 +254,9 @@ impl Frame {
             .slots
             .iter()
             .filter(|s| !s.escapes() && s.lo < s.hi && s.hi <= 0)
+            // A slot inside a lent object is its (a typed one's bytes are
+            // its variable's; native/lift-stack-typed-locals).
+            .filter(|s| !lent.iter().any(|&(lo, hi)| lo <= s.lo && s.hi <= hi))
             .filter(|s| !odd.iter().any(|&o| s.lo <= o && o < s.hi))
             .map(|s| Local {
                 lo: s.lo,
