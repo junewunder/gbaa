@@ -4423,3 +4423,4 @@
 {"at":"2026-11-27T05:23:24Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: on main"}
 {"at":"2026-11-27T05:23:29Z","actor":"loop","tag":"e15e6b46","host":"quack","cmd":"claim","id":"native/lift-field-base","text":"A field address held in a register prints on its base: claimed"}
 {"at":"2026-11-27T05:43:45Z","actor":"oversee","tag":"1c8e564b","host":"quack","cmd":"block","id":"native/lift-task-struct","text":"Mirror's task struct lookups print as one helper: stuck: Its question is being re-asked, folded into the shared-helpers one"}
+{"at":"2026-11-27T05:43:47Z","actor":"oversee","tag":"1c8e564b","host":"quack","cmd":"block","id":"native/lift-proto-two-forms","text":"Emerald: GetMonData's two-argument calls take a prototype: stuck: Its question is being re-asked, folded into the call-forms one"}
