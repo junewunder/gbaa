@@ -369,10 +369,8 @@ What the done pieces left open, for the units that come next.
 - **Shapes return too much** (piece 3). Results are what callers read,
   past a caller's hole what its path still holds (native/lift-returns-past-holes),
   but a caller in another code context or cut short reads all four, and an
-  unknown jump by value gives its callers' reads to every pointer's function
-  (not those of a jumper whose run went through it and proved it a return,
-  m4a's mixer halves, nor a forwarding stand-in's: Metroid's is r0 only).
-  A parameter only a path the summaries can't prove dead reads stays one.
+  unknown jump by value gives every pointer's function its callers' reads
+  but a proving jumper's or a forwarding stand-in's (Metroid's: r0 only).
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
   kind of read holds them (`research/fnref-held-words.md`). The pieces
