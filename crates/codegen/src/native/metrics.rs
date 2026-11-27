@@ -164,6 +164,12 @@
 //! [`super::field_base`]): `field_bases`, the typed accesses through a
 //! register holding a field's address printed on its base's register (no
 //! bar), and `ref_to_at_use`, the `Ref::<T>::to(…)` left (barred).
+//! libgcc's division (`native/lift-libgcc-div`): `libgcc_divisions`, the
+//! direct calls of agbcc's `__divsi3`, `__udivsi3`, `__modsi3` and
+//! `__umodsi3` or GCC's `__aeabi_idiv`, `__aeabi_uidiv`, `__aeabi_idivmod`
+//! and `__aeabi_uidivmod` (by the names file's symbol) printed as `/` or
+//! `%` (no bar: it should rise), and `libgcc_div_calls`, those left as
+//! calls, another of the routine's results live after them (barred).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -405,6 +411,7 @@ pub const UNBARRED: &[&str] = &[
     "refs_bound_named",
     "refs_bound_proven",
     "field_bases",
+    "libgcc_divisions",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

@@ -466,7 +466,7 @@ stand-ins).
 | A value chosen in each arm (`r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }`) as an `if`/`match` value; a break to the function's end as `return` | 13 (10 values, 4 returns) | 7,177 labelled blocks | yes | new: `native/lift-arm-values` |
 | A chain of `&` with constant masks as one mask (`x & !0x0c001f72`) | 3 | 386 | yes | new: `native/lift-mask-fold` |
 | The task struct lookup (katam's `TaskGetStructPtr`: `flags & 0x10`, IWRAM bytes or EWRAM words) as one helper | 4 | 1,070 | yes (the same expression); its name from the names files | new: `native/lift-task-struct` |
-| A call to libgcc's division (`__divsi3`) as `/` | 1 (and Metroid's FixedInverse) | 218 | yes, where only the quotient is read | new: `native/lift-libgcc-div` |
+| A call to libgcc's division (`__divsi3`) as `/` | 1 (and Metroid's FixedInverse) | 218 | yes, where only the quotient is read | `native/lift-libgcc-div` (done: 207 calls to 34 on 47ad536a's lift with the holes file, 173 printed as `/` or `%`; the rest have r2 or r3 live after them, read by a four-register function's return or a `call_fn`; modern GCC's routines wait on `native/summary-paired-guards`) |
 | A pointer parameter bound once as `Ref<T>` | 10 | | yes | `native/lift-pointer-types` (ready) |
 | Rotates dropped for a pointer parameter (always aligned in the game) | 7 | | only from callers' facts or the type's alignment | noted on `native/lift-aligned-loads` |
 | Rotates dropped for a stack argument (`sp` is always aligned) | 2 | | yes | noted on `native/lift-aligned-loads` |
@@ -509,7 +509,11 @@ symbol).
 r1-r3, so a rewrite as `/` is exact only where nothing reads r1-r3 after
 the call: round one's FixedInverse failed on r2 for that reason, round
 two's angle function passed because its callers read only r0 and r3.
-Needs `native/lift-returns-read`.
+Needs `native/lift-returns-read`. Done by `native/lift-libgcc-div`: the
+callee known by its names-file symbol, its call reads r0 and r1 alone
+where the result printed is the only one live after it (the routine
+passes r2 and r3 back on its divide-by-0 path, so each call seemed to
+read them), and a divisor that may be 0 keeps the call on that path.
 
 Tooling found on the way, filed: the interpreter cross-check's r0
 (`native/fn-check-interp-pop-r0`) and stand-ins naming the lift's globals
