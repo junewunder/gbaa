@@ -5581,23 +5581,10 @@
       "uses": ["heavy"],
       "priority": 78,
       "record": {
-        "state": "done",
-        "by": "d794da8a",
-        "at": "2026-11-27T11:56:03Z",
-        "evidence": "All three widenings, the review's fixes made (option a): frame::lend now keeps a borrowed pointer through a null check (IsZero, bit 31, cmp #0's carry/overflow of rN as it came fold to constants; the print reads pN.addr(), Lent::NOWHERE 0x03000000 without --shadow-locals, so the test is false) and an access at an index (W::Idx: rN + k + a value not made from rN, one block; printed pN.idx(i).ldN/stN, checked by the Lent's length, reach open to the saved registers), beside the earlier struct return's unread pointer. New C program c/borrow (agbcc and GCC; callees in cells.c, so GCC keeps the null check): mark_or null-checks, cell_set/cell_get index; frame 600 ebde5dc81734f725 matches mGBA for both. 'lent slots' lines, origin/main -> this branch: c-borrow-agbcc and c-borrow-gcc 0 slots, 0 of 2 pointer params, 0 host locals -> 2 slots, 3 of 4, 2 host locals, 3 accesses through a Lent; c-chain-agbcc 0 slots, 0 of 14 -> 10 slots, 5 of 14, 16 Lent accesses (the struct return); c-chain-gcc 5 slots, 4 of 15, 1 host local, 12 -> 6 slots, 6 of 15, 2 host locals, 17; native-bios-region/save/serial/tasks 0 -> 1 slot, 2 borrowed, 1 Lent access. Bars lowered (lift-metrics --lower-bars): sp_accesses_escaping_slot native-bios-region 651->650, native-save 657->656, native-serial 664->663, native-tasks 657->656 (c-chain-gcc stays at 8), plus their lines, bank_sp_calls, value_lets, load_sp, store_computed_unknown; c-chain-gcc lines 619->615, store_computed_unknown 17->13. lines_prelude 1482->1493 on every row (Lent::idx and Lent::NOWHERE, 11 lines). just lift-check passed on the branch before the merge with main: 0 differences on every row, every planted fault caught, c-borrow's new --plant-lent on cell_set's indexed store (agbcc 0x0800028a, GCC 0x08000294) caught at frame 2. just check passed on the merge with origin/main 104e4cad; lift-metrics 0 over, 0 under after it. Unit tests for the null check, the index and an index made from the pointer.",
-        "branch": "unit/native/lift-lend-wider",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T11:56:03Z",
-          "by": "d794da8a",
-          "host": "quack",
-          "pid": 2118754,
-          "start": "121115208",
-          "beats": true,
-          "session": "d794da8a-bb5f-499b-9b85-efe00f7d84d4",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "state": "blocked",
+        "why": "the loop's review asked for fixes a second time, so it waits for the overseer rather than going round again: - c/README.md:64 still says \"The eleven programs (twenty-two ROMs) are in the lifter's check\". This branch adds c/borrow to the table above that line and adds c-borrow-agbcc and c-borrow-gcc to crates/codegen/lift-check.toml, so the count is now twelve programs (twenty-four ROMs). docs/tools/comman…",
+        "by": "manual",
+        "at": "2026-11-27T12:01:42Z"
       },
       "notes": [
         {
@@ -5612,15 +5599,15 @@
         }
       ],
       "review": {
-        "fixes": 1,
-        "at": "2026-11-27T10:53:08Z",
-        "findings": "- Two of the card's three widenings are missing, and the session moved them into a new unit the card never asked for. The card's What says 'Widen it: a null check of a borrowed pointer (never null), an index checked against the Lent's length, a struct return's pointer returned unread.' The branch only does the third: `FromSummaries` in crates/codegen/src/native/frame/lend.rs now takes the shapes, `read_after`/`params` use them, and `echoed` was added in crates/codegen/src/native.rs. The Evidence says null checks and indexes 'went to Borrowed pointers kept on a null check or an index ({unit:native/lift-lend-null-index})', because no C row's lent pointer meets one. That split was the session's own choice. Nothing on the card or in its sprint note drops those two parts, and no unit by that name exists in this checkout (grep for `lift-lend-null-index` finds nothing). Fix it one of two ways. (a) Implement both in `frame::lend`'s escape rules: a compare of a borrowed parameter against 0 that reaches a branch does not take it out; an index checked against the Lent's length is allowed. Then add a C test row, or extend c-lent, that has one of each, so 'lent accesses up' and a lowered `sp_accesses_escaping_slot` bar can show they work, with a planted fault caught. (b) Get the split approved: `just ask` the owner whether these two parts can move to their own unit. Make sure that unit actually exists in the tracker with a card, then quote the approval in this unit's evidence. As it stands, don't record this unit as done with only one of its three parts.",
+        "fixes": 2,
+        "at": "2026-11-27T12:01:42Z",
+        "findings": "- c/README.md:64 still says \"The eleven programs (twenty-two ROMs) are in the lifter's check\". This branch adds c/borrow to the table above that line and adds c-borrow-agbcc and c-borrow-gcc to crates/codegen/lift-check.toml, so the count is now twelve programs (twenty-four ROMs). docs/tools/commands.md already says twenty-four. Update the sentence.\n- crates/codegen/lift-check.toml, the comments on [program.c-borrow-agbcc] and [program.c-borrow-gcc] (about lines 4713-4719 and 4822-4828 on the branch), say that before this unit \"the compare and the sum took both pointers out (1 of 4 pointer parameters borrowed, 1 host local)\". The unit's evidence gives different before-numbers for the same rows: \"0 slots, 0 of 2 pointer params, 0 host locals -> 2 slots, 3 of 4, 2 host locals\". At most one of these is right. Re-run the lift of c-borrow on origin/main with GBAA_LEND_DEBUG=1, or read its 'lent slots' line, and make both comments match what it reports. If the evidence's numbers turn out to be the wrong ones, correct them in the evidence when recording the unit.",
         "sent": {
-          "evidence": "Struct return's unread hidden pointer now borrowed (the lend env takes the shapes: params known, a return escapes only in what the shape gives back), and an echo calls by Regs only where read. c-chain-agbcc 'lent slots' before: 0 escaping slots in 0 functions (0 of 14 borrowed), 0 sp-relative accesses, 0 host locals, 0 Lent accesses; after: 10 slots in 2 functions (5 of 14), 13 sp-relative, 2 host locals, 16 Lent accesses; sp_accesses_escaping_slot bar 35 -> 20 (30 bars lowered in all). Other C rows' lines unchanged (c-chain-gcc 4 of 15, c-lent 1 of 1). Null checks and indexes: no C row's lent pointer meets one (GBAA_LEND_DEBUG survey), so they went to {unit:native/lift-lend-null-index}. just lift-check passed (all programs, 0 differences, every planted fault caught, incl. a new --plant-lent=0x080003d6 on c-chain-agbcc, caught at frame 28); after merging main, lift-check on c-div/c-chain rows passed; just check passed twice (exit 0).",
-          "by": "099043e1",
+          "evidence": "All three widenings, the review's fixes made (option a): frame::lend now keeps a borrowed pointer through a null check (IsZero, bit 31, cmp #0's carry/overflow of rN as it came fold to constants; the print reads pN.addr(), Lent::NOWHERE 0x03000000 without --shadow-locals, so the test is false) and an access at an index (W::Idx: rN + k + a value not made from rN, one block; printed pN.idx(i).ldN/stN, checked by the Lent's length, reach open to the saved registers), beside the earlier struct return's unread pointer. New C program c/borrow (agbcc and GCC; callees in cells.c, so GCC keeps the null check): mark_or null-checks, cell_set/cell_get index; frame 600 ebde5dc81734f725 matches mGBA for both. 'lent slots' lines, origin/main -> this branch: c-borrow-agbcc and c-borrow-gcc 0 slots, 0 of 2 pointer params, 0 host locals -> 2 slots, 3 of 4, 2 host locals, 3 accesses through a Lent; c-chain-agbcc 0 slots, 0 of 14 -> 10 slots, 5 of 14, 16 Lent accesses (the struct return); c-chain-gcc 5 slots, 4 of 15, 1 host local, 12 -> 6 slots, 6 of 15, 2 host locals, 17; native-bios-region/save/serial/tasks 0 -> 1 slot, 2 borrowed, 1 Lent access. Bars lowered (lift-metrics --lower-bars): sp_accesses_escaping_slot native-bios-region 651->650, native-save 657->656, native-serial 664->663, native-tasks 657->656 (c-chain-gcc stays at 8), plus their lines, bank_sp_calls, value_lets, load_sp, store_computed_unknown; c-chain-gcc lines 619->615, store_computed_unknown 17->13. lines_prelude 1482->1493 on every row (Lent::idx and Lent::NOWHERE, 11 lines). just lift-check passed on the branch before the merge with main: 0 differences on every row, every planted fault caught, c-borrow's new --plant-lent on cell_set's indexed store (agbcc 0x0800028a, GCC 0x08000294) caught at frame 2. just check passed on the merge with origin/main 104e4cad; lift-metrics 0 over, 0 under after it. Unit tests for the null check, the index and an index made from the pointer.",
+          "by": "d794da8a",
           "host": "quack",
           "branch": "unit/native/lift-lend-wider",
-          "change": "c2cc75483a4d889a30cfd24076b9292cedc7a1d6"
+          "change": "7276fef29b1618951e13eed023d475a19ed297bb"
         }
       },
       "round": "2026-11-27T09:38:54Z"
