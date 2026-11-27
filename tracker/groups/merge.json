@@ -913,7 +913,19 @@
       "detail": "Branch `unit/native/lift-signed-values` holds {unit:native/lift-signed-values}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/1",
-      "branch": "unit/native/lift-signed-values"
+      "branch": "unit/native/lift-signed-values",
+      "record": {
+        "state": "claimed",
+        "by": "79bbdeae",
+        "session": "79bbdeae-50e8-44c7-bb40-fe4ce9b563ee",
+        "host": "quack",
+        "pid": 3998997,
+        "start": "125626757",
+        "at": "2026-11-27T21:02:08Z",
+        "branch": "unit/native/lift-signed-values",
+        "beats": true
+      },
+      "round": "2026-11-27T21:02:08Z"
     }
   ]
 }
