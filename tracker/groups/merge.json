@@ -858,7 +858,19 @@
       "detail": "Branch `unit/native/lift-proto-r3-align` holds {unit:native/lift-proto-r3-align}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/3",
-      "branch": "unit/native/lift-proto-r3-align"
+      "branch": "unit/native/lift-proto-r3-align",
+      "record": {
+        "state": "claimed",
+        "by": "6ae9bbdc",
+        "session": "6ae9bbdc-506b-4448-a7cd-ff95918d9cb0",
+        "host": "quack",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T09:21:26Z",
+        "branch": "unit/native/lift-proto-r3-align",
+        "beats": true
+      },
+      "round": "2026-11-27T09:21:26Z"
     }
   ]
 }
