@@ -51,7 +51,7 @@ are a line or two.
 | 2 | Register names `r0`-`r14` | `\br([0-9]\|1[0-4])\b` | 359,948 | 3,377 | Mirror's names map has DWARF types, locals and lines (`native/mirror-dwarf-map`, ready): katam's locals name what's left |
 | 3 | A u32 as an address: typed pointer built from a bare u32 | `Ref::<…>::new(` | 62,289 | 572 | Mirror's DWARF map (types of parameters and locals), then stage B's typed pointers; none filed for the u32 itself |
 | 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | done (`native/lift-pc-markers`, 2026-11-24): 0, kept in the crate's `pcs.txt` and put back by its build script in a `guest-pc` build |
-| 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | `native/lift-aligned-loads` (2026-11-24): 12,090 left, raw `ld32`/`ld16` through untyped pointers; `load_rotates_left` 13,040 |
+| 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | `native/lift-aligned-loads` (2026-11-24): 12,090 left, raw `ld32`/`ld16` through untyped pointers; `load_rotates_left` 13,040; `native/lift-aligned-params` (2026-11-27): 10,814 (11,291 on main before it) |
 | 6 | Adds of zero (Thumb's `adds rd, rs, #0` as a move) | `wrapping_add\(0x0\)` | 41,107 | 367 | done (`native/lift-add-zero`, 2026-11-24): 0 |
 | 7 | A u32 as an address: byte loads and stores through a computed value | `\b(ld\|st)(8\|16\|32)\(g,` | 40,309 | 238 | Mirror's DWARF map and `native/lift-index-names` (merging); `load_computed_unknown` 48,412, `store_computed_unknown` 33,281 |
 | 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | `native/lift-cast-types` (2026-11-24): 35,531, a value printed at a width compared, narrowed and shifted in it; `casts` (barred on the lift-check programs). `native/lift-signed-values` (2026-11-27): `casts` counts `prim::sext` too (5,849, so 41,564 on the same lift), and 657 lets compared signed are declared `i32`: 40,190 (`lets_signed`), the signed compares of a name 7,998 to 6,781. Left: lets whose cast only moves to their load (`native/lift-signed-loads`), register locals (`native/lift-signed-registers`); `narrowing_casts` 7,264 |
@@ -118,6 +118,13 @@ object's, a stack local's and one at an address proven aligned (constants,
 sp and the arithmetic between) print without it: 44,881 to 12,090 on the
 Amazing Mirror. What's left reads a pointer parameter or a loaded pointer
 plus an offset with no type, aligned only as its callers make it.
+Since `native/lift-aligned-params` (2026-11-27) a register's low bits known
+0 carry across a function's blocks and, into a function only direct calls
+of its own code context enter, from all its callers' arguments:
+`load_rotates_left` 11,291 to 10,814 (10,482 to 10,077 `ShiftType::Ror`),
+1,341 functions entered knowing some. What's left is mostly loaded
+pointers and the parameters of functions a pointer reaches (the objects'
+callbacks), which no caller's fact may cover.
 
 **6. Adds of zero.** agbcc moves registers with `adds rd, rs, #0`:
 

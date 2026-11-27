@@ -12,6 +12,17 @@
 //!   sp (word-aligned, as the frame's locals already take it: a word
 //!   local is a slot at an offset 4 divides, [`super::frame`]) and the
 //!   arithmetic between: `(n << 2) + 0x3002560`, `sp + 8`, `x & !3`;
+//!   and from the registers' bits known 0 as the block starts ([`starts`],
+//!   unit `native/lift-aligned-params`): what every edge into it leaves,
+//!   over the function's blocks (a pointer stepped by 4 round a loop
+//!   stays a word's), and at its entry what every caller passes, where
+//!   every way into it is a direct call from its own code context
+//!   (`native::aligned_entries`: none for a function a pointer, a
+//!   stand-in, a jump, a fall or an unwind may enter). Such a load prints
+//!   with no `& !3` (`ld32(g, p)`), and a guest-pc build's `ld32` and
+//!   `ld16` stop the program on an address they don't find aligned, so a
+//!   wrong proof shows on the native check (`gbaa-lift --plant-aligned`,
+//!   c-align's planted control);
 //! - **by a check**: the load's own rotate, where the load reads through
 //!   a pointer whose alignment the prelude checks before it reads: a heap
 //!   object's field (`Game::at`, an object aligned as its widest field,
@@ -24,15 +35,34 @@
 use analysis::ir::{BinOp, Inst, Op, ValueId};
 use armv4t::sem::{ShiftType, Width};
 
+/// Each register's bits known to be 0 (r0-r15).
+pub type Regs = [u32; 16];
+
+/// Nothing known: sp alone word-aligned, as every block takes it.
+pub const NONE: Regs = {
+    let mut r = [0; 16];
+    r[13] = 3;
+    r
+};
+
 /// For each value of a block, the bits known to be 0: `known` its
-/// constants ([`super::narrow::values`]); sp is word-aligned at the
-/// block's start and after every write of a word-aligned value.
-pub fn zero_bits(insts: &[Inst], known: &[Option<u32>]) -> Vec<u32> {
-    // Each register's known zero bits: sp's low two.
-    let mut regs = [0u32; 16];
-    regs[13] = 3;
-    let mut kz: Vec<u32> = Vec::with_capacity(insts.len());
-    for (i, inst) in insts.iter().enumerate() {
+/// constants ([`super::narrow::values`]), `start` the registers' as the
+/// block starts ([`starts`]); sp is word-aligned at the block's start and
+/// after every write of a word-aligned value.
+pub fn zero_bits(insts: &[Inst], known: &[Option<u32>], start: &Regs) -> Vec<u32> {
+    run(insts, known, start, insts.len()).0
+}
+
+/// The registers' known-zero bits after `insts[..stop]`, from `start`.
+pub fn regs_at(insts: &[Inst], known: &[Option<u32>], start: &Regs, stop: usize) -> Regs {
+    run(insts, known, start, stop).1
+}
+
+fn run(insts: &[Inst], known: &[Option<u32>], start: &Regs, stop: usize) -> (Vec<u32>, Regs) {
+    let mut regs = *start;
+    regs[13] |= 3;
+    let mut kz: Vec<u32> = Vec::with_capacity(stop);
+    for (i, inst) in insts[..stop].iter().enumerate() {
         let z = |x: ValueId| kz[x.index()];
         // The low bits known 0 in both: a sum's.
         let low = |a: u32, b: u32| {
@@ -108,7 +138,87 @@ pub fn zero_bits(insts: &[Inst], known: &[Option<u32>]) -> Vec<u32> {
         };
         kz.push(v);
     }
-    kz
+    (kz, regs)
+}
+
+/// How an edge between a function's blocks leaves the registers: as the
+/// block left them by its exit inst (a jump); as a call leaves them
+/// (r4-r11 and sp, `saves::KEPT`, less `clear`: those a callee gives
+/// back); or nothing known.
+#[derive(Clone, Copy, Debug)]
+pub struct Edge {
+    pub from: u32,
+    pub exit: usize,
+    pub to: u32,
+    pub after: super::narrow::After,
+    /// After a call: the registers it may change (a giver's r4-r11).
+    pub clear: u16,
+    /// A BIOS call's (`swi`): kept as a call keeps them here, nothing
+    /// known after it in the constants' flow ([`super::narrow::starts`]).
+    pub bios: bool,
+}
+
+/// Each block's registers' known-zero bits at its start
+/// (native/lift-aligned-params): `entry`'s at the function's entry
+/// (its callers' facts, [`NONE`] where they aren't all known), and at
+/// every block what each edge in leaves, met (the bits all agree are 0).
+/// A block no edge reaches isn't listed. `edges` must be every edge
+/// between the function's blocks; `block` gives a block's IR and
+/// constants. A block of `pinned` (one an unwind lands in, with
+/// registers no edge brings) starts with nothing known.
+pub fn starts<'a>(
+    entry: u32,
+    at_entry: Regs,
+    edges: &[Edge],
+    pinned: &std::collections::BTreeSet<u32>,
+    block: impl Fn(u32) -> (&'a [Inst], &'a [Option<u32>]),
+) -> std::collections::BTreeMap<u32, Regs> {
+    use super::narrow::After;
+    let first = if pinned.contains(&entry) {
+        NONE
+    } else {
+        at_entry
+    };
+    let mut at: std::collections::BTreeMap<u32, Regs> = [(entry, first)].into();
+    loop {
+        let mut next: std::collections::BTreeMap<u32, Regs> = [(entry, first)].into();
+        for e in edges {
+            let Some(from) = at.get(&e.from) else {
+                continue;
+            };
+            let out = match e.after {
+                After::Unknown => NONE,
+                after => {
+                    let (insts, known) = block(e.from);
+                    let mut r = regs_at(insts, known, from, e.exit);
+                    if after == After::KeptCall {
+                        for (i, z) in r.iter_mut().enumerate() {
+                            if crate::saves::KEPT & !e.clear & 1 << i == 0 {
+                                *z = 0;
+                            }
+                        }
+                    }
+                    r
+                }
+            };
+            next.entry(e.to)
+                .and_modify(|r| {
+                    for (a, b) in r.iter_mut().zip(out) {
+                        *a &= b;
+                    }
+                })
+                .or_insert(out);
+        }
+        for (k, r) in next.iter_mut() {
+            if pinned.contains(k) {
+                *r = NONE;
+            }
+        }
+        if next == at {
+            return at;
+        }
+        at = next;
+    }
 }
 
 /// The low `n` bits.
@@ -205,7 +315,7 @@ mod tests {
     fn shifts(b: &[Inst], checked: &[usize]) -> Vec<bool> {
         let none = std::collections::BTreeMap::new();
         let known = super::super::narrow::values(b, &none);
-        let kz = zero_bits(b, &known);
+        let kz = zero_bits(b, &known, &NONE);
         let mut c = vec![false; b.len()];
         for &i in checked {
             c[i] = true;
@@ -253,6 +363,51 @@ mod tests {
         let sp = rotated(&mut b, ValueId(3));
         let s = shifts(&b, &[]);
         assert!(!s[r4] && !s[sp]);
+    }
+
+    /// A loop of one block: `r0 = r0 + step`, back to itself; the entry
+    /// passes `r0` with `entry` bits known 0. What the block starts knowing.
+    fn looped(entry: u32, step: u32, after: super::super::narrow::After) -> Regs {
+        let b = vec![
+            inst(Op::GetReg(Reg(0))),
+            inst(Op::Const(step)),
+            inst(Op::Bin(BinOp::Add, ValueId(0), ValueId(1))),
+            inst(Op::SetReg(Reg(0), ValueId(2))),
+            inst(Op::GetReg(Reg(4))),
+        ];
+        let known = super::super::narrow::values(&b, &std::collections::BTreeMap::new());
+        let mut at = NONE;
+        at[0] = entry;
+        at[4] = 3;
+        let edges = [Edge {
+            from: 0x100,
+            exit: 4,
+            to: 0x100,
+            after,
+            clear: 0,
+            bios: false,
+        }];
+        starts(0x100, at, &edges, &Default::default(), |_| (&b, &known))[&0x100]
+    }
+
+    #[test]
+    fn aligned_across_blocks() {
+        use super::super::narrow::After;
+        // p += 4 round a loop keeps a word-aligned p; p += 2 keeps its
+        // low bit only; nothing known on the way in, nothing after.
+        assert_eq!(looped(3, 4, After::Jump)[0], 3);
+        assert_eq!(looped(3, 2, After::Jump)[0], 1);
+        assert_eq!(looped(0, 4, After::Jump)[0], 0);
+        // A call clears r0-r3 and keeps r4-r11.
+        let r = looped(3, 4, After::KeptCall);
+        assert_eq!((r[0], r[4]), (0, 3));
+        // An unwind's landing knows nothing.
+        let b: Vec<Inst> = vec![inst(Op::GetReg(Reg(4)))];
+        let mut at = NONE;
+        at[4] = 3;
+        let pinned = [0x100].into();
+        let s = starts(0x100, at, &[], &pinned, |_| (&b, &[None][..]));
+        assert_eq!(s[&0x100], NONE);
     }
 
     #[test]
