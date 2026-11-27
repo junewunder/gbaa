@@ -5233,6 +5233,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-27T07:31:45Z",
+          "by": "e15e6b46",
+          "text": "Mirror's 2,157 ::to( left: mostly a pointer loaded from memory into an object (vN, legit), a base register reused (wiz's r4 as a loop counter), sums with a register index, and blocks after call_fn/CallVia, which kill every fact (conservative)."
+        }
+      ],
       "round": "2026-11-27T05:23:29Z"
     },
     {
