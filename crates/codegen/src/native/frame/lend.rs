@@ -4,10 +4,17 @@
 //!
 //! A **borrowed parameter** is one of a direct callee's r0-r3 whose value
 //! the callee only adds constants to, loads and stores through at a
-//! constant offset, and passes in r0-r3 to another borrowed parameter: no
-//! store of it, no return of it, no compare or other arithmetic that
-//! reaches an effect, no BIOS or pointer call with it, no two values met
-//! at a join that something then uses. A function whose address is a word
+//! constant offset or at an index ([`W::Idx`]: plus a value not made from
+//! it, in one block; printed `pN.idx(i)`, which the `Lent`'s length
+//! checks), tests for null (its flags against 0: a frame address is
+//! never 0 nor negative, so they are constants), and passes in r0-r3 to
+//! another borrowed parameter: no store of it, no return of it in a
+//! register a caller may read after ([`LendEnv::read_after`]: for the
+//! lift, what the callee's shape gives back, so a struct return's hidden
+//! pointer, left in r0 and read by no caller, is no use), no other
+//! compare or arithmetic that reaches an effect, no BIOS or pointer call
+//! with it, no two values met at a join that something then uses (the
+//! three widenings: `native/lift-lend-wider`). A function whose address is a word
 //! of the ROM (a pointer call may reach it) borrows nothing, and nor does
 //! one whose summary has a hole, nor one a tail call or a fall enters (its
 //! registers come by `Regs`, which can't hold a host local; the lift's
@@ -20,7 +27,9 @@
 //! call, [`Frame::lends`], to a borrowed parameter). The sets are the
 //! greatest such, found by taking out what fails until nothing does. A
 //! slot accessed at an offset its width doesn't divide isn't lent (the
-//! hardware's rounding picks its bytes). The lift prints each function's
+//! hardware's rounding picks its bytes). An address passed to a borrower
+//! with an access at an index reaches up to the saved registers (or the
+//! entry sp), as one passed any other way. The lift prints each function's
 //! lent objects ([`Lends::objects`]) as host locals and its borrowed
 //! parameters as `Lent`s (`native/lift-lent-print`).
 //!
@@ -31,15 +40,18 @@
 //!
 //! `GBAA_LEND_DEBUG=1` prints, per function, its pointer parameters and
 //! why each escaped (`guard`: a compare that reaches a branch; `store
-//! value`; `load addr`/`store addr`: arithmetic past a constant offset;
-//! `return`), and each parameter the program's rules take out; the lift,
-//! each borrower `native::code_lends` skips, and why.
+//! value`; `load addr`/`store addr`: arithmetic past a constant offset or
+//! an index; `index`: used as one; `return`), each frame address passed to a callee (`lends … to`, or
+//! `otherwise`), and each parameter the program's rules take out (by its
+//! callers or passes, or a spill a lent address reaches); the lift, each
+//! borrower `native::code_lends` skips, and why.
 //!
 //! As printed (`native/lift-lent-print`): an object is a local `lN: [u8;
 //! N]`, lent as `Lent::of(&mut lN, offset)`; a borrowed parameter is `pN:
 //! Lent<'_>`, its accesses `pN.ld16(k, F)`, passed on as `pN.at(k)`; where
-//! the body still reads rN as it came (a copy kept across a call), rN is
-//! `pN.addr()`, the guest address under `--shadow-locals`, else 0. An
+//! the body still reads rN as it came (a copy kept across a call, a null
+//! check), rN is `pN.addr()`, the guest address under `--shadow-locals`,
+//! else `Lent::NOWHERE` (nonzero, so a null check prints as it came). An
 //! object of its DWARF variable's type, and the parameters it reaches, are
 //! typed instead (`native/lift-stack-typed-locals`, `native::lent_types`).
 
@@ -53,6 +65,11 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum W {
     Arg(u8, i32),
+    /// Parameter `r` plus a constant plus an index: the value of inst
+    /// `i` of this block, made from the parameters `m` (a bit each), none
+    /// of them `r`. An access through it is a checked one (the `Lent`'s
+    /// length); it doesn't leave its block ([`W::plain`]).
+    Idx(u8, i32, u32, u8),
     Const(u32),
     Mixed(u8),
     Other,
@@ -63,9 +80,25 @@ impl W {
     fn params(self) -> u8 {
         match self {
             W::Arg(r, _) if r < 4 => 1 << r,
+            W::Idx(r, _, _, m) => 1 << r | m,
             W::Mixed(m) => m,
             _ => 0,
         }
+    }
+
+    /// Itself outside its block: an index's value is the block's own.
+    fn plain(self) -> W {
+        match self {
+            W::Idx(..) => W::mixed(self.params()),
+            w => w,
+        }
+    }
+
+    /// Parameter `r` (r0-r3) as it came: the borrowed pointer a null
+    /// check tests (`native/lift-lend-wider`). A frame address is never
+    /// 0 and below 0x8000_0000, so the test's flags are constants.
+    fn is_ptr(self) -> bool {
+        matches!(self, W::Arg(r, 0) if r < 4)
     }
 
     fn mixed(m: u8) -> W {
@@ -97,12 +130,42 @@ fn add(a: W, b: W, sub: bool) -> W {
         } else {
             a.wrapping_add(b)
         }),
+        (W::Idx(r, k, i, m), W::Const(c)) => W::Idx(
+            r,
+            if sub {
+                k.wrapping_sub(c as i32)
+            } else {
+                k.wrapping_add(c as i32)
+            },
+            i,
+            m,
+        ),
+        (W::Const(c), W::Idx(r, k, i, m)) if !sub => W::Idx(r, k.wrapping_add(c as i32), i, m),
         _ => W::mixed(a.params() | b.params()),
     }
 }
 
+/// `a + b`, `b` the value of inst `bi`: a parameter plus an index where
+/// one is a parameter `r` plus a constant and the other neither a
+/// constant nor made from `r` (`p[i]`, `&s->cells[i & 7]`).
+fn add_index(a: W, b: W, ai: u32, bi: u32) -> W {
+    let idx = |p: W, x: W, xi: u32| match (p, x) {
+        (W::Arg(r, k), W::Other | W::Mixed(_)) if r < 4 && x.params() & 1 << r == 0 => {
+            Some(W::Idx(r, k, xi, x.params()))
+        }
+        _ => None,
+    };
+    idx(a, b, bi)
+        .or_else(|| idx(b, a, ai))
+        .unwrap_or_else(|| add(a, b, false))
+}
+
 /// An exit, by its (block, inst index).
 type At = (u32, usize);
+
+/// The end of the bytes reached through a parameter with an access at an
+/// index ([`W::Idx`]): its lent object's end, which the `Lent` checks.
+const OPEN: i32 = i32::MAX;
 
 /// A load or store through a parameter: (parameter, offset, width).
 type Through = (u8, i32, u8);
@@ -130,6 +193,8 @@ struct FnRun {
     /// Its loads and stores through a parameter, by (block, inst index):
     /// (parameter, offset, width).
     through: BTreeMap<(u32, usize), (u8, i32, u8)>,
+    /// Of `through`, those at an index: the index's inst in the block.
+    index: BTreeMap<At, u32>,
     /// The parameters (a bit each) spilled to each frame word: borrowed
     /// only if no lent address reaches it.
     spills: Vec<(u8, i32)>,
@@ -215,6 +280,12 @@ fn run(
         if !blocks.contains_key(&to) {
             return;
         }
+        // An index is its block's value alone.
+        let s = &State {
+            regs: s.regs.map(W::plain),
+            flags: s.flags,
+            words: s.words.iter().map(|(k, v)| (*k, v.plain())).collect(),
+        };
         let next = match ins.get(&to) {
             Some(old) => State {
                 regs: std::array::from_fn(|r| old.regs[r].join(s.regs[r])),
@@ -287,6 +358,20 @@ fn run(
                 {
                     W::Const(0)
                 }
+                // A null check of a borrowed pointer (`cmp r0, #0`, or
+                // flags set by a move): never 0, never negative, and its
+                // subtract of 0 carries and doesn't overflow, whatever it is.
+                Op::IsZero(x) | Op::TestBit { v: x, n: 31 } if val(x).is_ptr() => W::Const(0),
+                Op::AdcCarry { a, b, c }
+                    if val(a).is_ptr() && val(b) == W::Const(!0) && val(c) == W::Const(1) =>
+                {
+                    W::Const(1)
+                }
+                Op::AdcOverflow { a, b, c }
+                    if val(a).is_ptr() && val(b) == W::Const(!0) && val(c) == W::Const(1) =>
+                {
+                    W::Const(0)
+                }
                 Op::GetReg(r) => s.regs[r.index()],
                 Op::GetFlag(f) => W::mixed(s.flags[f as usize]),
                 Op::SetFlag(f, x) => {
@@ -295,8 +380,10 @@ fn run(
                     W::Other
                 }
                 Op::YieldFlag(..) => W::Other,
-                Op::Bin(BinOp::Add, a, c) => add(val(a), val(c), false),
+                Op::Bin(BinOp::Add, a, c) => add_index(val(a), val(c), a.0, c.0),
                 Op::Bin(BinOp::Sub, a, c) => add(val(a), val(c), true),
+                // agbcc's `adds r0, r0, r3`: an index too.
+                Op::Adc { a, b, c } if val(c) == W::Const(0) => add_index(val(a), val(b), a.0, b.0),
                 // `sub r0, #4` is `r0 + !4 + 1`.
                 Op::Adc { a, b, c } => add(add(val(a), val(b), false), val(c), false),
                 Op::Shift { v, amount, .. } if val(amount) == W::Const(0) => val(v),
@@ -316,6 +403,14 @@ fn run(
                             reach(&mut out, r, k, n);
                             out.through.insert((key, i), (r, k, n));
                         }
+                        W::Idx(r, k, x, m) => {
+                            let n = super::width(width);
+                            reach(&mut out, r, k, n);
+                            out.reach.get_mut(&r).unwrap().1 = OPEN;
+                            out.through.insert((key, i), (r, k, n));
+                            out.index.insert((key, i), x);
+                            esc(&mut out, m, "index");
+                        }
                         W::Arg(13, k) if super::width(width) == 4 => {
                             return_word = s.words.get(&k).copied();
                         }
@@ -329,6 +424,14 @@ fn run(
                             let n = super::width(width);
                             reach(&mut out, r, k, n);
                             out.through.insert((key, i), (r, k, n));
+                        }
+                        W::Idx(r, k, x, m) => {
+                            let n = super::width(width);
+                            reach(&mut out, r, k, n);
+                            out.reach.get_mut(&r).unwrap().1 = OPEN;
+                            out.through.insert((key, i), (r, k, n));
+                            out.index.insert((key, i), x);
+                            esc(&mut out, m, "index");
                         }
                         W::Arg(13, k) => {
                             let n = super::width(width) as i32;
@@ -422,7 +525,7 @@ fn exit(out: &mut FnRun, entry: u32, at: (u32, usize), e: &Edge, s: &State, env:
             let (params, _) = env.params(*t);
             let passed = (0..4u8)
                 .filter(|r| params & 1 << r != 0)
-                .map(|r| (r, s.regs[r as usize]))
+                .map(|r| (r, s.regs[r as usize].plain()))
                 .collect();
             out.passes.insert(at, (*t, passed));
             if let Edge::Tail(_) = e {
@@ -457,6 +560,9 @@ pub struct Lends {
     /// Each function's loads and stores through a borrowed parameter, by
     /// (block, inst index): (parameter, offset, width).
     pub through: BTreeMap<u32, BTreeMap<At, Through>>,
+    /// Of `through`, those at an index (`pN.ld8x(k, i, F)`, checked
+    /// against the `Lent`'s length): the index's inst in the block.
+    pub index: BTreeMap<u32, BTreeMap<At, u32>>,
     /// The bytes each borrowed parameter reaches, by (function, register).
     pub reach: BTreeMap<(u32, u8), (i32, i32)>,
     /// Each function's lent objects, the host locals `native/lift-lent-print`
@@ -556,10 +662,23 @@ fn lent_slots(fr: &Frame, reach: &dyn Fn(&At, u8) -> Option<Span>) -> FrameLends
     // Each address passed: the bytes it reaches if lent so far.
     let mut bases: BTreeMap<i32, Option<(i32, i32)>> =
         fr.passed_else.iter().map(|&k| (k, None)).collect();
+    // The end of the object an address passed any other way at `k`
+    // may reach, the saved registers' start (or the entry sp's): where
+    // an indexed borrower's reach ends ([`OPEN`]).
+    let end = |k: i32| {
+        let first = *object(k).first()?;
+        fr.slots[first..]
+            .iter()
+            .find(|s| s.saved || (k < 0 && s.lo >= 0))
+            .map(|s| s.lo)
+    };
     for (at, ps) in &fr.lends {
         for &(reg, k) in ps {
             let r = reach(at, reg)
-                .map(|(lo, hi)| (k + lo, k + hi))
+                .and_then(|(lo, hi)| match hi {
+                    OPEN => Some((k + lo, end(k + lo)?)),
+                    _ => Some((k + lo, k + hi)),
+                })
                 .filter(|&(_, hi)| hi <= 0);
             let e = bases.entry(k).or_insert(r);
             *e = match (*e, r) {
@@ -673,7 +792,7 @@ fn reaches(
                     let Some(&(lo, hi)) = out.get(&(*c, *r)) else {
                         continue;
                     };
-                    let (lo, hi) = (lo + k, hi + k);
+                    let (lo, hi) = (lo + k, if hi == OPEN { OPEN } else { hi + k });
                     let e = out.entry((*f, p)).or_insert((lo, hi));
                     let new = (e.0.min(lo), e.1.max(hi));
                     if new != *e {
@@ -705,6 +824,17 @@ pub fn lends(
     for (f, r) in &runs {
         for (at, (t, _)) in &r.passes {
             callers.entry(*t).or_default().push((*f, *at));
+        }
+    }
+    if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
+        for (f, fr) in frames {
+            for (at, ps) in &fr.lends {
+                let t = runs.get(f).and_then(|r| r.passes.get(at)).map(|(t, _)| *t);
+                eprintln!("lend {f:#x}: lends {ps:?} to {t:x?} at {at:x?}");
+            }
+            if !fr.passed_else.is_empty() {
+                eprintln!("lend {f:#x}: passes {:?} otherwise", fr.passed_else);
+            }
         }
     }
     let mut pointers = 0;
@@ -758,6 +888,11 @@ pub fn lends(
                     })
                 });
                 if let Some(b) = borrowed.get_mut(f).filter(|b| **b & m != 0 && hit) {
+                    if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
+                        eprintln!(
+                            "lend {f:#x}: {m:#x} unborrowed: spilled at sp{k:+} a lent address reaches"
+                        );
+                    }
                     *b &= !m;
                     changed = true;
                 }
@@ -819,7 +954,7 @@ pub fn lends(
         next.retain(|_, m| *m != 0);
         borrowed = next;
         if !changed {
-            let through = borrowed
+            let through: BTreeMap<u32, BTreeMap<At, Through>> = borrowed
                 .iter()
                 .map(|(f, m)| {
                     let t = runs[f]
@@ -829,6 +964,19 @@ pub fn lends(
                         .map(|(k, v)| (*k, *v))
                         .collect();
                     (*f, t)
+                })
+                .collect();
+            let index = borrowed
+                .keys()
+                .map(|f| {
+                    let t = &through[f];
+                    let i: BTreeMap<At, u32> = runs[f]
+                        .index
+                        .iter()
+                        .filter(|(at, _)| t.contains_key(at))
+                        .map(|(at, x)| (*at, *x))
+                        .collect();
+                    (*f, i)
                 })
                 .collect();
             let borrows = |t: u32, r: u8| borrowed.get(&t).is_some_and(|m| m & 1 << r != 0);
@@ -883,6 +1031,7 @@ pub fn lends(
                 lent,
                 pointers,
                 through,
+                index,
                 reach,
                 objects,
                 lent_passes,
@@ -893,17 +1042,27 @@ pub fn lends(
     }
 }
 
-/// The lift's [`LendEnv`]: from the summaries; a function's address is
-/// taken as for the frames ([`super::FromSummaries`]), and a stand-in
-/// (`skip`) borrows nothing.
+/// The lift's [`LendEnv`]: from the summaries and the shapes; a
+/// function's address is taken as for the frames
+/// ([`super::FromSummaries`]), and a stand-in (`skip`) borrows nothing.
+/// A shaped function's parameters are its shape's, known (the lift passes
+/// those alone, whatever holes its summary has that don't touch them:
+/// agbcc's `rect_union` masks a saved r8), and what a caller may read
+/// after it is what its shape gives back (`native/lift-returns-read`): a
+/// struct return's hidden pointer, returned in r0 and read by no caller,
+/// prints as no result, so returning it is no use of it.
 struct FromSummaries<'a> {
     sums: &'a crate::saves::Summaries,
+    shapes: &'a BTreeMap<u32, crate::native::shape::Shape>,
     taken: BTreeSet<u32>,
     skip: &'a BTreeSet<u32>,
 }
 
 impl LendEnv for FromSummaries<'_> {
     fn params(&self, f: u32) -> (u8, bool) {
+        if let Some(c) = self.shapes.get(&f) {
+            return (c.params & 0xf, true);
+        }
         match self.sums.get(f) {
             Some(s) => (s.params & 0xf, s.holes.is_empty() && !s.stopped),
             None => (0xf, false),
@@ -918,6 +1077,9 @@ impl LendEnv for FromSummaries<'_> {
     }
 
     fn read_after(&self, f: u32) -> u8 {
+        if let Some(c) = self.shapes.get(&f) {
+            return c.results & 0xf;
+        }
         match self.sums.get(f) {
             Some(s) if s.holes.is_empty() => ((s.read_after | s.results) & 0xf) as u8,
             _ => 0xf,
@@ -930,11 +1092,12 @@ impl LendEnv for FromSummaries<'_> {
 }
 
 /// The lends of one lifted context's functions, whose `frames` are
-/// [`super::of_code`]'s; `skip`: the stand-ins.
+/// [`super::of_code`]'s; `shapes`: the lift's; `skip`: the stand-ins.
 pub fn of_code(
     ctx: &crate::func::Ctx,
     funcs: &[crate::func::Func],
     sums: &crate::saves::Summaries,
+    shapes: &BTreeMap<u32, crate::native::shape::Shape>,
     frames: &BTreeMap<u32, Frame>,
     skip: &BTreeSet<u32>,
 ) -> Lends {
@@ -945,6 +1108,7 @@ pub fn of_code(
         .collect();
     let env = FromSummaries {
         sums,
+        shapes,
         taken: super::taken(&all, ctx.rom),
         skip,
     };

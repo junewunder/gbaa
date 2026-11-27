@@ -4137,12 +4137,26 @@ fn may_release_irq(ctx: &Ctx, insts: &[Inst], addr: ValueId, width: Width, at: u
         .any(|&(a, b)| lo < b && a < hi)
 }
 
+/// The registers of r4-r11 (bit `n - 4` for rN) `s` gives back in r0-r3
+/// as they came ([`Summary::echoes`]) where a caller may read them: all,
+/// for a function with no shape; for a shaped one, those in r0-r3 it
+/// gives back (`shape`'s results). One no caller reads (agbcc's `pop
+/// {r3}; mov r8, r3` after a `void` function) prints as nothing, so its
+/// call needs no `Regs` to pass the caller's r8 in.
+fn echoed(s: &Summary, shape: Option<&Shape>) -> u8 {
+    let read = shape.map_or(0xf, |c| c.results);
+    s.echoes
+        .iter()
+        .filter(|(r, _)| read & 1 << **r != 0)
+        .fold(0, |m, (_, &n)| m | 1 << (n - 4))
+}
+
 /// Each context's stack locals lent to callees ([`frame::lend`];
 /// native/lift-lent-print). A function borrows nothing that is a
 /// stand-in, a checked one, a four-register one (its registers come in an
 /// array, which can't hold a host local), one a call reaches by its `x_`
 /// entry (it takes r4-r11 or r12 from its callers, or gives r4-r11 back
-/// as they came), or one another context calls or jumps to by address (a
+/// as they came where a caller reads them, [`echoed`]), or one another context calls or jumps to by address (a
 /// RAM copy's call, which this context's run doesn't see).
 fn code_lends(
     codes: &[Code],
@@ -4175,12 +4189,12 @@ fn code_lends(
                 .map(|f| f.entry)
                 .filter(|k| {
                     // A call passing it r4-r11 or r12, or taking r4-r11
-                    // back as they came, goes by `x_` and its `Regs`
+                    // back as they came where a caller reads them
+                    // ([`echoed`]), goes by `x_` and its `Regs`
                     // ([`FnPrinter::call`]).
-                    let by_regs = c
-                        .sums
-                        .get(*k)
-                        .is_some_and(|s| s.passed() != 0 || !s.echoes.is_empty() || s.ip.is_some());
+                    let by_regs = c.sums.get(*k).is_some_and(|s| {
+                        s.passed() != 0 || echoed(s, shaped.get(k)) != 0 || s.ip.is_some()
+                    });
                     holes.standins.contains_key(k)
                         || holes.fn_check.contains_key(k)
                         || !shaped.contains_key(k)
@@ -4188,11 +4202,11 @@ fn code_lends(
                         || by_regs
                 })
                 .collect();
-            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &skip);
+            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, shaped, &c.frames, &skip);
             // `GBAA_LEND_DEBUG=1`: what this skip takes out of the run's own.
             if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
                 let none = BTreeSet::new();
-                let all = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &none);
+                let all = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, shaped, &c.frames, &none);
                 for (k, m) in all.borrowed.iter().filter(|(k, _)| !l.borrowed.contains_key(k)) {
                     let s = c.sums.get(*k);
                     eprintln!(
@@ -4202,7 +4216,7 @@ fn code_lends(
                         shaped.contains_key(k),
                         foreign.contains(k),
                         s.map_or(0, |s| s.passed()),
-                        s.is_some_and(|s| !s.echoes.is_empty()),
+                        s.is_some_and(|s| echoed(s, shaped.get(k)) != 0),
                         s.is_some_and(|s| s.ip.is_some()),
                     );
                 }
@@ -5716,7 +5730,8 @@ impl FnPrinter<'_, '_> {
         let mut e = Entries::default();
         // Its borrowed parameters (native/lift-lent-print): `pN: Lent<'_>`,
         // and rN, where the body reads it as it came, the `Lent`'s guest
-        // address (with `--shadow-locals`; else 0): what it computes from
+        // address (with `--shadow-locals`; else `Lent::NOWHERE`, which a
+        // null check finds nonzero): what it computes from
         // that reaches only the `Lent`'s accesses and passes, which print
         // over it.
         let borrowed = self.lends.borrowed.get(&k).copied().unwrap_or(0);
@@ -8567,10 +8582,14 @@ impl FnPrinter<'_, '_> {
                     let e = match (self.local(i), self.lent_at(i)) {
                         (_, Some((r, k, n))) => {
                             self.soft.lent_accesses += 1;
-                            let x = match self.lent_field(r, k, n) {
+                            let x = match self
+                                .lent_index(i)
+                                .map_or_else(|| self.lent_field(r, k, n), |_| None)
+                            {
                                 Some(f) => format!("p{r}.get({f}, {:#010x})", self.f.entry),
                                 None => format!(
-                                    "p{r}.ld{}({}, {:#010x})",
+                                    "{}.ld{}({}, {:#010x})",
+                                    self.lent_base(r, i),
                                     n * 8,
                                     off_text(k),
                                     self.f.entry
@@ -8705,12 +8724,16 @@ impl FnPrinter<'_, '_> {
                     let body = match (local, lent) {
                         (_, Some((r, k, n))) => {
                             self.soft.lent_accesses += 1;
-                            let w = match self.lent_field(r, k, n) {
+                            let w = match self
+                                .lent_index(i)
+                                .map_or_else(|| self.lent_field(r, k, n), |_| None)
+                            {
                                 Some(f) => {
                                     format!("p{r}.set({f}, {val}, {:#010x});", self.f.entry)
                                 }
                                 None => format!(
-                                    "p{r}.st{}({}, {val}, {:#010x});",
+                                    "{}.st{}({}, {val}, {:#010x});",
+                                    self.lent_base(r, i),
                                     n * 8,
                                     off_text(k),
                                     self.f.entry
@@ -9246,8 +9269,13 @@ impl FnPrinter<'_, '_> {
                 };
                 base.or(Some(addr)).into_iter().chain(v).collect()
             }
-            Op::Load { .. } if local || field || callers => Vec::new(),
-            Op::Store { value, .. } if local || field || callers => vec![value],
+            // A borrowed parameter's access at an index reads the index.
+            Op::Load { .. } if local || field || callers => {
+                self.lent_index(i).into_iter().collect()
+            }
+            Op::Store { value, .. } if local || field || callers => {
+                self.lent_index(i).into_iter().chain([value]).collect()
+            }
             // An element through a stepped pointer: named by the loop's
             // variable, not the pointer's read ([`FnPrinter::field_ptr`]).
             Op::Load { .. } if idx.is_some() && self.stepped_access(i) => Vec::new(),
@@ -9824,6 +9852,25 @@ impl FnPrinter<'_, '_> {
             .copied()
     }
 
+    /// The index of the access at inst `i` of the current block through
+    /// a borrowed parameter, if it is at one ([`frame::lend::Lends::index`]).
+    fn lent_index(&self, i: usize) -> Option<ValueId> {
+        self.lends
+            .index
+            .get(&self.f.entry)?
+            .get(&(self.cur, i))
+            .map(|&x| ValueId(x))
+    }
+
+    /// `pN`, or where the access at inst `i` is at an index
+    /// ([`FnPrinter::lent_index`]), `pN.idx(i)`: the `Lent` checks it.
+    fn lent_base(&self, r: u8, i: usize) -> String {
+        match self.lent_index(i) {
+            Some(x) => format!("p{r}.idx({})", self.whole(x)),
+            None => format!("p{r}"),
+        }
+    }
+
     /// Whether the access at inst `i` of the current block is a host
     /// local's: a stack local's ([`Frame::local_at`]) or through a
     /// borrowed parameter ([`FnPrinter::lent_at`]).
@@ -9995,15 +10042,16 @@ impl FnPrinter<'_, '_> {
     }
 
     /// The registers of r4-r11 (bit `n - 4` for rN) `k` returns in r0-r3
-    /// as they came ([`Summary::echoes`]): a call passes them, so it
-    /// returns the caller's, as the machine does. 0 for a stand-in.
+    /// as they came where a caller may read them ([`echoed`]): a call
+    /// passes them, so it returns the caller's, as the machine does. 0
+    /// for a stand-in.
     fn echoes(&self, k: u32) -> u8 {
         if self.holes.standins.contains_key(&k) {
             return 0;
         }
         self.sums
             .get(k)
-            .map_or(0, |s| s.echoes.values().fold(0, |m, &n| m | 1 << (n - 4)))
+            .map_or(0, |s| echoed(s, self.shape(k).as_ref()))
     }
 
     /// What `k` gives back of r4-r11 to a direct call (bit `n - 4` for
@@ -11940,8 +11988,8 @@ fn local_read(l: &Local, d: u32, n: u8) -> String {
     }
     let b = |j: u32| format!("{name}[{}]", d + j);
     match n {
-        1 => format!("{} as u32", b(0)),
-        2 => format!("u16::from_le_bytes([{}, {}]) as u32", b(0), b(1)),
+        1 => format!("u32::from({})", b(0)),
+        2 => format!("u32::from(u16::from_le_bytes([{}, {}]))", b(0), b(1)),
         _ => format!(
             "u32::from_le_bytes([{}, {}, {}, {}])",
             b(0),
@@ -11952,16 +12000,32 @@ fn local_read(l: &Local, d: u32, n: u8) -> String {
     }
 }
 
-/// A store of `val`'s low `n` bytes at byte `d` of stack local `l`.
+/// A store of `val`'s low `n` bytes at byte `d` of stack local `l`. A
+/// constant (`0x8u32`) that fits prints at the store's width, uncast.
 fn local_write(l: &Local, d: u32, n: u8, val: &str) -> String {
     let name = l.name();
+    let fits = |bits: u32| {
+        val.strip_prefix("0x")
+            .and_then(|v| v.strip_suffix("u32"))
+            .and_then(|v| u32::from_str_radix(v, 16).ok())
+            .filter(|c| c >> bits == 0)
+    };
     match (l.word, n) {
         (true, _) => format!("{name} = {val};"),
-        (_, 1) => format!("{name}[{d}] = ({val}) as u8;"),
-        (_, 2) => format!(
-            "{name}[{d}..{}].copy_from_slice(&(({val}) as u16).to_le_bytes());",
-            d + 2
-        ),
+        (_, 1) => match fits(8) {
+            Some(c) => format!("{name}[{d}] = {c:#x}u8;"),
+            None => format!("{name}[{d}] = ({val}) as u8;"),
+        },
+        (_, 2) => match fits(16) {
+            Some(c) => format!(
+                "{name}[{d}..{}].copy_from_slice(&{c:#x}u16.to_le_bytes());",
+                d + 2
+            ),
+            None => format!(
+                "{name}[{d}..{}].copy_from_slice(&(({val}) as u16).to_le_bytes());",
+                d + 2
+            ),
+        },
         _ => format!(
             "{name}[{d}..{}].copy_from_slice(&({val}).to_le_bytes());",
             d + 4

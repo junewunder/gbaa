@@ -1064,6 +1064,76 @@ fn a_borrower_passing_its_pointer_on_is_a_pass() {
     assert_eq!(l.objects, BTreeMap::from([(1, vec![(-12, -8)])]));
 }
 
+/// A callee whose load through r0 is guarded by `test` of what `of`
+/// makes from r0 (`cmp r0, #0; bne`'s Z): whether it borrows r0.
+fn borrows_under(of: impl FnOnce(&mut B, ValueId) -> ValueId, test: fn(ValueId) -> Op) -> bool {
+    let mut c = B::default();
+    let p = c.get(0);
+    let x = of(&mut c, p);
+    let z = c.op(test(x));
+    c.insts.push(Inst {
+        op: Op::Load {
+            width: Width::Word,
+            addr: p,
+        },
+        guard: Some(z),
+    });
+    lends_of(&lender(c)).borrowed.contains_key(&2)
+}
+
+#[test]
+fn a_null_check_of_a_borrowed_pointer_keeps_it_borrowed() {
+    // native/lift-lend-wider: a frame address is never 0 or negative.
+    assert!(borrows_under(|_, p| p, Op::IsZero));
+    assert!(borrows_under(|_, p| p, |p| Op::TestBit { v: p, n: 31 }));
+    // `cmp r0, #0`'s carry and overflow: r0 + !0 + 1.
+    let cmp = |b: &mut B, p| {
+        let m = b.k(!0);
+        let one = b.op(Op::Bit(true));
+        b.op(Op::AdcCarry { a: p, b: m, c: one })
+    };
+    assert!(borrows_under(cmp, Op::BNot));
+    // A test of anything else made from it is a use.
+    assert!(!borrows_under(
+        |b, p| {
+            let four = b.k(4);
+            b.add(p, four)
+        },
+        Op::IsZero
+    ));
+    assert!(!borrows_under(|_, p| p, |p| Op::TestBit { v: p, n: 3 }));
+}
+
+#[test]
+fn an_access_at_an_index_reaches_to_the_saved_registers() {
+    // The callee stores through r0 + a global's value: `p[gI] = 5`.
+    let mut c = B::default();
+    let p = c.get(0);
+    let g = c.k(0x0300_0000);
+    let i = c.ld(g);
+    let q = c.add(p, i);
+    let five = c.k(5);
+    c.st(q, five);
+    let l = lends_of(&lender(c));
+    assert_eq!(l.borrowed, BTreeMap::from([(2, 1)]));
+    assert_eq!(l.index[&2].values().copied().collect::<Vec<_>>(), vec![i.0]);
+    // Its object runs from the address lent, -16, to the saved r4 at -8:
+    // the `Lent` checks the index against that.
+    assert_eq!(l.lent, BTreeMap::from([(1, BTreeSet::from([-16, -12]))]));
+    assert_eq!(l.objects, BTreeMap::from([(1, vec![(-16, -8)])]));
+}
+
+#[test]
+fn an_index_made_from_the_pointer_is_a_use() {
+    let mut c = B::default();
+    let p = c.get(0);
+    let three = c.k(3);
+    let i = c.op(Op::Bin(BinOp::Xor, p, three));
+    let q = c.add(p, i);
+    c.ld(q);
+    assert!(lends_of(&lender(c)).borrowed.is_empty());
+}
+
 #[test]
 fn a_callee_storing_its_pointer_borrows_nothing() {
     // `*(0x03000000) = r0`: the address reaches RAM.
