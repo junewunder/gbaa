@@ -5608,32 +5608,30 @@
       "needs": ["native/lift-pointer-registers"],
       "uses": ["heavy"],
       "priority": 71,
-      "record": {
-        "state": "done",
-        "by": "6f3bca57",
-        "at": "2026-11-27T19:48:12Z",
-        "evidence": "codegen::native::signed declares lets compared signed i32 by a min cut; casts now counts prim::sext. Amazing Mirror: casts 41,564 (sext counted) -> 40,190, 657 lets i32, name-as-i32 compares 7,998 -> 6,781; its native route passes 3,000 frames, 0 differences. just lift-check passed (46 programs; bars re-based for sext, lowered by the pass). Not halved: what holds the rest (5,513 lets: 5,192 with a plain u32 load right side, 3,371 a tie; register locals untouched) is filed as {unit:native/lift-signed-loads} and {unit:native/lift-signed-registers}. cargo test -p codegen and clippy -D warnings clean; full just check was queued 27 min behind other lanes' memory and stopped at the loop's 2h call, so the loop's own check runs it.",
-        "branch": "unit/native/lift-signed-values",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T19:48:12Z",
-          "by": "6f3bca57",
-          "host": "quack",
-          "pid": 4001563,
-          "start": "125628685",
-          "beats": true,
-          "session": "6f3bca57-9974-458d-8a10-cbb759f56908",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-27T20:01:44Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/signed.rs:340-358 (the `Use::Other` branch in `sign`) and the cost loop after it: the card's sprint text says \"A value also shifted right or compared unsigned stays u32\", and the pass…"
+        },
         {
           "at": "2026-11-24T13:29:10Z",
           "by": "3411b93a",
           "text": "From {unit:native/lift-cast-types}: typing one let i32 gains little (Mirror: ~1,500 lets used only signed save ~600 casts; 7,100 are mixed-use). prim::sext (5,849) is a cast the count misses: printing it as 'as i16 as u32' raises the metric. codegen::native::casts has the helpers."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-27T20:01:44Z",
+        "findings": "- crates/codegen/src/native/signed.rs:340-358 (the `Use::Other` branch in `sign`) and the cost loop after it: the card's sprint text says \"A value also shifted right or compared unsigned stays u32\", and the pass doesn't enforce that. A use such as `w >> 3`, or an unsigned compare like `w < v2` or `w >= 0x10u32`, ends up as `Use::Other`. That costs only +1, so a let with two signed compares, one logical shift right and a cast-free right side still gets declared `i32` and prints `(w as u32) >> 3`. The output is still correct, but it does exactly what the card rules out. Fix: when a variable has a use followed by `>>` (not inside `as i32`), or is an operand of `<`, `>`, `<=` or `>=` without its `as i32`, mark it as never `i32`. For example, give it a source-side cost no saving can outweigh, or leave it out of `vars`. Add a test next to `other_uses_cast_back`: a let with two `(v1 as i32) < k` compares and one `v1 >> 4`, and another with an unsigned `v1 < v2`, both staying `u32`. Then re-run `just lift-check` and re-base any casts bars that move. Also re-measure Mirror's `casts`, `lets_signed` and the name-as-i32 compares for the evidence and for docs/research/mirror-machine-count.md row 8 and its prose.",
+        "sent": {
+          "evidence": "codegen::native::signed declares lets compared signed i32 by a min cut; casts now counts prim::sext. Amazing Mirror: casts 41,564 (sext counted) -> 40,190, 657 lets i32, name-as-i32 compares 7,998 -> 6,781; its native route passes 3,000 frames, 0 differences. just lift-check passed (46 programs; bars re-based for sext, lowered by the pass). Not halved: what holds the rest (5,513 lets: 5,192 with a plain u32 load right side, 3,371 a tie; register locals untouched) is filed as {unit:native/lift-signed-loads} and {unit:native/lift-signed-registers}. cargo test -p codegen and clippy -D warnings clean; full just check was queued 27 min behind other lanes' memory and stopped at the loop's 2h call, so the loop's own check runs it.",
+          "by": "6f3bca57",
+          "host": "quack",
+          "branch": "unit/native/lift-signed-values",
+          "change": "fd5687b7a67efa86a7d5acd8c35f09b97e34ea1c"
+        }
+      },
       "round": "2026-11-27T17:43:14Z"
     },
     {
