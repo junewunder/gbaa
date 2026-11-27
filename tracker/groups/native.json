@@ -5215,6 +5215,17 @@
       "needs": ["native/lift-pointer-registers"],
       "uses": ["heavy"],
       "priority": 83,
+      "record": {
+        "state": "claimed",
+        "by": "47986d06",
+        "session": "47986d06-3eaf-42c1-a80e-16b71eae7718",
+        "host": "quack",
+        "pid": 2117526,
+        "start": "121114149",
+        "at": "2026-11-27T07:36:48Z",
+        "branch": "unit/native/lift-field-base",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T07:36:42Z",
