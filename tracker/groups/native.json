@@ -5509,7 +5509,19 @@
       "needs": ["native/lift-frame-exact-narrow", "native/lift-lent-frameless"],
       "uses": ["heavy"],
       "tags": ["slow-check"],
-      "priority": 68
+      "priority": 68,
+      "record": {
+        "state": "claimed",
+        "by": "76d60dff",
+        "session": "76d60dff-006a-4940-9c23-33b45a52e28a",
+        "host": "quack",
+        "pid": 4000180,
+        "start": "125627797",
+        "at": "2026-11-27T20:55:37Z",
+        "branch": "unit/native/lift-frame-exact-irq-reach",
+        "beats": true
+      },
+      "round": "2026-11-27T20:55:37Z"
     },
     {
       "id": "native/game-lift-bars-refresh",
