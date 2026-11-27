@@ -5701,18 +5701,22 @@
       "priority": 84,
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e08f2de2",
-        "session": "e08f2de2-bd97-4126-98e5-8dbcb86deb3e",
-        "host": "quack",
-        "pid": 2118754,
-        "start": "121115208",
-        "at": "2026-11-27T07:14:03Z",
+        "at": "2026-11-27T07:39:56Z",
+        "evidence": "Branch bd15122a (origin/main dc0bef53 merged): just lift-check passed, 0 differences on every program, every planted fault and hard hole caught; just check passes. Bars (mods cc50187): Metroid results_several 68->57, tuple_calls 872->661, native route 0 differences 2700 frames; Emerald 287->285, 17862->17468, 600 frames; both games run 600/600 headless.",
         "branch": "unit/native/lift-returns-past-holes",
-        "resumed": "4569bc3e",
-        "prevSession": "4569bc3e-9c54-4823-90a4-cc01493e31d0",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T07:39:56Z",
+          "by": "e08f2de2",
+          "host": "quack",
+          "pid": 2118754,
+          "start": "121115208",
+          "beats": true,
+          "session": "e08f2de2-bd97-4126-98e5-8dbcb86deb3e",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {

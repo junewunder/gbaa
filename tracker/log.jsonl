@@ -4457,3 +4457,4 @@
 {"at":"2026-11-27T07:36:48Z","actor":"loop","tag":"47986d06","host":"quack","cmd":"claim","id":"native/lift-field-base","text":"A field address held in a register prints on its base: claimed"}
 {"at":"2026-11-27T07:38:34Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-27T07:38:40Z","actor":"loop","tag":"f259740d","host":"quack","cmd":"claim","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: claimed"}
+{"at":"2026-11-27T07:39:56Z","actor":"loop","tag":"e08f2de2","host":"quack","cmd":"done","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: done"}
