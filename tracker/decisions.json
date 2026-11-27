@@ -1626,6 +1626,21 @@
       "at": "2026-11-27T05:50:30Z",
       "question": "q/getmondata-narrow-calls",
       "via": "1c8e564b"
+    },
+    {
+      "id": "d/shared-helpers-the-lifter-makes-them-an-llm",
+      "title": "Shared helpers: the lifter makes them, an LLM names them",
+      "why": "june, 2026-11-27, correcting her answer a to 'a and b': every repeat past a size and count bar prints as a helper with a generated name (by shape), with no LLM step; an LLM's private [[helper]] entry then names one and may give it a tested body. Mirror's task struct lookup is the first one named.",
+      "by": "owner",
+      "at": "2026-11-27T05:50:40Z",
+      "scope": [
+        "native/lift-clone-count",
+        "native/lift-helper-match",
+        "native/fn-check-helper",
+        "native/lift-task-struct",
+        "native/lift-helper-auto"
+      ],
+      "replaces": "d/helpers-shared-by-many-functions"
     }
   ]
 }

@@ -4435,3 +4435,4 @@
 {"at":"2026-11-27T05:48:00Z","actor":"oversee","tag":"1c8e564b","host":"quack","cmd":"edit","id":"native/lift-task-struct","text":"Mirror's task struct lookups print as one helper: edited (add-needs)"}
 {"at":"2026-11-27T05:50:28Z","actor":"oversee","tag":"1c8e564b","host":"quack","cmd":"add-unit","id":"native/lift-helper-auto","text":"new unit: Repeats past a bar print as generated helpers"}
 {"at":"2026-11-27T05:50:30Z","actor":"owner","tag":"1c8e564b","host":"quack","cmd":"answer","text":"the owner answered \"GetMonData's two-argument calls: prove, test, or trust pret?\": Trust pret's two-argument prototype","q":"q/getmondata-narrow-calls","d":"d/getmondata-narrow-calls","via":"1c8e564b"}
+{"at":"2026-11-27T05:50:40Z","actor":"oversee","tag":"1c8e564b","host":"quack","cmd":"decide","text":"decided: Shared helpers: the lifter makes them, an LLM names them","d":"d/shared-helpers-the-lifter-makes-them-an-llm"}
