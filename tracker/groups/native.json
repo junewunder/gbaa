@@ -5292,15 +5292,22 @@
       "uses": ["heavy"],
       "priority": 72,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "357babd6",
-        "session": "357babd6-e1cb-47c4-b3fa-2639e0d6f666",
-        "host": "quack",
-        "pid": 4001563,
-        "start": "125628685",
-        "at": "2026-11-27T20:01:50Z",
+        "at": "2026-11-27T20:10:39Z",
+        "evidence": "Review fix: lift-check finished. The 4 programs the 2 h run left (native-serial, native-spike, native-takes, native-tasks) ran via just lift-check --only on 9ff2d647: each native pass 600 frames 0 differences, planted fault/hole caught, 'lift-check: passed'; the other 42 passed in the earlier run, so all 46 pass. just lift-metrics --metric mask_chains: 0 on all 46 programs, at bar, 0 over. Earlier evidence stands: just check, Mirror native route 0 differences, Mirror '& 0x…u32) & 0x' count fallen near 0, review. Branch up to date with origin/main (fd0c09f6).",
         "branch": "unit/native/lift-mask-fold",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T20:10:39Z",
+          "by": "357babd6",
+          "host": "quack",
+          "pid": 4001563,
+          "start": "125628685",
+          "beats": true,
+          "session": "357babd6-e1cb-47c4-b3fa-2639e0d6f666",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {

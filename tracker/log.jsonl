@@ -4551,3 +4551,4 @@
 {"at":"2026-11-27T20:04:01Z","actor":"loop","tag":"584e83c0","host":"quack","cmd":"claim","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: claimed"}
 {"at":"2026-11-27T20:07:59Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-lift-aligned-params","text":"new unit: Merge main on quack lane 3"}
 {"at":"2026-11-27T20:08:05Z","actor":"loop","tag":"fbd19bea","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: claimed"}
+{"at":"2026-11-27T20:10:39Z","actor":"loop","tag":"357babd6","host":"quack","cmd":"done","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: done"}
