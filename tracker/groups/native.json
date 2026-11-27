@@ -5607,6 +5607,17 @@
       "needs": ["native/lift-pointer-registers"],
       "uses": ["heavy"],
       "priority": 71,
+      "record": {
+        "state": "claimed",
+        "by": "584e83c0",
+        "session": "584e83c0-cae6-4782-bb2e-cbce06967d55",
+        "host": "quack",
+        "pid": 3998997,
+        "start": "125626757",
+        "at": "2026-11-27T20:04:01Z",
+        "branch": "unit/native/lift-signed-values",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T20:01:44Z",

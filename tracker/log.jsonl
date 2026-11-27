@@ -4548,3 +4548,4 @@
 {"at":"2026-11-27T20:01:44Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-27T20:01:50Z","actor":"loop","tag":"357babd6","host":"quack","cmd":"claim","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: claimed"}
 {"at":"2026-11-27T20:03:55Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: on main"}
+{"at":"2026-11-27T20:04:01Z","actor":"loop","tag":"584e83c0","host":"quack","cmd":"claim","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: claimed"}
