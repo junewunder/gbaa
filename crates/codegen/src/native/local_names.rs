@@ -201,6 +201,40 @@ pub fn plan(
             && !printers(id)
             && syn::parse_str::<syn::Ident>(id).is_ok()
     };
+    // The C names: the prototype's are the readable form's identifiers.
+    let raw = names
+        .functions
+        .get(&f.entry)
+        .and_then(|i| crate::dwarf::proto_params(i.proto.as_deref()?, &i.name))
+        .map(|(_, ps)| ps)
+        .unwrap_or_default();
+    let proto = names.typed.proto_of(f.entry);
+    // The prototype's name of argument register `r`, as an identifier.
+    let proto_name = |r: usize| {
+        let (_, _) = proto?.args.get(r)?.as_ref()?;
+        names.lift_local_ident(raw.get(r)?.0.as_deref()?)
+    };
+    // A borrowed parameter (`pN: Lent<'_>`, native/lift-lent-print) takes
+    // its prototype name; the register copy beside it (`let rN =
+    // pN.addr()`) keeps its own, and a variable DWARF homes elsewhere
+    // under that name (agbcc's `mov r6, r0`) is the Lent, no note.
+    let mut lent_named: BTreeSet<String> = BTreeSet::new();
+    let mut lent_regs: BTreeSet<usize> = BTreeSet::new();
+    for r in 0..4 {
+        let lent = format!("p{r}");
+        if !words.contains(&lent) {
+            continue;
+        }
+        lent_regs.insert(r);
+        if let Some(id) = proto_name(r)
+            && ok(&id, &taken)
+        {
+            out.renames.insert(lent, id.clone());
+            taken.insert(id.clone());
+            lent_named.insert(id);
+            out.named += 1;
+        }
+    }
     let mut noted: BTreeSet<(usize, u8)> = BTreeSet::new();
     for r in 0..13u8 {
         let reg = format!("r{r}");
@@ -272,7 +306,10 @@ pub fn plan(
                 // A comment where each variable's range starts.
                 for &n in &vars {
                     let l = &locals[n];
-                    if !u.at.iter().any(|&a| holds(n, a)) || !noted.insert((n, r)) {
+                    let lent = names
+                        .lift_local_ident(&l.name)
+                        .is_some_and(|id| lent_named.contains(&id));
+                    if lent || !u.at.iter().any(|&a| holds(n, a)) || !noted.insert((n, r)) {
                         continue;
                     }
                     let Some(k) = block_at(f, l.from, l.to) else {
@@ -288,20 +325,9 @@ pub fn plan(
     }
     // Parameters by the prototype: a register local never written, and
     // a plain entry's `aN`.
-    // The C names: the prototype's are the readable form's identifiers.
-    let raw = names
-        .functions
-        .get(&f.entry)
-        .and_then(|i| crate::dwarf::proto_params(i.proto.as_deref()?, &i.name))
-        .map(|(_, ps)| ps)
-        .unwrap_or_default();
-    if let Some(p) = names.typed.proto_of(f.entry) {
-        for (r, a) in p.args.iter().enumerate().take(4) {
-            let Some((_, _)) = a else { continue };
-            let Some(Some(name)) = raw.get(r).map(|(n, _)| n.as_deref()) else {
-                continue;
-            };
-            let Some(id) = names.lift_local_ident(name) else {
+    if proto.is_some() {
+        for r in (0..4).filter(|r| !lent_regs.contains(r)) {
+            let Some(id) = proto_name(r) else {
                 continue;
             };
             let reg = format!("r{r}");

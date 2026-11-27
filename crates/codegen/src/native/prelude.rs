@@ -745,39 +745,63 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
 /// (native/lift-lent-print; docs/native-port-design.md, "Stack locals
 /// passed by address"): the local's bytes as cells, so two arguments may
 /// be the same object beside `g: &mut Game`, and the offset in it. It is
-/// no number: nothing compares or stores it. An access past its end stops
-/// the program, naming the function. `--shadow-locals` lifts carry its guest address (`addr`;
-/// else 0), whose bytes they keep too.
-#[derive(Clone, Copy)]
-pub struct Lent<'a> {
+/// no number: nothing stores it, and only a null check compares it. An
+/// access past its end (an index's too) stops the program, naming the
+/// function. `--shadow-locals` lifts carry its guest address (`addr`;
+/// else [`Lent::NOWHERE`]), whose bytes they keep too. `T`: the C type it
+/// points at, a typed local's (native/lift-stack-typed-locals), else `()`,
+/// bytes.
+pub struct Lent<'a, T = ()> {
     b: &'a [std::cell::Cell<u8>],
     at: i32,
     guest: u32,
+    t: std::marker::PhantomData<T>,
 }
 
-impl<'a> Lent<'a> {
+impl<T> Clone for Lent<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Lent<'_, T> {}
+
+impl<'a, T> Lent<'a, T> {
     /// A borrower that reaches nothing of what it is passed.
-    pub const NONE: Lent<'static> = Lent { b: &[], at: 0, guest: 0 };
+    pub const NONE: Lent<'static, T> = Lent { b: &[], at: 0, guest: 0, t: std::marker::PhantomData };
 
     /// Byte `at` of local `l`.
-    pub fn of(l: &'a mut [u8], at: i32) -> Lent<'a> {
-        Lent { b: std::cell::Cell::from_mut(l).as_slice_of_cells(), at, guest: 0 }
+    pub fn of(l: &'a mut [u8], at: i32) -> Lent<'a, T> {
+        Lent::cells(std::cell::Cell::from_mut(l).as_slice_of_cells(), at, 0)
+    }
+
+    fn cells(b: &'a [std::cell::Cell<u8>], at: i32, guest: u32) -> Lent<'a, T> {
+        Lent { b, at, guest, t: std::marker::PhantomData }
     }
 
     /// Byte `at` of local `l`, which the frame's bytes from `guest` shadow.
-    pub fn shadow(l: &'a mut [u8], at: i32, guest: u32) -> Lent<'a> {
+    pub fn shadow(l: &'a mut [u8], at: i32, guest: u32) -> Lent<'a, T> {
         Lent { guest, ..Lent::of(l, at) }
     }
 
     /// `k` bytes on.
-    pub fn at(self, k: i32) -> Lent<'a> {
-        Lent { at: self.at + k, ..self }
+    pub fn at<U>(self, k: i32) -> Lent<'a, U> {
+        Lent::cells(self.b, self.at + k, self.guest)
     }
 
-    /// Its guest address (`--shadow-locals`), else 0.
-    pub fn addr(self) -> u32 {
-        if self.guest == 0 { 0 } else { self.guest.wrapping_add(self.at as u32) }
+    /// At index `i` (`p[i]`, a C index's bytes): checked as any access is.
+    pub fn idx(self, i: u32) -> Lent<'a> {
+        Lent::cells(self.b, self.at.wrapping_add(i as i32), self.guest)
     }
+
+    /// Its guest address (`--shadow-locals`), else `NOWHERE`: a frame
+    /// address is neither 0 nor negative, so a null check of it prints as
+    /// it came (native/lift-lend-wider).
+    pub fn addr(self) -> u32 {
+        if self.guest == 0 { Self::NOWHERE } else { self.guest.wrapping_add(self.at as u32) }
+    }
+
+    /// The address of a `Lent` without one: IWRAM's first byte.
+    pub const NOWHERE: u32 = 0x0300_0000;
 
     fn bytes(self, k: i32, n: usize, f: u32) -> &'a [std::cell::Cell<u8>] {
         let o = self.at + k;

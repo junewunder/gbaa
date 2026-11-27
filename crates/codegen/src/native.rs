@@ -236,6 +236,7 @@ pub mod frame;
 pub mod globals;
 pub mod heap;
 pub mod indent;
+pub mod lent_types;
 pub mod lift_check;
 pub mod live;
 pub mod local_names;
@@ -1584,6 +1585,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let takers: BTreeSet<u32> = passed_by.keys().copied().collect();
     let lr_ret = lr_entries(&codes, &all, holes);
     let lends = code_lends(&codes, holes, &shapes.shaped);
+    // Lent objects of their DWARF variable's type (native/lift-stack-typed-locals).
+    let lent_types: Vec<lent_types::LentTypes> = codes
+        .iter()
+        .zip(&lends)
+        .map(|(c, l)| lent_types::of_code(l, &c.frames, &c.funcs, holes.fields.as_deref()))
+        .collect();
+    let field_types = holes.fields.as_deref().map(|m| &m.types);
     let sp_exact = exact_sp(&codes, &lends, &all, holes, &sets, &psr_fns);
     // What RAM each function may store to (native/lift-for-ram-bounds).
     let ram_writes = writes::ram_writes(
@@ -1598,7 +1606,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut soft = Soft::default();
     let mut fns = Vec::new();
     let entry = key(0x0800_0000, false);
-    for (c, lends) in codes.iter().zip(&lends) {
+    for ((c, lends), lent_types) in codes.iter().zip(&lends).zip(&lent_types) {
         for f in &c.funcs {
             fns.push(f.entry);
             let check = holes.fn_check.get(&f.entry);
@@ -1650,9 +1658,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     locals: c
                         .frames
                         .get(&f.entry)
-                        .map(|fr| fr.locals(lends.objects.get(&f.entry).map_or(&[], Vec::as_slice)))
+                        .map(|fr| fr.locals(&lent_types.spans(lends, f.entry, field_types)))
                         .unwrap_or_default(),
                     lends,
+                    lent_types,
                     exit_i: None,
                     cur: f.entry,
                     globals: &globals,
@@ -2277,6 +2286,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             soft.lent_accesses
         )
         .unwrap();
+        let typed: usize = lent_types
+            .iter()
+            .map(|l| l.objects.values().map(BTreeMap::len).sum::<usize>())
+            .sum();
+        let untyped: usize = lent_types.iter().map(|l| l.untyped).sum();
+        let params: usize = lent_types.iter().map(|l| l.params.len()).sum();
+        writeln!(
+            report,
+            "lent locals typed (native/lift-stack-typed-locals): {typed} of {} host locals of their DWARF variable's type, {params} borrowed parameters of one; {untyped} left bytes",
+            typed + untyped
+        )
+        .unwrap();
     }
     match (&fnrefs, &holes.skip_fn_flow) {
         (Some(f), _) => report.push_str(&f.0.report(&f.1, &f.2)),
@@ -2738,6 +2759,20 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     );
     m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
     m.push("params_rebound", text().map(ref_params::rebound).sum());
+    // Lent stack locals (native/lift-stack-typed-locals): those of their
+    // DWARF variable's type (no bar: it should rise), and those left
+    // bytes (barred).
+    m.push(
+        "lent_locals_typed",
+        n(lent_types
+            .iter()
+            .map(|l| l.objects.values().map(BTreeMap::len).sum::<usize>())
+            .sum()),
+    );
+    m.push(
+        "lent_locals_untyped",
+        n(lent_types.iter().map(|l| l.untyped).sum()),
+    );
     // libgcc's division (native/lift-libgcc-div): the calls printed as
     // `/` or `%` (no bar: it should rise) and those left as calls (barred).
     m.push("libgcc_divisions", soft.divisions);
@@ -4102,12 +4137,26 @@ fn may_release_irq(ctx: &Ctx, insts: &[Inst], addr: ValueId, width: Width, at: u
         .any(|&(a, b)| lo < b && a < hi)
 }
 
+/// The registers of r4-r11 (bit `n - 4` for rN) `s` gives back in r0-r3
+/// as they came ([`Summary::echoes`]) where a caller may read them: all,
+/// for a function with no shape; for a shaped one, those in r0-r3 it
+/// gives back (`shape`'s results). One no caller reads (agbcc's `pop
+/// {r3}; mov r8, r3` after a `void` function) prints as nothing, so its
+/// call needs no `Regs` to pass the caller's r8 in.
+fn echoed(s: &Summary, shape: Option<&Shape>) -> u8 {
+    let read = shape.map_or(0xf, |c| c.results);
+    s.echoes
+        .iter()
+        .filter(|(r, _)| read & 1 << **r != 0)
+        .fold(0, |m, (_, &n)| m | 1 << (n - 4))
+}
+
 /// Each context's stack locals lent to callees ([`frame::lend`];
 /// native/lift-lent-print). A function borrows nothing that is a
 /// stand-in, a checked one, a four-register one (its registers come in an
 /// array, which can't hold a host local), one a call reaches by its `x_`
 /// entry (it takes r4-r11 or r12 from its callers, or gives r4-r11 back
-/// as they came), or one another context calls or jumps to by address (a
+/// as they came where a caller reads them, [`echoed`]), or one another context calls or jumps to by address (a
 /// RAM copy's call, which this context's run doesn't see).
 fn code_lends(
     codes: &[Code],
@@ -4140,12 +4189,12 @@ fn code_lends(
                 .map(|f| f.entry)
                 .filter(|k| {
                     // A call passing it r4-r11 or r12, or taking r4-r11
-                    // back as they came, goes by `x_` and its `Regs`
+                    // back as they came where a caller reads them
+                    // ([`echoed`]), goes by `x_` and its `Regs`
                     // ([`FnPrinter::call`]).
-                    let by_regs = c
-                        .sums
-                        .get(*k)
-                        .is_some_and(|s| s.passed() != 0 || !s.echoes.is_empty() || s.ip.is_some());
+                    let by_regs = c.sums.get(*k).is_some_and(|s| {
+                        s.passed() != 0 || echoed(s, shaped.get(k)) != 0 || s.ip.is_some()
+                    });
                     holes.standins.contains_key(k)
                         || holes.fn_check.contains_key(k)
                         || !shaped.contains_key(k)
@@ -4153,11 +4202,11 @@ fn code_lends(
                         || by_regs
                 })
                 .collect();
-            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &skip);
+            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, shaped, &c.frames, &skip);
             // `GBAA_LEND_DEBUG=1`: what this skip takes out of the run's own.
             if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
                 let none = BTreeSet::new();
-                let all = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &none);
+                let all = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, shaped, &c.frames, &none);
                 for (k, m) in all.borrowed.iter().filter(|(k, _)| !l.borrowed.contains_key(k)) {
                     let s = c.sums.get(*k);
                     eprintln!(
@@ -4167,7 +4216,7 @@ fn code_lends(
                         shaped.contains_key(k),
                         foreign.contains(k),
                         s.map_or(0, |s| s.passed()),
-                        s.is_some_and(|s| !s.echoes.is_empty()),
+                        s.is_some_and(|s| echoed(s, shaped.get(k)) != 0),
                         s.is_some_and(|s| s.ip.is_some()),
                     );
                 }
@@ -4805,6 +4854,11 @@ struct FnPrinter<'a, 'b> {
     /// `Lent`'s, and what it lends or passes on to a borrowed parameter
     /// as a `Lent`.
     lends: &'a frame::lend::Lends,
+    /// Its context's lent objects and borrowed parameters of a C type
+    /// ([`lent_types`]; native/lift-stack-typed-locals): such an object
+    /// is a `Local<T, N>`, such a parameter a `Lent<'_, T>`, and their
+    /// accesses its fields.
+    lent_types: &'a lent_types::LentTypes,
     /// The exit being printed, by inst index: which call's lends
     /// [`FnPrinter::call`] passes.
     exit_i: Option<usize>,
@@ -5676,7 +5730,8 @@ impl FnPrinter<'_, '_> {
         let mut e = Entries::default();
         // Its borrowed parameters (native/lift-lent-print): `pN: Lent<'_>`,
         // and rN, where the body reads it as it came, the `Lent`'s guest
-        // address (with `--shadow-locals`; else 0): what it computes from
+        // address (with `--shadow-locals`; else `Lent::NOWHERE`, which a
+        // null check finds nonzero): what it computes from
         // that reaches only the `Lent`'s accesses and passes, which print
         // over it.
         let borrowed = self.lends.borrowed.get(&k).copied().unwrap_or(0);
@@ -5703,7 +5758,7 @@ impl FnPrinter<'_, '_> {
                 Some(sh) => std::iter::once(13)
                     .chain(shape::regs(sh.params))
                     .map(|r| match r < 4 && borrowed & 1 << r != 0 {
-                        true => format!("p{r}: Lent<'_>"),
+                        true => format!("p{r}: {}", self.lent_param_ty(r as u8)),
                         false => format!("{}: u32", arg(r)),
                     })
                     .collect::<Vec<_>>()
@@ -5795,7 +5850,7 @@ impl FnPrinter<'_, '_> {
             Some(sh) => {
                 let ps: String = shape::regs(sh.params)
                     .map(|r| match r < 4 && borrowed & 1 << r != 0 {
-                        true => format!(", p{r}: Lent<'_>"),
+                        true => format!(", p{r}: {}", self.lent_param_ty(r as u8)),
                         false => format!(", a{r}: u32"),
                     })
                     .collect();
@@ -8527,12 +8582,19 @@ impl FnPrinter<'_, '_> {
                     let e = match (self.local(i), self.lent_at(i)) {
                         (_, Some((r, k, n))) => {
                             self.soft.lent_accesses += 1;
-                            let x = format!(
-                                "p{r}.ld{}({}, {:#010x})",
-                                n * 8,
-                                off_text(k),
-                                self.f.entry
-                            );
+                            let x = match self
+                                .lent_index(i)
+                                .map_or_else(|| self.lent_field(r, k, n), |_| None)
+                            {
+                                Some(f) => format!("p{r}.get({f}, {:#010x})", self.f.entry),
+                                None => format!(
+                                    "{}.ld{}({}, {:#010x})",
+                                    self.lent_base(r, i),
+                                    n * 8,
+                                    off_text(k),
+                                    self.f.entry
+                                ),
+                            };
                             if self.holes.shadow_locals {
                                 format!(
                                     "{{ let x: u32 = {x}; let m: u32 = {mem}; if x != m {{ eprintln!(\"shadow local: {at:#010x} loads {{x:#x}} through p{r}, the frame's bytes hold {{m:#x}}\"); }} x }}"
@@ -8542,7 +8604,7 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         (Some((l, d, n)), None) => {
-                            let x = local_read(&l, d, n);
+                            let x = self.local_read(&l, d, n);
                             if self.holes.shadow_locals {
                                 format!(
                                     "{{ let x: u32 = {x}; let m: u32 = {mem}; if x != m {{ eprintln!(\"shadow local: {at:#010x} loads {{x:#x}} from {}, the frame's bytes hold {{m:#x}}\"); }} x }}",
@@ -8662,12 +8724,21 @@ impl FnPrinter<'_, '_> {
                     let body = match (local, lent) {
                         (_, Some((r, k, n))) => {
                             self.soft.lent_accesses += 1;
-                            let w = format!(
-                                "p{r}.st{}({}, {val}, {:#010x});",
-                                n * 8,
-                                off_text(k),
-                                self.f.entry
-                            );
+                            let w = match self
+                                .lent_index(i)
+                                .map_or_else(|| self.lent_field(r, k, n), |_| None)
+                            {
+                                Some(f) => {
+                                    format!("p{r}.set({f}, {val}, {:#010x});", self.f.entry)
+                                }
+                                None => format!(
+                                    "{}.st{}({}, {val}, {:#010x});",
+                                    self.lent_base(r, i),
+                                    n * 8,
+                                    off_text(k),
+                                    self.f.entry
+                                ),
+                            };
                             if self.holes.shadow_locals {
                                 format!("{w} {mem}")
                             } else {
@@ -8675,7 +8746,7 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         (Some((l, d, n)), None) => {
-                            let w = local_write(&l, d, n, &val);
+                            let w = self.local_write(&l, d, n, &val);
                             if self.holes.shadow_locals {
                                 format!("{w} {mem}")
                             } else {
@@ -9198,8 +9269,13 @@ impl FnPrinter<'_, '_> {
                 };
                 base.or(Some(addr)).into_iter().chain(v).collect()
             }
-            Op::Load { .. } if local || field || callers => Vec::new(),
-            Op::Store { value, .. } if local || field || callers => vec![value],
+            // A borrowed parameter's access at an index reads the index.
+            Op::Load { .. } if local || field || callers => {
+                self.lent_index(i).into_iter().collect()
+            }
+            Op::Store { value, .. } if local || field || callers => {
+                self.lent_index(i).into_iter().chain([value]).collect()
+            }
             // An element through a stepped pointer: named by the loop's
             // variable, not the pointer's read ([`FnPrinter::field_ptr`]).
             Op::Load { .. } if idx.is_some() && self.stepped_access(i) => Vec::new(),
@@ -9776,6 +9852,25 @@ impl FnPrinter<'_, '_> {
             .copied()
     }
 
+    /// The index of the access at inst `i` of the current block through
+    /// a borrowed parameter, if it is at one ([`frame::lend::Lends::index`]).
+    fn lent_index(&self, i: usize) -> Option<ValueId> {
+        self.lends
+            .index
+            .get(&self.f.entry)?
+            .get(&(self.cur, i))
+            .map(|&x| ValueId(x))
+    }
+
+    /// `pN`, or where the access at inst `i` is at an index
+    /// ([`FnPrinter::lent_index`]), `pN.idx(i)`: the `Lent` checks it.
+    fn lent_base(&self, r: u8, i: usize) -> String {
+        match self.lent_index(i) {
+            Some(x) => format!("p{r}.idx({})", self.whole(x)),
+            None => format!("p{r}"),
+        }
+    }
+
     /// Whether the access at inst `i` of the current block is a host
     /// local's: a stack local's ([`Frame::local_at`]) or through a
     /// borrowed parameter ([`FnPrinter::lent_at`]).
@@ -9809,6 +9904,22 @@ impl FnPrinter<'_, '_> {
         }
         for l in &self.locals {
             let name = l.name();
+            if let Some(x) = self.typed_local(l) {
+                // A lent object of its variable's type
+                // (native/lift-stack-typed-locals).
+                let init = if shadow {
+                    let bs: Vec<String> = (0..l.len)
+                        .map(|j| format!("ld8(g, {}) as u8", local_addr(l, j)))
+                        .collect();
+                    format!("Local::of([{}])", bs.join(", "))
+                } else {
+                    "Local::new()".to_string()
+                };
+                let ty = self.rust_ty(&x.ty);
+                writeln!(s, "    // {}: {}", x.var, x.c).unwrap();
+                writeln!(s, "    let {name}: Local<{ty}, {}> = {init};", l.len).unwrap();
+                continue;
+            }
             let (ty, init) = if l.word {
                 let init = if shadow {
                     format!("ld32(g, {})", local_addr(l, 0))
@@ -9844,6 +9955,13 @@ impl FnPrinter<'_, '_> {
             let name = l.name();
             if l.word {
                 writeln!(s, "{ind}st32(g, {}, {name});", local_addr(l, 0)).unwrap();
+            } else if self.typed_local(l).is_some() {
+                writeln!(
+                    s,
+                    "{ind}for (j, x) in {name}.bytes().iter().enumerate() {{ st8(g, {}.wrapping_add(j as u32), *x as u32); }}",
+                    local_addr(l, 0)
+                )
+                .unwrap();
             } else {
                 writeln!(
                     s,
@@ -9924,15 +10042,16 @@ impl FnPrinter<'_, '_> {
     }
 
     /// The registers of r4-r11 (bit `n - 4` for rN) `k` returns in r0-r3
-    /// as they came ([`Summary::echoes`]): a call passes them, so it
-    /// returns the caller's, as the machine does. 0 for a stand-in.
+    /// as they came where a caller may read them ([`echoed`]): a call
+    /// passes them, so it returns the caller's, as the machine does. 0
+    /// for a stand-in.
     fn echoes(&self, k: u32) -> u8 {
         if self.holes.standins.contains_key(&k) {
             return 0;
         }
         self.sums
             .get(k)
-            .map_or(0, |s| s.echoes.values().fold(0, |m, &n| m | 1 << (n - 4)))
+            .map_or(0, |s| echoed(s, self.shape(k).as_ref()))
     }
 
     /// What `k` gives back of r4-r11 to a direct call (bit `n - 4` for
@@ -10100,6 +10219,8 @@ impl FnPrinter<'_, '_> {
                     > 1
             };
             let e = match local(r, o) {
+                // A typed one lends by `&self`: no borrow to share.
+                Some(l) if self.typed_local(&l).is_some() => self.lent_of(&l, o - l.lo),
                 Some(l) if twice(&l) => {
                     assert!(
                         q.as_ref().is_none_or(|(x, _)| *x == l.lo),
@@ -10137,8 +10258,90 @@ impl FnPrinter<'_, '_> {
             .fold(0, |m, r| m | 1 << r)
     }
 
+    /// Stack local `l`'s type, if it is a lent object of one
+    /// ([`lent_types`]; native/lift-stack-typed-locals).
+    fn typed_local(&self, l: &Local) -> Option<&lent_types::Typed> {
+        l.lent
+            .then(|| self.lent_types.object(self.f.entry, l.lo))
+            .flatten()
+    }
+
+    /// The names files' Rust type for `ty` (`t::Ctx`).
+    fn rust_ty(&self, ty: &crate::types::Ty) -> String {
+        match self.holes.fields.as_deref() {
+            Some(m) => fields::rust(&m.types, ty),
+            None => "u8".into(),
+        }
+    }
+
+    /// The field accessor, `|s| s.pos().x()`, of the scalar the `n`
+    /// bytes at `d` of `ty` are.
+    fn field_fn(&self, ty: &crate::types::Ty, d: u32, n: u8) -> Option<String> {
+        let m = self.holes.fields.as_deref()?;
+        let steps = m.types.scalar_at(ty, d, u32::from(n))?;
+        Some(format!("|s| s{}", lent_types::path(&steps)))
+    }
+
+    /// The field accessor of an access through borrowed parameter `r` of
+    /// a type, `k` bytes on from its start, `n` wide.
+    fn lent_field(&self, r: u8, k: i32, n: u8) -> Option<String> {
+        let ty = self.lent_types.params.get(&(self.f.entry, r))?;
+        let k = u32::try_from(k).ok()?;
+        let f = self.field_fn(ty, k, n);
+        assert!(
+            f.is_some(),
+            "{:#010x}: an access through typed p{r} at {k} fits no field",
+            self.f.entry
+        );
+        f
+    }
+
+    /// Borrowed parameter `r`'s Rust type: `Lent<'_, t::Ctx>` where it has
+    /// a C type (native/lift-stack-typed-locals), else `Lent<'_>`.
+    fn lent_param_ty(&self, r: u8) -> String {
+        match self.lent_types.params.get(&(self.f.entry, r)) {
+            Some(ty) => format!("Lent<'_, {}>", self.rust_ty(ty)),
+            None => "Lent<'_>".into(),
+        }
+    }
+
+    /// A load of `n` bytes at byte `d` of stack local `l`: a typed one's
+    /// field ([`local_read`] else).
+    fn local_read(&self, l: &Local, d: u32, n: u8) -> String {
+        match self.typed_local(l) {
+            Some(x) => {
+                let f = self
+                    .field_fn(&x.ty, d, n)
+                    .expect("a typed local's access fits a field");
+                format!("{}.get({f})", l.name())
+            }
+            None => local_read(l, d, n),
+        }
+    }
+
+    /// A store of `val`'s low `n` bytes at byte `d` of stack local `l`: a
+    /// typed one's field ([`local_write`] else).
+    fn local_write(&self, l: &Local, d: u32, n: u8, val: &str) -> String {
+        match self.typed_local(l) {
+            Some(x) => {
+                let f = self
+                    .field_fn(&x.ty, d, n)
+                    .expect("a typed local's access fits a field");
+                format!("{}.set({f}, {val});", l.name())
+            }
+            None => local_write(l, d, n, val),
+        }
+    }
+
     /// Lent object `l` of this frame as a `Lent` at byte `d` of it.
     fn lent_of(&self, l: &Local, d: i32) -> String {
+        if self.typed_local(l).is_some() {
+            return if self.holes.shadow_locals {
+                format!("{}.shadow({}, {})", l.name(), off_text(d), local_addr(l, 0))
+            } else {
+                format!("{}.lend({})", l.name(), off_text(d))
+            };
+        }
         if self.holes.shadow_locals {
             format!(
                 "Lent::shadow(&mut {}, {}, {})",
@@ -11785,8 +11988,8 @@ fn local_read(l: &Local, d: u32, n: u8) -> String {
     }
     let b = |j: u32| format!("{name}[{}]", d + j);
     match n {
-        1 => format!("{} as u32", b(0)),
-        2 => format!("u16::from_le_bytes([{}, {}]) as u32", b(0), b(1)),
+        1 => format!("u32::from({})", b(0)),
+        2 => format!("u32::from(u16::from_le_bytes([{}, {}]))", b(0), b(1)),
         _ => format!(
             "u32::from_le_bytes([{}, {}, {}, {}])",
             b(0),
@@ -11797,16 +12000,32 @@ fn local_read(l: &Local, d: u32, n: u8) -> String {
     }
 }
 
-/// A store of `val`'s low `n` bytes at byte `d` of stack local `l`.
+/// A store of `val`'s low `n` bytes at byte `d` of stack local `l`. A
+/// constant (`0x8u32`) that fits prints at the store's width, uncast.
 fn local_write(l: &Local, d: u32, n: u8, val: &str) -> String {
     let name = l.name();
+    let fits = |bits: u32| {
+        val.strip_prefix("0x")
+            .and_then(|v| v.strip_suffix("u32"))
+            .and_then(|v| u32::from_str_radix(v, 16).ok())
+            .filter(|c| c >> bits == 0)
+    };
     match (l.word, n) {
         (true, _) => format!("{name} = {val};"),
-        (_, 1) => format!("{name}[{d}] = ({val}) as u8;"),
-        (_, 2) => format!(
-            "{name}[{d}..{}].copy_from_slice(&(({val}) as u16).to_le_bytes());",
-            d + 2
-        ),
+        (_, 1) => match fits(8) {
+            Some(c) => format!("{name}[{d}] = {c:#x}u8;"),
+            None => format!("{name}[{d}] = ({val}) as u8;"),
+        },
+        (_, 2) => match fits(16) {
+            Some(c) => format!(
+                "{name}[{d}..{}].copy_from_slice(&{c:#x}u16.to_le_bytes());",
+                d + 2
+            ),
+            None => format!(
+                "{name}[{d}..{}].copy_from_slice(&(({val}) as u16).to_le_bytes());",
+                d + 2
+            ),
+        },
         _ => format!(
             "{name}[{d}..{}].copy_from_slice(&({val}).to_le_bytes());",
             d + 4

@@ -125,3 +125,64 @@ impl Game {
         self.set(p, (old & !mask) | ((v << LO) & mask));
     }
 }
+
+/// A stack local of a C type, lent to callees (native/lift-stack-typed-locals;
+/// docs/native-port-design.md, "Stack locals passed by address"): its `N`
+/// bytes as cells, so a `Lent` of it and its own accesses share them, each
+/// access one field (`s.get(|s| s.mark())`).
+pub struct Local<T, const N: usize>([std::cell::Cell<u8>; N], std::marker::PhantomData<T>);
+
+impl<T, const N: usize> Local<T, N> {
+    /// Zeroed, as a frame's bytes the lift doesn't keep start.
+    pub fn new() -> Local<T, N> {
+        Local::of([0; N])
+    }
+
+    /// Of these bytes (a `--shadow-locals` lift's, the frame's).
+    pub fn of(b: [u8; N]) -> Local<T, N> {
+        Local(b.map(std::cell::Cell::new), std::marker::PhantomData)
+    }
+
+    /// Its bytes, for a flush to the frame.
+    pub fn bytes(&self) -> [u8; N] {
+        std::array::from_fn(|j| self.0[j].get())
+    }
+
+    /// A `Lent` of it, `at` bytes in.
+    pub fn lend<U>(&self, at: i32) -> Lent<'_, U> {
+        Lent::cells(&self.0, at, 0)
+    }
+
+    /// A `Lent` of it `at` bytes in, which the frame's bytes from `guest`
+    /// shadow.
+    pub fn shadow<U>(&self, at: i32, guest: u32) -> Lent<'_, U> {
+        Lent::cells(&self.0, at, guest)
+    }
+
+    /// The field `f` picks, loaded.
+    #[inline(always)]
+    pub fn get<F: Word>(&self, f: impl FnOnce(Ref<T>) -> Ref<F>) -> u32 {
+        self.lend::<T>(0).get(f, 0)
+    }
+
+    /// The field `f` picks, set to `v`'s low bytes.
+    #[inline(always)]
+    pub fn set<F: Word>(&self, f: impl FnOnce(Ref<T>) -> Ref<F>, v: u32) {
+        self.lend::<T>(0).set(f, v, 0)
+    }
+}
+
+impl<'a, T> Lent<'a, T> {
+    /// The field `f` picks of the `T` it points at, loaded; `func` is the
+    /// function, named if it reaches past the local.
+    #[inline(always)]
+    pub fn get<F: Word>(self, f: impl FnOnce(Ref<T>) -> Ref<F>, func: u32) -> u32 {
+        self.ld(f(Ref::at(0)).0 as i32, F::BYTES as usize, func)
+    }
+
+    /// The field `f` picks of the `T` it points at, set to `v`'s low bytes.
+    #[inline(always)]
+    pub fn set<F: Word>(self, f: impl FnOnce(Ref<T>) -> Ref<F>, v: u32, func: u32) {
+        self.st(f(Ref::at(0)).0 as i32, F::BYTES as usize, v, func)
+    }
+}
