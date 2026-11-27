@@ -5569,13 +5569,25 @@
       "needs": ["native/lift-pointer-registers"],
       "uses": ["heavy"],
       "priority": 71,
+      "record": {
+        "state": "claimed",
+        "by": "6f3bca57",
+        "session": "6f3bca57-9974-458d-8a10-cbb759f56908",
+        "host": "quack",
+        "pid": 4001563,
+        "start": "125628685",
+        "at": "2026-11-27T17:43:14Z",
+        "branch": "unit/native/lift-signed-values",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T13:29:10Z",
           "by": "3411b93a",
           "text": "From {unit:native/lift-cast-types}: typing one let i32 gains little (Mirror: ~1,500 lets used only signed save ~600 casts; 7,100 are mixed-use). prim::sext (5,849) is a cast the count misses: printing it as 'as i16 as u32' raises the metric. codegen::native::casts has the helpers."
         }
-      ]
+      ],
+      "round": "2026-11-27T17:43:14Z"
     },
     {
       "id": "native/land-emerald-route-lifter",
