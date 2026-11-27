@@ -155,7 +155,10 @@
 //! declared the `Ref<T>` their accesses make of them, by where `T` came
 //! from (the names files', a heap run's; no bars: they should rise), and
 //! `ref_new_at_use`, the `Ref::<T>::new(…)` and `Ref::<T>::to(…)` still
-//! printed at a use (barred).
+//! printed at a use (barred). Field bases (`native/lift-field-base`,
+//! [`super::field_base`]): `field_bases`, the typed accesses through a
+//! register holding a field's address printed on its base's register (no
+//! bar), and `ref_to_at_use`, the `Ref::<T>::to(…)` left (barred).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -396,6 +399,7 @@ pub const UNBARRED: &[&str] = &[
     "lets_named",
     "refs_bound_named",
     "refs_bound_proven",
+    "field_bases",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
