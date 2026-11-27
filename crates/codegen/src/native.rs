@@ -5149,12 +5149,6 @@ impl FnPrinter<'_, '_> {
         s
     }
 
-    /// Whether nothing of the function's frame is in memory
-    /// ([`Frame::in_locals`]; native/lift-frame-gone): its sp arithmetic
-    /// isn't printed, so its callees run on its entry sp. Not where it
-    /// passes sp on to code needing the guest's exactly ([`exact_sp`]),
-    /// in the reset or an IRQ wrapper (their `msr` banks sp), nor with
-    /// `--shadow-locals` (the shadow keeps the frame's bytes).
     /// Whether a store that may reach I/O, a wait or a halt banks sp first
     /// (`bank_sp`): not in a frameless function (native/lift-lent-frameless).
     /// It keeps nothing in memory for a handler to overwrite, and no IRQ
@@ -5165,6 +5159,12 @@ impl FnPrinter<'_, '_> {
         !self.frameless
     }
 
+    /// Whether nothing of the function's frame is in memory
+    /// ([`Frame::in_locals`]; native/lift-frame-gone): its sp arithmetic
+    /// isn't printed, so its callees run on its entry sp. Not where it
+    /// passes sp on to code needing the guest's exactly ([`exact_sp`]),
+    /// in the reset or an IRQ wrapper (their `msr` banks sp), nor with
+    /// `--shadow-locals` (the shadow keeps the frame's bytes).
     fn is_frameless(&self) -> bool {
         !self.sp_exact
             && self.psr.is_none()
