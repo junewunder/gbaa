@@ -6141,6 +6141,14 @@
       "check": "recorded",
       "needs": ["native/lift-signed-values"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-arm-let-values",
+      "title": "A register set in each if arm prints as the if's value",
+      "detail": "After {unit:native/lift-arm-values} a labelled block whose breaks each end an if's arm prints as that if, but each arm still writes the register (r3 = 0x1ac / r3 = 0x14c) read after the join; the pilot's rewrites wrote let top = if … { … } else { … }. Print a register written last in every arm of an if (or match) and read after it, not before, as that statement's value. Also left by {unit:native/lift-arm-values} (Metroid, by where the first break left is): deeper in an if arm 857, in another labelled block 1032, in a match arm 371: these need the plan (a tail shared by arms), not the text. Done when: the new metric barred on the C rows and Metroid, lift-check passes, Metroid's native route 0 differences.",
+      "check": "recorded",
+      "needs": ["native/lift-arm-values"],
+      "uses": ["heavy"]
     }
   ]
 }
