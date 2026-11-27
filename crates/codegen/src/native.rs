@@ -226,6 +226,7 @@ pub mod casts;
 pub mod cond;
 pub mod counted;
 pub mod cut;
+pub mod field_base;
 pub mod fields;
 pub mod find_field;
 pub mod first_stop;
@@ -1656,6 +1657,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
                     live_in: BTreeMap::new(),
+                    field_in: FieldFacts::default(),
                     local: BTreeMap::new(),
                     bound: Default::default(),
                     fors: BTreeMap::new(),
@@ -1664,6 +1666,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     ptr_cands: Vec::new(),
                     ptr_steps: BTreeMap::new(),
                     ptr_reads: BTreeMap::new(),
+                    ptr_rounds: BTreeMap::new(),
                     first_lets: BTreeSet::new(),
                     tail_for: false,
                     banked: BTreeMap::new(),
@@ -2685,6 +2688,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .sum(),
     );
     m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
+    // A field's address in a register, on its base (native/lift-field-base):
+    // the accesses printed so (no bar: it should rise), and the `::to(` left.
+    m.push("field_bases", soft.field_bases);
+    m.push("ref_to_at_use", text().map(ref_binds::to_at_use).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
@@ -4425,6 +4432,9 @@ struct Soft {
     /// Accesses through a heap object's pointer no type explains
     /// (native/ref-heap).
     ref_unexplained: u64,
+    /// Typed accesses through a field's address printed on its object's
+    /// start: a register holding it ([`field_base`]), or a constant.
+    field_bases: u64,
     /// The heap's types the printed accesses use.
     ref_tys: BTreeSet<usize>,
     /// Accesses printed through a pointer the names files type
@@ -4622,6 +4632,26 @@ struct Soft {
     blocks_printed_again: u64,
 }
 
+/// The facts `rN == rM + k` of one function ([`field_base::facts`]), by
+/// key: at each block's start, and on each edge, by its blocks.
+#[derive(Default)]
+struct FieldFacts {
+    /// None are printed: a function in the `match` form for a save or
+    /// restore, or with patched versions of its blocks.
+    off: bool,
+    inc: BTreeMap<u32, BTreeSet<field_base::Fact>>,
+    on: BTreeMap<(u32, u32), BTreeSet<field_base::Fact>>,
+}
+
+/// An object's start as a printed pointer: a register's local, or a
+/// constant (named as data where it is, [`named`]).
+fn base_text(b: field_base::Base) -> String {
+    match b {
+        field_base::Base::Reg(m) => format!("r{m}"),
+        field_base::Base::Const(c) => format!("{c:#x}u32"),
+    }
+}
+
 struct FnPrinter<'a, 'b> {
     ctx: &'a Ctx<'a>,
     f: &'a Func,
@@ -4740,6 +4770,11 @@ struct FnPrinter<'a, 'b> {
     dead: BTreeMap<u32, Vec<bool>>,
     /// What is live at each block's start, as `dead` has it.
     live_in: BTreeMap<u32, live::Live>,
+    /// The facts `rN == rM + k` at each block's start ([`field_base`]):
+    /// a field's address in a register printed on its base's. Empty in a
+    /// function printed in the `match` form for a save or restore, or with
+    /// patched block versions.
+    field_in: FieldFacts,
     /// The writes of r0-r12 only their own block reads, by block
     /// ([`FnPrinter::dead_writes`]): each prints as a `let`.
     local: BTreeMap<u32, Vec<Option<live::Local>>>,
@@ -4763,6 +4798,8 @@ struct FnPrinter<'a, 'b> {
     ptr_cands: Vec<counted::Stepped>,
     ptr_steps: BTreeMap<u32, Vec<usize>>,
     ptr_reads: BTreeMap<(u32, usize), (fields::Indexed, String, String)>,
+    /// Each such read's register and round ([`FnPrinter::stepped_base`]).
+    ptr_rounds: BTreeMap<(u32, usize), (usize, Vec<u32>)>,
     /// The `for`s whose variable's first value a stepped pointer's index
     /// takes, kept before the loop as `rN_first`, by label.
     first_lets: BTreeSet<usize>,
@@ -5065,6 +5102,14 @@ impl FnPrinter<'_, '_> {
         };
         let catch = catch || !resume.is_empty();
         (self.dead, self.live_in, self.local) = self.dead_writes();
+        self.field_in = if catch || self.restoring || !f.variants.is_empty() {
+            FieldFacts {
+                off: true,
+                ..FieldFacts::default()
+            }
+        } else {
+            self.field_bases()
+        };
         (self.field_at, self.field_idx, self.elem_addr, _) = self.field_types();
         self.banked = self.redundant_banks();
         // A catch point prints in the `match` form: a restore goes on at
@@ -6040,6 +6085,167 @@ impl FnPrinter<'_, '_> {
         )
     }
 
+    /// The facts `rN == rM + k` at each block's start and on each edge
+    /// ([`field_base`]), by key, over the edges [`FnPrinter::dead_writes`]'
+    /// liveness takes ([`FnPrinter::field_edges`]).
+    fn field_bases(&self) -> FieldFacts {
+        let keys: Vec<u32> = self.f.blocks.keys().copied().collect();
+        let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let xs: Vec<Vec<ExitInfo>> = self
+            .f
+            .blocks
+            .values()
+            .map(|gb| exits(self.ctx, gb))
+            .collect();
+        let insts: Vec<&[Inst]> = self
+            .f
+            .blocks
+            .values()
+            .map(|gb| &gb.block.insts[..])
+            .collect();
+        let edges = |b: usize, i: usize| {
+            let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+                return Vec::new();
+            };
+            self.field_edges(keys[b], x)
+                .into_iter()
+                .filter_map(|(k, kills)| {
+                    Some(field_base::Edge {
+                        to: *index.get(&k)?,
+                        kills,
+                    })
+                })
+                .collect()
+        };
+        let Some(&entry) = index.get(&self.f.entry) else {
+            return FieldFacts::default();
+        };
+        let f = field_base::facts(&insts, entry, edges);
+        FieldFacts {
+            off: false,
+            inc: f
+                .inc
+                .into_iter()
+                .zip(keys.iter().copied())
+                .filter_map(|(f, k)| Some((k, f?)))
+                .filter(|(_, f)| !f.is_empty())
+                .collect(),
+            on: f
+                .edges
+                .into_iter()
+                .map(|((a, b), f)| ((keys[a], keys[b]), f))
+                .collect(),
+        }
+    }
+
+    /// Where exit `x` of block `key` goes on, by key (some maybe no block
+    /// of this function's), as [`FnPrinter::dead_writes`]' liveness has
+    /// it, each with the registers its printed exit sets (bit `n` for
+    /// rN): a direct call's r0-r3, r12 and the r4-r11 its callee takes or
+    /// gives back; a call through a pointer or `call_fn` everything; a
+    /// BIOS call r0-r3 and r12.
+    fn field_edges(&self, key: u32, x: &ExitInfo) -> Vec<(u32, u16)> {
+        const LOW: u16 = 0x100f;
+        match x.plan {
+            Plan::Static(k) | Plan::Rekey(k) => vec![(k, 0)],
+            Plan::Call { target, ret } => {
+                let high = self.passed(target) | self.echoes(target) | self.gives(target);
+                vec![(ret, LOW | u16::from(high) << 4)]
+            }
+            Plan::CallVia { ret, .. } | Plan::Dynamic { ret: Some(ret), .. } => {
+                vec![(ret, u16::MAX)]
+            }
+            Plan::Dynamic { ret: None, .. } if !self.reads_target(x) => Vec::new(),
+            Plan::Dynamic {
+                ret: None, target, ..
+            } => {
+                let thumb = self.f.blocks[&key].block.thumb;
+                match dyn_targets(self.ctx, self.holes, x.at, thumb, target) {
+                    Ok(ts) => ts.into_iter().map(|t| (t, 0)).collect(),
+                    Err(_) => Vec::new(),
+                }
+            }
+            Plan::Swi { next } => vec![(next, LOW)],
+            Plan::Undefined { .. } | Plan::Unwind => Vec::new(),
+        }
+    }
+
+    /// The start of the object `x` points `k` bytes into at inst `at` of
+    /// the block printing now, printed, for an access's pointer
+    /// ([`field_base::base_of`]): a constant (`gLevel + 0x54`, 0x54 into
+    /// a `t::Level`, is `gLevel`, named as data where it is), or a
+    /// register the block's start has live, so that its variable holds
+    /// the value.
+    fn field_base(&self, at: usize, x: ValueId, k: u32) -> Option<String> {
+        if self.field_in.off {
+            return None;
+        }
+        let insts = &self.f.blocks[&self.cur].block.insts;
+        if let Some(c) = konst(insts, x) {
+            return Some(base_text(field_base::Base::Const(c.wrapping_sub(k))));
+        }
+        // A block no fact reaches still has its own sums.
+        let none = BTreeSet::new();
+        let inc = self.field_in.inc.get(&self.cur).unwrap_or(&none);
+        let live = self.live_in.get(&self.cur).copied()?;
+        field_base::base_of(insts, inc, at, x, k, live & !self.steps_left_out()).map(base_text)
+    }
+
+    /// The start of the object a `for`'s stepped pointer (register `reg`
+    /// of the loop whose round is `round`, [`counted::Stepped`]) points
+    /// `k` bytes into before the loop, printed: from the facts on the
+    /// edges into the round ([`field_base::base_in`]), a constant or a
+    /// register live at the round's start that nothing in the round
+    /// writes, the printed exits included.
+    fn stepped_base(&self, reg: usize, round: &[u32], k: u32) -> Option<String> {
+        if self.field_in.off {
+            return None;
+        }
+        let inside: BTreeSet<u32> = round.iter().copied().collect();
+        let mut on: Option<BTreeSet<field_base::Fact>> = None;
+        let mut ok = live::ALL;
+        for ((a, b), f) in &self.field_in.on {
+            if !inside.contains(a) && inside.contains(b) {
+                on = Some(match on {
+                    None => f.clone(),
+                    Some(o) => o.intersection(f).copied().collect(),
+                });
+                ok &= self.live_in.get(b).copied().unwrap_or(0);
+            }
+        }
+        for &b in round {
+            let gb = self.f.blocks.get(&b)?;
+            for inst in &gb.block.insts {
+                if let Op::SetReg(r, _) = inst.op {
+                    ok &= !live::reg(r.index());
+                }
+            }
+            for x in exits(self.ctx, gb) {
+                for (_, kills) in self.field_edges(b, &x) {
+                    ok &= !u32::from(kills);
+                }
+            }
+        }
+        field_base::base_in(&on?, reg as u8, k, ok & !self.steps_left_out()).map(base_text)
+    }
+
+    /// The registers a `for` steps whose step is left out (its variable,
+    /// a pointer stepped beside it): their locals don't follow the
+    /// machine's, so none is a base for [`FnPrinter::field_base`].
+    fn steps_left_out(&self) -> u32 {
+        let reg = |b: u32, i: usize| match self.f.blocks.get(&b).map(|gb| gb.block.insts[i].op) {
+            Some(Op::SetReg(r, _)) => 1 << r.index(),
+            _ => 0,
+        };
+        let fors = self.steps.iter().map(|(&b, &i)| reg(b, i));
+        let ptrs = self
+            .ptr_steps
+            .iter()
+            .flat_map(|(&b, is)| is.iter().map(move |&i| (b, i)))
+            .map(|(b, i)| reg(b, i));
+        fors.chain(ptrs).fold(0, |m, r| m | r)
+    }
+
     /// Which stores of a block print a `bank_sp` before them (`cur` the
     /// block; `typed`, `objs` and `refs` from [`FnPrinter::accesses`]):
     /// those that may reach I/O ([`store_may_reach_io`]), as
@@ -6588,6 +6794,7 @@ impl FnPrinter<'_, '_> {
                     if is_c {
                         self.ptr_reads
                             .insert((k, i), (x.clone(), format!("r{}", c.reg), c.index.clone()));
+                        self.ptr_rounds.insert((k, i), (c.reg, c.round.clone()));
                     }
                 }
             }
@@ -8614,13 +8821,39 @@ impl FnPrinter<'_, '_> {
             .as_deref()
             .expect("a named access has types");
         if let Some(ix) = r.idx {
-            let x = &self.field_idx[&(self.cur, i)];
-            let (p, ix) = match self.ptr_reads.get(&(self.cur, x.base.index())) {
-                Some((_, p, ix)) if x.base == x.i => (p.clone(), ix.clone()),
-                _ => (self.val(x.base), self.val(ix)),
+            let x = &self.field_idx[&(self.cur, i)].clone();
+            let (p, ix, start) = match self.ptr_reads.get(&(self.cur, x.base.index())) {
+                // A stepped pointer: what it pointed into before the loop
+                // ([`FnPrinter::stepped_base`]).
+                Some((_, p, ix)) if x.base == x.i => {
+                    let (reg, round) = &self.ptr_rounds[&(self.cur, x.base.index())];
+                    match self
+                        .stepped_base(*reg, round, x.at.off)
+                        .filter(|_| x.at.off != 0)
+                    {
+                        Some(m) => {
+                            self.soft.field_bases += 1;
+                            (m, ix.clone(), true)
+                        }
+                        None => (p.clone(), ix.clone(), false),
+                    }
+                }
+                // The base a field's address in a register is from
+                // ([`field_base`]).
+                _ => match self
+                    .field_base(i, x.base, x.at.off)
+                    .filter(|_| x.at.off != 0)
+                {
+                    Some(m) => {
+                        self.soft.field_bases += 1;
+                        (m, self.val(ix), true)
+                    }
+                    None => (self.val(x.base), self.val(ix), false),
+                },
             };
-            let (e, whole) = fields::pointer_indexed(&maps.types, x, r.f.width as u32, &p, &ix)
-                .expect("checked when the access was found");
+            let (e, whole) =
+                fields::pointer_indexed_at(&maps.types, x, r.f.width as u32, &p, &ix, start)
+                    .expect("checked when the access was found");
             self.soft.named_index += 1;
             if whole {
                 self.soft.named_fields += 1;
@@ -8629,13 +8862,21 @@ impl FnPrinter<'_, '_> {
             }
             return e;
         }
-        let at = &self.field_at[&(self.cur, i)];
-        let (p, k) = match r.base {
-            Some((b, c)) => (self.val(b), at.off - c),
-            None => (self.val(addr), at.off),
+        let at = self.field_at[&(self.cur, i)].clone();
+        let (x, k) = match r.base {
+            Some((b, c)) => (b, at.off - c),
+            None => (addr, at.off),
+        };
+        // A field's address a register holds, on its base's register
+        // ([`field_base`]): the same address.
+        let (p, k) = match self.field_base(i, x, k).filter(|_| k != 0) {
+            Some(m) => {
+                self.soft.field_bases += 1;
+                (m, 0)
+            }
+            None => (self.val(x), k),
         };
         if r.joined {
-            let at = at.clone();
             return fields::joined_pointer(
                 &maps.types,
                 &mut self.soft.joined,
@@ -8646,7 +8887,7 @@ impl FnPrinter<'_, '_> {
             )
             .expect("checked when the access was found");
         }
-        let (e, whole) = fields::pointer(&maps.types, at, r.f.width as u32, &p, k, r.bits)
+        let (e, whole) = fields::pointer(&maps.types, &at, r.f.width as u32, &p, k, r.bits)
             .expect("checked when the access was found");
         if whole {
             self.soft.named_fields += 1;

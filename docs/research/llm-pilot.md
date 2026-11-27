@@ -462,7 +462,7 @@ stand-ins).
 
 | Pattern | In | Lift | Provable? | Unit |
 |---|---|---|---|---|
-| A field's address held in a register (`Ref::<T>::to(r, off)`) as its base's field | 8 | 12,035 | yes | new: `native/lift-field-base` |
+| A field's address held in a register (`Ref::<T>::to(r, off)`) as its base's field | 8 | 12,035 | yes | `native/lift-field-base` (done: 14,153 to 2,157 at 341e0997, 11,996 field bases; the rest mostly a pointer loaded from memory into an object, a base register reused (as a loop counter), sums with a register index, and blocks after `call_fn`/`CallVia`, which kill every fact) |
 | A value chosen in each arm (`r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }`) as an `if`/`match` value; a break to the function's end as `return` | 13 (10 values, 4 returns) | 7,177 labelled blocks | yes | new: `native/lift-arm-values` |
 | A chain of `&` with constant masks as one mask (`x & !0x0c001f72`) | 3 | 386 | yes | new: `native/lift-mask-fold` |
 | The task struct lookup (katam's `TaskGetStructPtr`: `flags & 0x10`, IWRAM bytes or EWRAM words) as one helper | 4 | 1,070 | yes (the same expression); its name from the names files | new: `native/lift-task-struct` |
