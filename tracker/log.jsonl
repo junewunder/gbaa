@@ -4546,3 +4546,4 @@
 {"at":"2026-11-27T19:57:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-27T19:57:22Z","actor":"loop","tag":"691120b3","host":"quack","cmd":"claim","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: claimed"}
 {"at":"2026-11-27T20:01:44Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-27T20:01:50Z","actor":"loop","tag":"357babd6","host":"quack","cmd":"claim","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: claimed"}
