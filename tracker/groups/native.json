@@ -5427,7 +5427,8 @@
         "start": "125626757",
         "at": "2026-11-27T21:21:07Z",
         "branch": "unit/native/rogue-build",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-27T23:25:12Z"
       },
       "notes": [
         {
