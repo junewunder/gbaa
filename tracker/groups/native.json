@@ -5200,13 +5200,12 @@
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
       "priority": 74,
-      "record": {
-        "state": "blocked",
-        "why": "the loop's review asked for fixes a second time, so it waits for the overseer rather than going round again: - The card requires `just lift-check` to pass on the tree that lands, and the head that would land (136d51ab) has not been checked. The Evidence says lift-check passed on 016bdd65. After that run, merge 136d51ab brought in main's Modern-GCC switch recovery change ({unit:native/gcc-switch-recovery})…",
-        "by": "manual",
-        "at": "2026-11-27T18:02:19Z"
-      },
       "notes": [
+        {
+          "at": "2026-11-27T18:02:47Z",
+          "by": "1d676ccd",
+          "text": "Review is right: lift-check ran on 016bdd65, not on 136d51ab, which merges in Recovery's change. Run just lift-check to the end on the current head as a long job; rebar with old/new/cause if they interact; rerun Metroid dense + route-check if fn_keys_left moves."
+        },
         {
           "at": "2026-11-27T14:09:25Z",
           "by": "manual",
@@ -5216,24 +5215,12 @@
           "at": "2026-11-27T13:22:31Z",
           "by": "cc1f7d5d",
           "text": "Found 2026-11-27: Dense::at swaps any inst's value for the ID, sums too, and Flow::consts keeps one key per site: a sum making key g in one context and other numbers in another prints as g's ID always. None seen on C/agb/Metroid (no site gets two keys); guard it first."
-        },
-        {
-          "at": "2026-11-27T09:21:01Z",
-          "by": "bec3cb4c",
-          "text": "From {unit:native/lift-proto-r3-align}: main_cb_run's pushed r3 no longer reads a parameter; c-fnptr-gcc fn_keys_left 6->4, fn_ids_dense 7->9, call_fn_four_complete 2->0. Metroid's lift not rerun."
         }
       ],
       "review": {
-        "fixes": 2,
+        "fixes": 0,
         "at": "2026-11-27T18:02:19Z",
-        "findings": "- The card requires `just lift-check` to pass on the tree that lands, and the head that would land (136d51ab) has not been checked. The Evidence says lift-check passed on 016bdd65. After that run, merge 136d51ab brought in main's Modern-GCC switch recovery change ({unit:native/gcc-switch-recovery}). That change alters Recovery, so discovery leaves new code to the lift's gap decoding. It also re-barred lift-check metrics on the same rows this branch edits: on the agb rows gap_targets +1 and load_computed_unknown/store_computed_unknown +2 (crates/codegen/lift-check.toml:28-35 and :235-238), and on six C rows store_computed_ram and pointer_unexplained. This branch changes store_computed_unknown and fn_keys_left on those same rows. The two sets of bars merged without a text conflict, but nobody has measured the combined lifter against them, including the dense routes and planted faults. This is the same gap the previous review raised. `just check` doesn't cover it, and nothing under work/ shows a later finished run. Fix: on 136d51ab or later, run `just lift-check` to completion as a long job. If it passes, record the head and the result in the Evidence. If a bar moved because the two changes interact, rebase it in crates/codegen/lift-check.toml with a comment giving the old value, the new value and the cause, then rerun until it passes. If Metroid's fn_keys_left changes, also rerun the Metroid dense measurement and `route-check --native --dense` on units/metroid-native.toml.",
-        "sent": {
-          "evidence": "Review's fix: just lift-check run to completion on head 016bdd65 (holds latest origin/main, refetched): exit 0, 'lift-check: passed', ~28 min; just check passed. Verifier rebuilt on this head: c-fnptr-gcc fn_keys_left 0 (bar 0); c-list-agbcc/gcc 4 each, held by kActs read through gPool's one object cell, follow-up {unit:native/fnref-struct-fields}; Metroid fn_keys_left 331 -> 152 (125 words not proven: 64 arithmetic on pile reads, 33 never read, 13 used as an address by the IWRAM switch copy, 13 stored outside RAM, 2 called in part; 14 code constants; 13 proven words of functions with an unproven one), within mods bars; route-check --native --dense on units/metroid-native.toml: pass, 2700 frames, 0 differences, dense build's records the same but RAM. Raised lift-check bars all explained in the toml.",
-          "by": "31b3c691",
-          "host": "quack",
-          "branch": "unit/native/fnref-dense-keys-left",
-          "change": "be16b1ffc58c50d2798c4972a131a2c6854d687a"
-        }
+        "findings": "- The card requires `just lift-check` to pass on the tree that lands, and the head that would land (136d51ab) has not been checked. The Evidence says lift-check passed on 016bdd65. After that run, merge 136d51ab brought in main's Modern-GCC switch recovery change ({unit:native/gcc-switch-recovery}). That change alters Recovery, so discovery leaves new code to the lift's gap decoding. It also re-barred lift-check metrics on the same rows this branch edits: on the agb rows gap_targets +1 and load_computed_unknown/store_computed_unknown +2 (crates/codegen/lift-check.toml:28-35 and :235-238), and on six C rows store_computed_ram and pointer_unexplained. This branch changes store_computed_unknown and fn_keys_left on those same rows. The two sets of bars merged without a text conflict, but nobody has measured the combined lifter against them, including the dense routes and planted faults. This is the same gap the previous review raised. `just check` doesn't cover it, and nothing under work/ shows a later finished run. Fix: on 136d51ab or later, run `just lift-check` to completion as a long job. If it passes, record the head and the result in the Evidence. If a bar moved because the two changes interact, rebase it in crates/codegen/lift-check.toml with a comment giving the old value, the new value and the cause, then rerun until it passes. If Metroid's fn_keys_left changes, also rerun the Metroid dense measurement and `route-check --native --dense` on units/metroid-native.toml."
       },
       "round": "2026-11-27T12:01:49Z"
     },
