@@ -5888,6 +5888,7 @@
     {
       "id": "native/lift-returns-cross-context",
       "title": "Results read by callers in another code context or cut short",
+      "needs": ["native/lift-returns-past-holes"],
       "uses": ["heavy"]
     }
   ]
