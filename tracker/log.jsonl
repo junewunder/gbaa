@@ -4524,3 +4524,4 @@
 {"at":"2026-11-27T14:41:48Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
 {"at":"2026-11-27T17:42:29Z","actor":"session","tag":"1d676ccd","host":"quack","cmd":"overseer","text":"overseer d3f284 on quack attached, replacing c5ca60 on quack"}
 {"at":"2026-11-27T17:42:58Z","actor":"loop","tag":"396b3820","host":"quack","cmd":"claim","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: claimed"}
+{"at":"2026-11-27T17:43:04Z","actor":"loop","tag":"0a34a83d","host":"quack","cmd":"claim","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: claimed"}
