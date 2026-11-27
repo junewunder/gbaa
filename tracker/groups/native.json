@@ -5941,13 +5941,25 @@
       "needs": ["native/lift-for-ram-bounds", "native/lift-for-top-tested"],
       "uses": ["heavy"],
       "priority": 69,
+      "record": {
+        "state": "claimed",
+        "by": "3f97f4d2",
+        "session": "3f97f4d2-83f5-456b-8186-4573863ed325",
+        "host": "quack",
+        "pid": 4001563,
+        "start": "125628685",
+        "at": "2026-11-27T20:24:03Z",
+        "branch": "unit/native/lift-for-ram-bounds-games",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T20:30:01Z",
           "by": "1fbd91b3",
           "text": "From {unit:native/lift-for-ram-bounds}: C loops print as for, no game loop does. Metroid GBAA_FOR_WHY: shape fails first (step not of the counter 198, compare not of counter and bound 108). Emerald: IRQ handler's table calls likely make its writes anywhere (unchecked)."
         }
-      ]
+      ],
+      "round": "2026-11-27T20:24:03Z"
     },
     {
       "id": "native/lift-open-bus-typed",
