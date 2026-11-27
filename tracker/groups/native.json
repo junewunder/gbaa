@@ -5202,6 +5202,11 @@
       "priority": 74,
       "notes": [
         {
+          "at": "2026-11-27T09:21:01Z",
+          "by": "bec3cb4c",
+          "text": "From {unit:native/lift-proto-r3-align}: main_cb_run's pushed r3 no longer reads a parameter; c-fnptr-gcc fn_keys_left 6->4, fn_ids_dense 7->9, call_fn_four_complete 2->0. Metroid's lift not rerun."
+        },
+        {
           "at": "2026-11-24T06:58:00Z",
           "by": "91d18000",
           "text": "Checker of {unit:native/fnref-dense}: dense_ids' usable doesn't exclude flows with lost ROM reads (Val::lost_rom), whose values may carry an unrecorded key into a compare; none of the C/agb programs or Metroid has any. Before a game that does: no dense IDs then (Flow needs a flag)."
