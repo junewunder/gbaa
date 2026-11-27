@@ -5872,6 +5872,12 @@
       "id": "native/minish-stop-eeprom-wait",
       "title": "Minish Cap's lift: past its EEPROM ready wait (frame 4)",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-helper-auto",
+      "title": "Repeats past a bar print as generated helpers",
+      "detail": "From the owner, 2026-11-27 (q/helpers-shared-by-many-functions, a and b). With the matcher from {unit:native/lift-helper-match}, every repeated pure region in the clone count ({unit:native/lift-clone-count}) past a size and count bar prints once as a helper with a name made from its shape (h_<hash>) and a call at every exact match, with no declaration and no LLM step; the body is the pattern itself, exact. A [[helper]] entry for the same pattern renames it. The bar lives in lift-check.toml. Done when: lift-check has a C program with one shape inlined at many sites and a near miss, its lift prints one generated helper, Mirror's lift prints the generated helpers (count in the report), its native route still matches, and just check passes.",
+      "needs": ["native/lift-clone-count", "native/lift-helper-match"]
     }
   ]
 }
