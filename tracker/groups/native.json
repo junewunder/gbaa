@@ -5647,15 +5647,22 @@
       "uses": ["heavy"],
       "priority": 82,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f259740d",
-        "session": "f259740d-bff2-4149-87f7-5a8b9941702f",
-        "host": "quack",
-        "pid": 2117956,
-        "start": "121114680",
-        "at": "2026-11-27T07:38:40Z",
+        "at": "2026-11-27T08:53:03Z",
+        "evidence": "Review fix done: results now typed (native::ref_results): a function whose every return is a named Ref<T>'s addr() or a constant returns Ref<T>; callers bind it whole or take .addr(), adapters too. Typed: c-chain-gcc memcpy, Metroid 3, Emerald 25. On the merge with main: just lift-check passed (all programs 0 differences, every planted fault caught); just check passed; Metroid 600/600, native route 2700 frames 0 differences, params_rebound 0; Emerald 600/600, params_rebound 1. lift-metrics lowered 16 bars after the merge.",
         "branch": "unit/native/lift-pointer-signatures",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T08:53:03Z",
+          "by": "f259740d",
+          "host": "quack",
+          "pid": 2117956,
+          "start": "121114680",
+          "beats": true,
+          "session": "f259740d-bff2-4149-87f7-5a8b9941702f",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
