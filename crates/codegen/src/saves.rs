@@ -51,7 +51,7 @@
 
 use crate::func::{Ctx, ExitInfo, Func, GBlock, Plan, exits, successors};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
-use armv4t::sem::Width;
+use armv4t::sem::{PsrMask, Width};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod summary;
@@ -148,6 +148,45 @@ struct State {
     /// [`V::Sp`] tracks): a call, a BIOS call or a store to an unknown
     /// address may change any stack word ([`State::lend`]).
     lent: bool,
+    /// In an IRQ wrapper, the mode it runs in ([`Bank`]).
+    bank: Bank,
+}
+
+/// Where an IRQ wrapper's run is: in IRQ mode, the mode it is entered in;
+/// in another (an `msr` to system mode around its handler call), IRQ
+/// mode's sp and lr banked as they were; or in a mode the run lost
+/// (native/lift-frame-exact-irq-reach).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Bank {
+    Home,
+    Away(V, V),
+    Lost,
+}
+
+/// The mode an `msr cpsr` of `v` sets: a constant's low five bits, or
+/// those of `x & m | c` (`bic` and `orr` of the CPSR it read), `m`
+/// clearing the mode bits.
+fn msr_mode(insts: &[Inst], v: ValueId) -> Option<u32> {
+    let k = |x: ValueId| match insts[x.index()].op {
+        Op::Const(c) | Op::Pool(c) => Some(c),
+        _ => None,
+    };
+    if let Some(c) = k(v) {
+        return Some(c & 0x1f);
+    }
+    let Op::Bin(BinOp::Or, a, b) = insts[v.index()].op else {
+        return None;
+    };
+    let (x, c) = match (k(a), k(b)) {
+        (_, Some(c)) => (a, c),
+        (Some(c), _) => (b, c),
+        _ => return None,
+    };
+    let Op::Bin(BinOp::And, p, q) = insts[x.index()].op else {
+        return None;
+    };
+    let m = k(p).or(k(q))?;
+    (m & 0x1f == 0).then_some(c & 0x1f)
 }
 
 impl State {
@@ -167,6 +206,7 @@ impl State {
             flags: [V::Other; 4],
             sure: 0,
             lent: false,
+            bank: Bank::Home,
         }
     }
 
@@ -201,6 +241,39 @@ impl State {
             flags: std::array::from_fn(|i| self.flags[i].join(o.flags[i])),
             sure: self.sure & o.sure,
             lent: self.lent || o.lent,
+            bank: match (self.bank, o.bank) {
+                (a, b) if a == b => a,
+                (Bank::Away(sa, la), Bank::Away(sb, lb)) => Bank::Away(sa.join(sb), la.join(lb)),
+                _ => Bank::Lost,
+            },
+        }
+    }
+
+    /// An IRQ wrapper's `msr` into `mode` (`None`: not known): sp and lr
+    /// are the new mode's, IRQ mode's banked while away.
+    fn switch(&mut self, mode: Option<u32>) {
+        const IRQ: u32 = 0x12;
+        match (mode, self.bank) {
+            (Some(IRQ), Bank::Home) => {}
+            (Some(IRQ), Bank::Away(sp, lr)) => {
+                self.regs[13] = sp;
+                self.regs[14] = lr;
+                self.bank = Bank::Home;
+            }
+            (Some(_), Bank::Home) => {
+                self.bank = Bank::Away(self.regs[13], self.regs[14]);
+                self.regs[13] = V::Other;
+                self.regs[14] = V::Other;
+            }
+            (Some(_), Bank::Away(..)) => {
+                self.regs[13] = V::Other;
+                self.regs[14] = V::Other;
+            }
+            (None, _) | (_, Bank::Lost) => {
+                self.bank = Bank::Lost;
+                self.regs[13] = V::Other;
+                self.regs[14] = V::Other;
+            }
         }
     }
 
@@ -248,8 +321,10 @@ impl State {
         }
         self.flags = [V::Other; 4];
         self.sure &= if kept { KEPT as u32 & 0x0ff0 } else { 0 };
-        match self.regs[13] {
-            V::Sp(sp) => self.slots.retain(|&k, _| k >= sp),
+        // In an IRQ wrapper away from IRQ mode, the callee runs on
+        // another mode's stack: IRQ mode's frame stays.
+        match (self.regs[13], self.bank) {
+            (V::Sp(sp), _) | (_, Bank::Away(V::Sp(sp), _)) => self.slots.retain(|&k, _| k >= sp),
             _ => self.slots.clear(),
         }
     }
@@ -366,6 +441,7 @@ fn walk<'a>(
         work: BTreeSet::from([f.entry]),
         callees: BTreeSet::new(),
         sum,
+        irq: ctx.disc.irq_handlers.contains(&f.entry),
     };
     if f.overlay.is_some() {
         w.fail("runs from IWRAM".into())?;
@@ -403,6 +479,10 @@ struct Walk<'a> {
     callees: BTreeSet<u32>,
     /// A summary's run: its callees' summaries so far and what it finds.
     sum: Option<Sum<'a>>,
+    /// The function is an IRQ wrapper (discovery's `irq_handlers`): its run
+    /// goes on past an unguarded `msr` into a mode it can name, banking sp
+    /// and lr ([`State::switch`]).
+    irq: bool,
 }
 
 impl Walk<'_> {
@@ -706,6 +786,21 @@ impl Walk<'_> {
                 }
                 Op::SetUserReg(..) | Op::SetCpsr { .. } | Op::SetSpsr { .. } => {
                     self.fail("changes mode or the PSRs".into())?;
+                    if let Op::SetCpsr { v, mask } = inst.op
+                        && mask.0 & PsrMask::CONTROL.0 != 0
+                        && self.irq
+                    {
+                        let mode = if guard.is_none() {
+                            msr_mode(insts, v)
+                        } else {
+                            None
+                        };
+                        s.switch(mode);
+                        for (_, yes, no) in &mut cond {
+                            yes.switch(mode);
+                            no.switch(mode);
+                        }
+                    }
                     // An `msr` may set the flags and a user-bank write the
                     // registers: no constant is certain past one.
                     s.sure = 0;
@@ -905,6 +1000,8 @@ impl Walk<'_> {
                 }
                 Ok(())
             }
+            // An IRQ wrapper's run goes on in the mode it knows.
+            Plan::Rekey(k) if self.irq && s.bank != Bank::Lost => self.flow(at, k, s),
             Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode"), Some(s)),
             // A compiler's trap: it put one where the program can't go on
             // (a null dereference, `unreachable`), so the path never
@@ -1276,4 +1373,56 @@ fn pure_known(insts: &[Inst], op: Op, vals: &[V], falses: &[ValueId]) -> Option<
             V::Const(op.eval_pure(c, |v| c(v) != 0)?)
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn inst(op: Op) -> Inst {
+        Inst { op, guard: None }
+    }
+
+    #[test]
+    fn an_msr_names_its_mode_from_bic_and_orr() {
+        // mrs r3, cpsr; bic r3, #0xdf; orr r3, #0x1f
+        let insts = [
+            inst(Op::GetCpsr),
+            inst(Op::Const(!0xdf)),
+            inst(Op::Bin(BinOp::And, ValueId(0), ValueId(1))),
+            inst(Op::Const(0x1f)),
+            inst(Op::Bin(BinOp::Or, ValueId(2), ValueId(3))),
+            inst(Op::Const(0x92)),
+        ];
+        assert_eq!(msr_mode(&insts, ValueId(4)), Some(0x1f));
+        assert_eq!(msr_mode(&insts, ValueId(5)), Some(0x12));
+        // An and keeping a mode bit: not known.
+        let keep = [
+            inst(Op::GetCpsr),
+            inst(Op::Const(!0xc0)),
+            inst(Op::Bin(BinOp::And, ValueId(0), ValueId(1))),
+            inst(Op::Const(0x1f)),
+            inst(Op::Bin(BinOp::Or, ValueId(2), ValueId(3))),
+        ];
+        assert_eq!(msr_mode(&keep, ValueId(4)), None);
+    }
+
+    #[test]
+    fn an_irq_wrapper_gets_its_sp_and_lr_back_in_irq_mode() {
+        let mut s = State::entry();
+        s.regs[13] = V::Sp(-20);
+        s.slots.insert(-4, V::Entry(14));
+        s.switch(Some(0x1f));
+        assert_eq!((s.regs[13], s.regs[14]), (V::Other, V::Other));
+        // A call on system mode's stack leaves IRQ mode's frame.
+        s.called(false);
+        assert_eq!(s.slots.get(&-4), Some(&V::Entry(14)));
+        s.switch(Some(0x12));
+        assert_eq!((s.regs[13], s.regs[14]), (V::Sp(-20), V::Entry(14)));
+        assert_eq!(s.bank, Bank::Home);
+        // A mode it can't name loses them for good.
+        s.switch(None);
+        s.switch(Some(0x12));
+        assert_eq!((s.bank, s.regs[13]), (Bank::Lost, V::Other));
+    }
 }
