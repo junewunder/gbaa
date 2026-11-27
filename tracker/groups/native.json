@@ -5529,6 +5529,17 @@
       "needs": ["native/lift-lent-print", "native/lift-lent-frameless", "native/emerald-lent-local-stop"],
       "uses": ["heavy"],
       "priority": 79,
+      "record": {
+        "state": "claimed",
+        "by": "13a2365d",
+        "session": "13a2365d-adcd-4f57-91d7-b4be064f34c9",
+        "host": "quack",
+        "pid": 2117956,
+        "start": "121114680",
+        "at": "2026-11-27T11:16:46Z",
+        "branch": "unit/native/lift-stack-typed-locals",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T11:16:40Z",

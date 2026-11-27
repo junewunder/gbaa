@@ -4489,3 +4489,4 @@
 {"at":"2026-11-27T11:09:41Z","actor":"loop","tag":"f30e1648","host":"quack","cmd":"decide","text":"decided: A proven pointer type agrees with whole fields side by side","d":"d/a-proven-pointer-type-agrees-with-whole-fields"}
 {"at":"2026-11-27T11:11:40Z","actor":"loop","tag":"dad7fa92","host":"quack","cmd":"done","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: done"}
 {"at":"2026-11-27T11:16:40Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-27T11:16:46Z","actor":"loop","tag":"13a2365d","host":"quack","cmd":"claim","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: claimed"}
