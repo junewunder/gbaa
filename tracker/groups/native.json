@@ -5201,15 +5201,22 @@
       "uses": ["heavy"],
       "priority": 74,
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "cc1f7d5d",
-        "session": "cc1f7d5d-c8fb-42b8-90cb-131be267e186",
-        "host": "quack",
-        "pid": 2118754,
-        "start": "121115208",
-        "at": "2026-11-27T12:01:49Z",
+        "at": "2026-11-27T14:04:32Z",
+        "evidence": "Branch unit/native/fnref-dense-keys-left (6ee0a11b, merge 0ce35c2c, memory 016bdd65). c-fnptr-gcc fn_keys_left 4 -> 0 (bars lowered): indexed_obj puts gCallbacks[j-1] (anchor+0x54+4j) in gCallbacks, not gNumCallbacks. Metroid 331 -> 152 (addr_only: 80 constants only used as load addresses; a hole's number from a Part/Cmp piece is RomDull: ~100); what holds the 152: 125 words not proven (64 arithmetic on pile reads, 33 never read, 13 used as an address in the IWRAM switch copy at 0x030016ca, 13 stored outside RAM, 2 called in part), 14 code constants, 13 proven words of non-dense functions. Emerald 11146 (main) -> 11141. Pre-merge: just lift-check passed (all programs, packed and dense routes, planted faults). Merged tree: just check passed, lift-metrics 0 over 0 under, Metroid's dense build passes route-check --native --dense on units/metroid-native.toml (2700 frames). The merged lift-check rerun was stopped at the 2-hour mark: rerun it. c-list's 4 and 4: kActs read back through gPool's one object cell; follow-up {unit:native/fnref-struct-fields}. Metroid/Emerald casts, locals_noted, unread_lets (Emerald for_counter_arith) over their private bars on main's lifter too. After merge: lower mods/metroid/lift-bars.toml fn_keys_left to 152.",
         "branch": "unit/native/fnref-dense-keys-left",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T14:04:32Z",
+          "by": "cc1f7d5d",
+          "host": "quack",
+          "pid": 2118754,
+          "start": "121115208",
+          "beats": true,
+          "session": "cc1f7d5d-c8fb-42b8-90cb-131be267e186",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
