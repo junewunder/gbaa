@@ -11,6 +11,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [Emerald's function-address flow settles: what stopped it](fnref-flow-emerald-memory.md) — three kinds of junk value dripped tokens; GBAA_FNREF_GAINS shows them; keep Metroid byte-same
 - [Emerald's function-address flow: the memory fix (Ref tokens) and speed-ups](fnref-flow-emerald-history.md) — a large read is one Ref token; five slow spots; don't absorb to the object end
 - [Finding where a native program and its play build part in time](native-check-divergence.md) — diff the records frame by frame in Python, then trace each sync's clock in both builds
+- [Finding why Recovery leaves a ROM's jump unresolved](recovery-unresolved-jump-debugging.md) — jt-check --rom ROM --trace ADDR; widening and frame escapes are the usual causes
 - [Generated-crate builds that hang or outlive their job](generated-crate-gotchas.md) — a name error can look like a 30-minute build; `just long stop` leaves rustc holding the lock; SLP crash on p37
 - [Kirby & the Amazing Mirror: decomp, player struct, scripts](kirby-amazing-mirror.md) — katam matches our ROM; gKirbys at 0x02020EE0; Lua keysRead drives Kirby once stateFn = 0x0803FF65
 - [Measuring and profiling the function flow's switches](fnref-switches-how-to-measure.md) — run off and on side by side; eu-stack -i on a line-table build; an empty VAR= is set

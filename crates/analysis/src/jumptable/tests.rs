@@ -713,3 +713,315 @@ fn local_reloaded_after_its_bounds_check() {
         thumb([0x30, 0x34, 0x38, 0x3c])
     );
 }
+
+/// Modern GCC narrows a byte with `lsls r2, r0, #24; lsrs r3, r2, #24`,
+/// bounds r3 and indexes with `lsrs r3, r2, #22`: r3 times 4, as r2's low
+/// 24 bits are clear. The bound on r3 bounds the index.
+#[test]
+fn bound_on_a_narrower_shift_bounds_the_index() {
+    let mut a = Asm::new();
+    a.h(0x00, 0x0602) // lsls r2, r0, #24
+        .h(0x02, 0x0e13) // lsrs r3, r2, #24
+        .h(0x04, 0x2b03) // cmp r3, #3
+        .bcond(0x06, 8, 0x40) // bhi default
+        .h(0x08, 0x0d93) // lsrs r3, r2, #22
+        .h(0x0a, 0x4a01) // ldr r2, [pc, #4] (the pool word)
+        .h(0x0c, 0x58d3) // ldr r3, [r2, r3]
+        .h(0x0e, 0x469f) // mov pc, r3
+        .w(0x10, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4).h(0x40, 0x2000).h(0x42, 0x4770);
+    let rec = recover(&a.program(0x44));
+    let j = resolved(&rec, 0x0e);
+    assert_eq!(j.targets, thumb([0x30, 0x34, 0x38, 0x3c]));
+    assert_eq!(j.table, word_table(0x100, 4));
+}
+
+/// Modern GCC takes the entry's address, `r9 = table + 4 * r7`, before a
+/// loop, and bounds r7 inside it, just before `ldr r2, [r9]; mov pc, r2`:
+/// the address is derived from r7 plus a constant, so the bound reaches
+/// it.
+#[test]
+fn entry_address_made_before_the_bound() {
+    let mut a = Asm::new();
+    a.h(0x00, 0x0401) // lsls r1, r0, #16
+        .h(0x02, 0x0c0f) // lsrs r7, r1, #16
+        .h(0x04, 0x4b05) // ldr r3, [pc, #20] (the pool word at 0x1c)
+        .h(0x06, 0x00ba) // lsls r2, r7, #2
+        .h(0x08, 0x18d3) // adds r3, r2, r3
+        .h(0x0a, 0x4699) // mov r9, r3
+        .bl(0x0c, 0x60) // loop: bl get
+        .h(0x10, 0x2f03) // cmp r7, #3
+        .bcond(0x12, 8, 0x0c) // bhi loop
+        .h(0x14, 0x464a) // mov r2, r9
+        .h(0x16, 0x6812) // ldr r2, [r2, #0]
+        .h(0x18, 0x4697) // mov pc, r2
+        .w(0x1c, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4);
+    getter(&mut a);
+    let p = a.funcs(0x72, true, &[(0, 0x54), (0x60, 0x6c), (0x70, 0x72)]);
+    let j = resolved(&recover(&p), 0x18).clone();
+    assert_eq!(j.targets, thumb([0x30, 0x34, 0x38, 0x3c]));
+    assert_eq!(j.table, word_table(0x100, 4));
+}
+
+/// An `ldrsh` index joined from three paths (two loads and a constant),
+/// bounded through its zero-extended copy: each path's value is the
+/// sign extension of a halfword, so the joined one is too, and the bound
+/// on the copy bounds it.
+#[test]
+fn sign_extended_index_joined_from_paths() {
+    // Path 3 is `movs r2, #0`, or, with `asr`, the halfword after the
+    // first load plus one, narrowed with `lsls; asrs` (another sign
+    // extension).
+    for asr in [false, true] {
+        let mut a = Asm::new();
+        a.h(0x00, 0x2800) // cmp r0, #0
+            .bcond(0x02, 0, 0x10) // beq path 2
+            .h(0x04, 0x2801) // cmp r0, #1
+            .bcond(0x06, 0, 0x50) // beq path 3
+            .h(0x08, 0x2300) // movs r3, #0
+            .h(0x0a, 0x5ee2) // ldrsh r2, [r4, r3]
+            .b(0x0c, 0x18)
+            .h(0x0e, 0x46c0) // nop
+            .h(0x10, 0x2302) // path 2: movs r3, #2
+            .h(0x12, 0x5ee2) // ldrsh r2, [r4, r3]
+            .b(0x14, 0x18)
+            .h(0x16, 0x46c0) // nop
+            .h(0x18, 0x0411) // lsls r1, r2, #16
+            .h(0x1a, 0x0c09) // lsrs r1, r1, #16
+            .h(0x1c, 0x2903) // cmp r1, #3
+            .bcond(0x1e, 8, 0x40) // bhi default
+            .h(0x20, 0x4901) // ldr r1, [pc, #4] (the pool word at 0x28)
+            .h(0x22, 0x0092) // lsls r2, r2, #2
+            .h(0x24, 0x588a) // ldr r2, [r1, r2]
+            .h(0x26, 0x4697) // mov pc, r2
+            .w(0x28, ROM_BASE + 0x100);
+        if asr {
+            a.h(0x50, 0x2300) // path 3: movs r3, #0
+                .h(0x52, 0x5ee2) // ldrsh r2, [r4, r3]
+                .h(0x54, 0x3201) // adds r2, #1
+                .h(0x56, 0x0412) // lsls r2, r2, #16
+                .h(0x58, 0x1412) // asrs r2, r2, #16
+                .b(0x5a, 0x18);
+        } else {
+            a.h(0x50, 0x2200) // path 3: movs r2, #0
+                .b(0x52, 0x18);
+        }
+        for k in 0..4 {
+            a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+        }
+        a.cases(0x30, 4).h(0x40, 0x2000).h(0x42, 0x4770);
+        let rec = recover(&a.program(0x5c));
+        let j = resolved(&rec, 0x26);
+        assert_eq!(j.targets, thumb([0x30, 0x34, 0x38, 0x3c]), "asr {asr}");
+    }
+}
+
+/// A local array indexed by a register (`add r3, sp, #4; strb r5, [r3,
+/// r6]`, or the sum made first with a flag-setting `adds r3, r3, r6`)
+/// lets a call write the array and up, not the table base spilled below
+/// it.
+#[test]
+fn spill_below_an_indexed_local_survives_a_call() {
+    for adds in [false, true] {
+        let mut a = Asm::new();
+        a.h(0x00, 0xb500) // push {lr}
+            .h(0x02, 0xb082) // sub sp, #8
+            .h(0x04, 0x4907) // ldr r1, [pc, #28] (the pool word at 0x24)
+            .h(0x06, 0x9100) // str r1, [sp, #0]
+            .h(0x08, 0xab01); // add r3, sp, #4
+        if adds {
+            a.h(0x0a, 0x199b); // adds r3, r3, r6
+        } else {
+            a.h(0x0a, 0x559d); // strb r5, [r3, r6]
+        }
+        a.bl(0x0c, 0x60) // bl get
+            .h(0x10, 0x2c03) // cmp r4, #3
+            .bcond(0x12, 8, 0x50) // bhi default
+            .h(0x14, 0x00a4) // lsls r4, r4, #2
+            .h(0x16, 0x9a00) // ldr r2, [sp, #0]
+            .h(0x18, 0x5913) // ldr r3, [r2, r4]
+            .h(0x1a, 0x469f) // mov pc, r3
+            .w(0x24, ROM_BASE + 0x100);
+        for k in 0..4 {
+            a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+        }
+        a.cases(0x30, 4).h(0x50, 0x2000).h(0x52, 0x4770);
+        getter(&mut a);
+        let p = a.funcs(0x72, true, &[(0, 0x54), (0x60, 0x6c), (0x70, 0x72)]);
+        assert_eq!(
+            resolved(&recover(&p), 0x1a).targets,
+            thumb([0x30, 0x34, 0x38, 0x3c]),
+            "adds {adds}"
+        );
+    }
+}
+
+/// A continuation entry inside a function, which its cases far-jump back
+/// to (`bl`), analysed as a root of its own: it starts without the table
+/// base the function spilled to the stack. The function's analysis runs
+/// through it and resolves the jump, so the entry's doesn't count.
+#[test]
+fn far_jump_entry_yields_to_its_function() {
+    let mut a = Asm::new();
+    a.h(0x00, 0xb500) // push {lr}
+        .h(0x02, 0xb082) // sub sp, #8
+        .h(0x04, 0x4904) // ldr r1, [pc, #16] (the pool word at 0x18)
+        .h(0x06, 0x9101) // str r1, [sp, #4]
+        .h(0x08, 0x7802) // entry: ldrb r2, [r0, #0]
+        .h(0x0a, 0x2a03) // cmp r2, #3
+        .bcond(0x0c, 8, 0x08) // bhi entry
+        .h(0x0e, 0x9b01) // ldr r3, [sp, #4]
+        .h(0x10, 0x0091) // lsls r1, r2, #2
+        .h(0x12, 0x5859) // ldr r1, [r3, r1]
+        .h(0x14, 0x468f) // mov pc, r1
+        .w(0x18, ROM_BASE + 0x100);
+    for k in 0..3 {
+        a.bl(0x30 + 4 * k, 0x08); // case k: bl entry (a far jump)
+    }
+    a.h(0x3c, 0xb002) // case 3: add sp, #8
+        .h(0x3e, 0xbd00); // pop {pc}
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    let p = a.program(0x40);
+    let (f, entry) = ((ROM_BASE, true), (ROM_BASE + 0x08, true));
+    let mut e = Engine::default();
+    e.run(&p, [f, entry]);
+    assert_eq!(
+        e.results[&entry].jumps[&(ROM_BASE + 0x14)],
+        JumpRes::Unresolved
+    );
+    let rec = e.collect([f, entry]);
+    assert_eq!(
+        resolved(&rec, 0x14).targets,
+        thumb([0x30, 0x34, 0x38, 0x3c])
+    );
+}
+
+/// A switch whose cases come back past the bounds check, each with its
+/// own constant index (modern GCC's state machines): the merge point
+/// they come back to is joined into many times, but no one loop edge
+/// more than [`crate::vsa::func::WIDEN_AFTER`], so the index isn't
+/// widened there.
+#[test]
+fn cases_back_to_the_jump_with_constants() {
+    let mut a = Asm::new();
+    a.h(0x00, 0x2807) // cmp r0, #7
+        .bcond(0x02, 8, 0x60) // bhi default
+        .h(0x04, 0x0003) // movs r3, r0
+        .h(0x06, 0x4a02) // head: ldr r2, [pc, #8] (the pool word at 0x10)
+        .h(0x08, 0x0099) // lsls r1, r3, #2
+        .h(0x0a, 0x5851) // ldr r1, [r2, r1]
+        .h(0x0c, 0x468f) // mov pc, r1
+        .h(0x0e, 0x46c0) // nop
+        .w(0x10, ROM_BASE + 0x100);
+    for k in 0..8 {
+        // case k: movs r3, #(k + 1) % 8; b head
+        a.h(0x20 + 4 * k, 0x2300 | ((k as u16 + 1) & 7))
+            .b(0x22 + 4 * k, 0x06);
+        a.w(0x100 + 4 * k, ROM_BASE + 0x20 + 4 * k);
+    }
+    a.h(0x60, 0x4770); // default: bx lr
+    let j = resolved(&recover(&a.program(0x62)), 0x0c).clone();
+    assert_eq!(j.targets, thumb((0..8).map(|k| 0x20 + 4 * k)));
+}
+
+/// A loop counter that has settled isn't widened while another register
+/// still grows: the widening is of sets the join grows. The jump at the
+/// head indexes with the counter, bounded only where the cases come back.
+#[test]
+fn settled_counter_survives_widening() {
+    let mut a = Asm::new();
+    a.h(0x00, 0x2300) // movs r3, #0
+        .h(0x02, 0x2201) // movs r2, #1
+        .h(0x04, 0x4902) // head: ldr r1, [pc, #8] (the pool word at 0x10)
+        .h(0x06, 0x0098) // lsls r0, r3, #2
+        .h(0x08, 0x5808) // ldr r0, [r1, r0]
+        .h(0x0a, 0x4687) // mov pc, r0
+        .w(0x10, ROM_BASE + 0x100)
+        .h(0x30, 0x0052) // every case: lsls r2, r2, #1 (grows)
+        .h(0x32, 0x3301) // adds r3, #1
+        .h(0x34, 0x2b03) // cmp r3, #3
+        .bcond(0x36, 9, 0x04) // bls head
+        .h(0x38, 0x4770); // bx lr
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30);
+    }
+    let j = resolved(&recover(&a.program(0x3a)), 0x0a).clone();
+    assert_eq!(j.targets, thumb([0x30]));
+    assert_eq!(j.table, word_table(0x100, 4));
+}
+
+/// A frame address only held in a register (modern GCC keeps `buf - 33`
+/// in r5 for a loop that indexes it from 33) hasn't escaped: a call that
+/// isn't passed it can't write the frame.
+#[test]
+fn frame_address_in_a_register_does_not_escape() {
+    let mut a = Asm::new();
+    a.h(0x00, 0xb500) // push {lr}
+        .h(0x02, 0xb082) // sub sp, #8
+        .h(0x04, 0x4907) // ldr r1, [pc, #28] (the pool word at 0x24)
+        .h(0x06, 0x9100) // str r1, [sp, #0]
+        .h(0x08, 0x466d) // mov r5, sp
+        .h(0x0a, 0x46a8) // mov r8, r5
+        .bl(0x0c, 0x60) // bl get
+        .h(0x10, 0x2c03) // cmp r4, #3
+        .bcond(0x12, 8, 0x50) // bhi default
+        .h(0x14, 0x00a4) // lsls r4, r4, #2
+        .h(0x16, 0x9a00) // ldr r2, [sp, #0]
+        .h(0x18, 0x5913) // ldr r3, [r2, r4]
+        .h(0x1a, 0x469f) // mov pc, r3
+        .w(0x24, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4).h(0x50, 0x2000).h(0x52, 0x4770);
+    getter(&mut a);
+    let p = a.funcs(0x72, true, &[(0, 0x54), (0x60, 0x6c), (0x70, 0x72)]);
+    assert_eq!(
+        resolved(&recover(&p), 0x1a).targets,
+        thumb([0x30, 0x34, 0x38, 0x3c])
+    );
+}
+
+/// But one joined with another value is lost, and escapes: the call
+/// after the join may be passed it (`get(c ? &base : 0)` writes the slot
+/// the table base was spilled to).
+#[test]
+fn frame_address_lost_at_a_join_escapes() {
+    let mut a = Asm::new();
+    a.h(0x00, 0xb500) // push {lr}
+        .h(0x02, 0xb082) // sub sp, #8
+        .h(0x04, 0x4907) // ldr r1, [pc, #28] (the pool word at 0x24)
+        .h(0x06, 0x9100) // str r1, [sp, #0]
+        .h(0x08, 0x4668) // mov r0, sp
+        .h(0x0a, 0x2c09) // cmp r4, #9
+        .bcond(0x0c, 1, 0x10) // bne 1f
+        .h(0x0e, 0x2000) // movs r0, #0
+        .bl(0x10, 0x60) // 1: bl get
+        .h(0x14, 0x2c03) // cmp r4, #3
+        .bcond(0x16, 8, 0x50) // bhi default
+        .h(0x18, 0x00a4) // lsls r4, r4, #2
+        .h(0x1a, 0x9a00) // ldr r2, [sp, #0]
+        .h(0x1c, 0x5913) // ldr r3, [r2, r4]
+        .h(0x1e, 0x469f) // mov pc, r3
+        .w(0x24, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4).h(0x50, 0x2000).h(0x52, 0x4770);
+    getter(&mut a);
+    let p = a.funcs(0x72, true, &[(0, 0x54), (0x60, 0x6c), (0x70, 0x72)]);
+    assert_eq!(rec_jump(&recover(&p), 0x1e), Some(&JumpRes::Unresolved));
+}
+
+fn rec_jump(rec: &Recovery, at: u32) -> Option<&JumpRes> {
+    rec.jumps.get(&(ROM_BASE + at))
+}

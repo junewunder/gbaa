@@ -142,12 +142,15 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
-  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 610/617
-  (modern GCC) exact, on any wrong target, or on a subset beyond the four
+  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 612/617
+  (modern GCC) exact, on any wrong target, or on a subset beyond the five
   checked by hand (the justfile names them). It also scores the far-jump `bl` rule (5a) on every
   Thumb `bl`, failing below 548/548 or 726/732 or on any false one.
   `jt-check ELF --trace ADDR` prints the value-set states around an address
-  and `--dump FILE` every jump's result, for debugging.
+  and `--dump FILE` every jump's result, for debugging; `jt-check --rom ROM
+  --trace ADDR [--back N]` does it on a ROM's own discovery (no ELF): the
+  jump's result, the states from each root reaching it, and where frame
+  addresses escape. A minute or three a game: run it with `just long`.
 - Code discovery (`analysis::discovery`, decision 5): `just discover ROM`
   writes `$GBAA_DATA/disc/<name>.starts` in the accuracy check's format and
   prints the counts. `just disc-pret [pokeemerald_modern]` runs it on a pret
