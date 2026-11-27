@@ -5213,6 +5213,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-27T22:03:19Z",
+          "by": "691120b3",
+          "text": "lift-check + just check passed on 1bac55f5; Metroid dense route 2700 frames pass, fn_keys_left 152. adafa5ae (main's signed-values) raised native-entry-jump casts 323->324, lift-metrics clean; lift-check/check not rerun there."
+        },
+        {
           "at": "2026-11-27T18:02:47Z",
           "by": "1d676ccd",
           "text": "Review is right: lift-check ran on 016bdd65, not on 136d51ab, which merges in Recovery's change. Run just lift-check to the end on the current head as a long job; rebar with old/new/cause if they interact; rerun Metroid dense + route-check if fn_keys_left moves."
@@ -5221,11 +5226,6 @@
           "at": "2026-11-27T14:09:25Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - The card requires lift-check to be green, but it was never completed on the tree that would land. The branch includes merge 0ce35c2c, which brought in main's lifter changes ({unit:native/lift-lend-wider}), and…"
-        },
-        {
-          "at": "2026-11-27T13:22:31Z",
-          "by": "cc1f7d5d",
-          "text": "Found 2026-11-27: Dense::at swaps any inst's value for the ID, sums too, and Flow::consts keeps one key per site: a sum making key g in one context and other numbers in another prints as g's ID always. None seen on C/agb/Metroid (no site gets two keys); guard it first."
         }
       ],
       "review": {
