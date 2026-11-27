@@ -6226,6 +6226,14 @@
         "by": "357babd6",
         "at": "2026-11-27T20:10:48Z"
       }
+    },
+    {
+      "id": "native/lift-frame-exact-jumper-lr",
+      "title": "Exact sp: a return through a jumper's pushed lr is proven",
+      "detail": "Metroid's IRQ rule holders 0x03003ba0, 0x030041fc, 0x030042a4 (IWRAM sound code, report line 'IRQ rule of exact sp'): a Thumb entry pushes r4-r11 and lr, then bx pc into its ARM half, a function of its own, whose pop {..., lr}; bx lr reads the lr the Thumb half pushed, above its own entry sp. The saves walk doesn't inline overlay code (Walk::flow: r.overlay.is_none()) and the ARM function's summary can't see the jumper's slot, so the jump is open and exact_sp counts it unknown. Prove it a return (the jumper's lr_returns, or an entry state the jumper gives). Check: just lift-check; Metroid's sp_irq_holders down by 3 (mods/metroid/lift-bars.toml) and its native route 0 differences; just check. The IRQ rule goes off on Metroid only when every holder is fixed ({unit:native/lift-frame-exact-irq-reach}).",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "tags": ["slow-check"]
     }
   ]
 }
