@@ -160,6 +160,10 @@
 //! parameters still bound again in their body (`let n: Ref<T> =
 //! Ref::new(n);`), not typed in the signature (barred, at 0 on the C
 //! programs).
+//! Field bases (`native/lift-field-base`,
+//! [`super::field_base`]): `field_bases`, the typed accesses through a
+//! register holding a field's address printed on its base's register (no
+//! bar), and `ref_to_at_use`, the `Ref::<T>::to(…)` left (barred).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -400,6 +404,7 @@ pub const UNBARRED: &[&str] = &[
     "lets_named",
     "refs_bound_named",
     "refs_bound_proven",
+    "field_bases",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

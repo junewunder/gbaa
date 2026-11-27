@@ -272,7 +272,13 @@ mod tests {
         let tail = "pub fn f_00000030(g: &mut Game, _: u32, a: Ref<u8>, b: u32) -> u32 {\n    if b == 0 {\n        return a.addr();\n    }\n    b\n}\n";
         let mixed = "pub fn f_00000040(g: &mut Game, _: u32, a: Ref<u8>, b: Ref<u16>) -> u32 {\n    if g.get(b) == 0 {\n        return b.addr();\n    }\n    return a.addr();\n}\n";
         let named = "pub fn f_00000050(g: &mut Game, _: u32, a: Ref<u8>) -> u32 {\n    return a.addr();\n}\npub static T: [Fn; 1] = [f_00000050];\n";
-        let texts = [(0x10, reg), (0x20, two), (0x30, tail), (0x40, mixed), (0x50, named)];
+        let texts = [
+            (0x10, reg),
+            (0x20, two),
+            (0x30, tail),
+            (0x40, mixed),
+            (0x50, named),
+        ];
         let (o, n) = run(&texts);
         assert_eq!(n, Typed::default());
         for (a, (_, b)) in o.iter().zip(texts) {

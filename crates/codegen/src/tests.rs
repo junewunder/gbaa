@@ -2260,6 +2260,24 @@ fn the_code_after_a_call_that_never_returns_is_not_the_callers() {
     assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
 }
 
+/// `c: push {lr}; bl f; movs r0, #0; bx r2` and `f: adds r0, r1, #0;
+/// movs r1, #1; bx lr`, in Thumb: c's run stops at its jump to an
+/// unknown place with f's r1 still in r1, its r0 written over.
+#[test]
+fn a_caller_stopped_at_a_hole_may_read_past_it_only_what_it_still_holds() {
+    let h = [
+        0xB500, 0xF000, 0xF803, 0x2000, 0x4710, 0x46C0, // c
+        0x1C08, 0x2101, 0x4770, // f, 0x0c
+    ];
+    let sizes = [2, 4, 2, 2, 2, 2, 2, 2];
+    let (rom, d) = thumb_program(&h, &sizes, &[0x0800_0001, 0x0800_000d]);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let (c, f) = (&sums.by_entry[&0x0800_0001], &sums.by_entry[&0x0800_000d]);
+    assert!(c.stopped && !c.blind, "{:?}", c.holes);
+    assert_eq!((f.read_after, f.hidden_after), (0, 0b10));
+}
+
 /// `c: push {lr}; movs r1, #5; bl f; adds r2, r0, #0; pop {r0}; bx r0`,
 /// `f: adds r0, r1, #0; bx lr` and `g: push {lr}; bl f; pop {r0}; bx r0`,
 /// in Thumb.
