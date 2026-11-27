@@ -4550,3 +4550,4 @@
 {"at":"2026-11-27T20:03:55Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: on main"}
 {"at":"2026-11-27T20:04:01Z","actor":"loop","tag":"584e83c0","host":"quack","cmd":"claim","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: claimed"}
 {"at":"2026-11-27T20:07:59Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-lift-aligned-params","text":"new unit: Merge main on quack lane 3"}
+{"at":"2026-11-27T20:08:05Z","actor":"loop","tag":"fbd19bea","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: claimed"}
