@@ -5701,7 +5701,19 @@
       "check": "recorded",
       "needs": ["native/lift-pointer-registers", "native/lift-pointer-signatures"],
       "uses": ["heavy"],
-      "priority": 76
+      "priority": 76,
+      "record": {
+        "state": "claimed",
+        "by": "f30e1648",
+        "session": "f30e1648-cc0c-4278-89ae-1552e410c3fd",
+        "host": "quack",
+        "pid": 2117526,
+        "start": "121114149",
+        "at": "2026-11-27T10:15:47Z",
+        "branch": "unit/native/lift-proven-pointer-types",
+        "beats": true
+      },
+      "round": "2026-11-27T10:15:47Z"
     },
     {
       "id": "native/lift-returns-past-holes",
