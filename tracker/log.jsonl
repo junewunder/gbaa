@@ -4415,3 +4415,4 @@
 {"at":"2026-11-25T06:48:04Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/emerald-lent-local-stop","text":"Emerald's lift stops at frame 5055 on a lent local: on main"}
 {"at":"2026-11-25T06:51:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
 {"at":"2026-11-27T05:09:31Z","actor":"session","tag":"1c8e564b","host":"quack","cmd":"overseer","text":"overseer c5ca60 on quack attached, replacing fdddd3 on quack"}
+{"at":"2026-11-27T05:10:52Z","actor":"loop","tag":"40bebfcc","host":"quack","cmd":"claim","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: claimed"}
