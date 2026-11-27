@@ -246,6 +246,7 @@ pub mod modules;
 pub mod named;
 pub mod narrow;
 pub mod pc_marks;
+pub mod proven_types;
 pub mod ref_binds;
 pub mod ref_params;
 pub mod ref_results;
@@ -2709,6 +2710,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // still made at a use, `Ref::<T>::new(…)` (barred).
     m.push("refs_bound_named", n(soft.refs_bound_named));
     m.push("refs_bound_proven", n(soft.refs_bound_proven));
+    // Pointer types the lift proves from its parameters' accesses, with
+    // no names file's type, scored against the prototypes' DWARF types
+    // (native/lift-proven-pointer-types; no bars: a measurement).
+    if let Some(t) = &holes.types {
+        let p = proven_types::score(t, &soft.proven);
+        m.push("proven_types_agree", n(p.agree));
+        m.push("proven_types_disagree", n(p.disagree));
+        m.push("proven_types_unproven", n(p.unproven));
+    }
     // Register locals (native/lift-register-locals): writes of r0-r12's
     // mut locals printed (a value only its block reads is a `let`), and
     // functions whose entry unpacks a register or flag never read as it
@@ -4702,6 +4712,9 @@ struct Soft {
     /// their type came from: the names files', a heap run's.
     refs_bound_named: usize,
     refs_bound_proven: usize,
+    /// Each function's accesses through its parameters
+    /// ([`proven_types`]), where the names files give types.
+    proven: BTreeMap<u32, proven_types::Facts>,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -5228,6 +5241,7 @@ impl FnPrinter<'_, '_> {
             self.field_bases()
         };
         (self.field_at, self.field_idx, self.elem_addr, _) = self.field_types();
+        self.proven_facts();
         self.banked = self.redundant_banks();
         // A catch point prints in the `match` form: a restore goes on at
         // its save's return site's label ([`longjmp`]).
@@ -5918,6 +5932,76 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// Where the exit at inst `i` of block `b` (an index into `keys`)
+    /// goes on in the function, for [`fields::flow`] and
+    /// [`proven_types::flow`]: a call at its return site, with its callee.
+    fn flow_succs(
+        &self,
+        keys: &[u32],
+        index: &BTreeMap<u32, usize>,
+        xs: &[Vec<ExitInfo>],
+        b: usize,
+        i: usize,
+    ) -> Vec<(usize, fields::After)> {
+        let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+            return Vec::new();
+        };
+        let to = |k: u32, after| index.get(&k).map(|&s| (s, after)).into_iter().collect();
+        match x.plan {
+            Plan::Static(k) | Plan::Rekey(k) => to(k, fields::After::Jump),
+            Plan::Call { target, ret } => to(ret, fields::After::Call(Some(target))),
+            Plan::CallVia { ret, .. }
+            | Plan::Dynamic { ret: Some(ret), .. }
+            | Plan::Swi { next: ret } => to(ret, fields::After::Call(None)),
+            Plan::Dynamic {
+                ret: None, target, ..
+            } => {
+                let thumb = self.f.blocks[&keys[b]].block.thumb;
+                dyn_targets(self.ctx, self.holes, x.at, thumb, target)
+                    .map(|ts| {
+                        ts.into_iter()
+                            .filter_map(|t| Some((*index.get(&t)?, fields::After::Jump)))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            }
+            Plan::Undefined { .. } | Plan::Unwind => Vec::new(),
+        }
+    }
+
+    /// The frame's word slot the access at inst `i` of block `b` is of.
+    fn flow_slot(&self, keys: &[u32], b: usize, i: usize) -> Option<i32> {
+        let (l, d, n) = self.frame?.local_at(&self.locals, keys[b], i)?;
+        (l.word && d == 0 && n == 4).then_some(l.lo)
+    }
+
+    /// What this function does with its parameters, with no names file's
+    /// type ([`proven_types`]; unit `native/lift-proven-pointer-types`):
+    /// kept for the whole program's score, where the names files give
+    /// one to score against.
+    fn proven_facts(&mut self) {
+        if self.holes.types.is_none() {
+            return;
+        }
+        let mut keys: Vec<u32> = vec![self.f.entry];
+        keys.extend(self.f.blocks.keys().copied().filter(|&k| k != self.f.entry));
+        let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let xs: Vec<Vec<ExitInfo>> = keys
+            .iter()
+            .map(|k| exits(self.ctx, &self.f.blocks[k]))
+            .collect();
+        let insts: Vec<&[Inst]> = keys
+            .iter()
+            .map(|k| &self.f.blocks[k].block.insts[..])
+            .collect();
+        let facts = proven_types::flow(
+            &insts,
+            |b, i| self.flow_succs(&keys, &index, &xs, b, i),
+            |b, i| self.flow_slot(&keys, b, i),
+        );
+        self.soft.proven.insert(self.f.entry, facts);
+    }
+
     /// The accesses of this function whose address the names files type
     /// ([`fields::flow`]; unit `native/lift-typed-access`), by block and
     /// inst. An exit goes on where [`FnPrinter::dead_writes`] has it: a
@@ -5961,36 +6045,8 @@ impl FnPrinter<'_, '_> {
             maps,
             self.f.entry,
             &insts,
-            |b, i| {
-                let Some(x) = xs[b].iter().find(|x| x.index == i) else {
-                    return Vec::new();
-                };
-                let to = |k: u32, after| index.get(&k).map(|&s| (s, after)).into_iter().collect();
-                match x.plan {
-                    Plan::Static(k) | Plan::Rekey(k) => to(k, fields::After::Jump),
-                    Plan::Call { target, ret } => to(ret, fields::After::Call(Some(target))),
-                    Plan::CallVia { ret, .. }
-                    | Plan::Dynamic { ret: Some(ret), .. }
-                    | Plan::Swi { next: ret } => to(ret, fields::After::Call(None)),
-                    Plan::Dynamic {
-                        ret: None, target, ..
-                    } => {
-                        let thumb = self.f.blocks[&keys[b]].block.thumb;
-                        dyn_targets(self.ctx, self.holes, x.at, thumb, target)
-                            .map(|ts| {
-                                ts.into_iter()
-                                    .filter_map(|t| Some((*index.get(&t)?, fields::After::Jump)))
-                                    .collect()
-                            })
-                            .unwrap_or_default()
-                    }
-                    Plan::Undefined { .. } | Plan::Unwind => Vec::new(),
-                }
-            },
-            |b, i| {
-                let (l, d, n) = self.frame?.local_at(&self.locals, keys[b], i)?;
-                (l.word && d == 0 && n == 4).then_some(l.lo)
-            },
+            |b, i| self.flow_succs(&keys, &index, &xs, b, i),
+            |b, i| self.flow_slot(&keys, b, i),
             &steps,
         );
         let key = |(b, i): (usize, usize)| (keys[b], i);

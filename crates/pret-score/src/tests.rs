@@ -115,9 +115,15 @@ fn score(lines: u64, median: f64) -> Score {
     Score {
         name: "g".into(),
         note: "a note".into(),
-        lift: [("lines".to_string(), lines), ("line_notes".to_string(), 5)]
-            .into_iter()
-            .collect(),
+        lift: [
+            ("lines".to_string(), lines),
+            ("line_notes".to_string(), 5),
+            ("proven_types_agree".to_string(), lines / 10),
+            ("proven_types_disagree".to_string(), 2),
+            ("proven_types_unproven".to_string(), 8),
+        ]
+        .into_iter()
+        .collect(),
         functions_named: 3,
         functions: 4,
         offer: Offer {
@@ -213,6 +219,10 @@ fn the_table_against_another_run() {
     );
     assert!(
         t.contains("results void, one / prototypes     1 (0) of 2, 1 (0) of 1 / 3 (66.7%)"),
+        "{t}"
+    );
+    assert!(
+        t.contains("proven ptr types: agree/not/none   10 (-2), 2 (0), 8 (0) (50.0%)"),
         "{t}"
     );
     assert!(t.contains("g: a note"), "{t}");
