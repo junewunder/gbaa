@@ -5282,15 +5282,22 @@
       "uses": ["heavy"],
       "priority": 80,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "255e28cf",
-        "session": "255e28cf-08df-4e56-a841-2e85369339fd",
-        "host": "quack",
-        "pid": 2117526,
-        "start": "121114149",
-        "at": "2026-11-27T08:05:00Z",
+        "at": "2026-11-27T10:10:08Z",
+        "evidence": "Mirror's division calls 207 to 34 (173 printed as / or %; libgcc_div_calls 34) on its lift with its holes file; Mirror's native route (units/kirby-mirror-native.toml) passes 3000 frames, 0 differences, audio the same, on 7735df65 (main merged, plus a fix for main's Ref-result adapters, which broke Mirror's build on origin/main bbe93fed alone). just lift-check passed, 44 of 44 programs, on aa2d38fe, incl. new c-div-agbcc (8 of 8 printed) and c-div-gcc (6 of 9), each with planted store and --plant-div caught. just check passed on 748dd85b. c-div frame 600 matches mGBA in both builds. Found and filed: {unit:native/lift-call-entry-flags}, {unit:native/summary-paired-guards}.",
         "branch": "unit/native/lift-libgcc-div",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T10:10:08Z",
+          "by": "255e28cf",
+          "host": "quack",
+          "pid": 2117526,
+          "start": "121114149",
+          "beats": true,
+          "session": "255e28cf-08df-4e56-a841-2e85369339fd",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
