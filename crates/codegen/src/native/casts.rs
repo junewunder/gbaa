@@ -21,19 +21,23 @@
 //! text, whatever the value: the lift's behaviour is unchanged.
 
 /// How many integer casts `text` holds: ` as ` and an integer type, a
-/// whole word (the `casts` metric; `mirror-machine-count.md` row 8's
-/// count).
+/// whole word, and each `prim::sext(` (a sign extension from a width that
+/// isn't a Rust type, or of a load whose alignment isn't proven: a cast
+/// all the same; native/lift-signed-values) (the `casts` metric;
+/// `mirror-machine-count.md` row 8's count).
 pub fn count(text: &str) -> usize {
-    text.match_indices(" as ")
-        .filter(|&(i, _)| {
-            let rest = &text[i + 4..];
-            TYPES.iter().any(|t| {
-                rest.strip_prefix(t).is_some_and(|r| {
-                    !r.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+    text.matches("prim::sext(").count()
+        + text
+            .match_indices(" as ")
+            .filter(|&(i, _)| {
+                let rest = &text[i + 4..];
+                TYPES.iter().any(|t| {
+                    rest.strip_prefix(t).is_some_and(|r| {
+                        !r.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                    })
                 })
             })
-        })
-        .count()
+            .count()
 }
 
 /// The integer types a printed cast names, with their widths and signs.
@@ -52,7 +56,7 @@ fn int(ty: &str) -> Option<(u32, bool)> {
 }
 
 /// `e` without parentheses around the whole of it.
-fn unwrap(mut e: &str) -> &str {
+pub fn unwrap(mut e: &str) -> &str {
     loop {
         let t = e.trim();
         let Some(inner) = t.strip_prefix('(').and_then(|t| t.strip_suffix(')')) else {
@@ -94,6 +98,38 @@ const TYPES: [&str; 8] = ["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64"];
 /// them. `e` is an operand already (one term or in parentheses).
 pub fn cast(e: &str, ty: &str) -> String {
     format!("{} as {ty}", source(e, ty))
+}
+
+/// `e` (an operand) as an `i32`: [`cast`], or what it casts where that is
+/// an `i32` already (`((x as i32) >> 16) as u32` is `((x as i32) >> 16)`),
+/// in parentheses unless it is a cast.
+pub fn to_i32(e: &str) -> String {
+    let a = source(e, "i32");
+    if is_i32(a) {
+        let t = unwrap(a);
+        return match top_cast(t) {
+            Some(_) => t.to_string(),
+            None => format!("({t})"),
+        };
+    }
+    format!("{a} as i32")
+}
+
+/// Whether `e` is an `i32` as printed: a cast to `i32`, or a shift of one.
+pub fn is_i32(e: &str) -> bool {
+    fn of(e: &syn::Expr) -> bool {
+        match e {
+            syn::Expr::Paren(p) => of(&p.expr),
+            syn::Expr::Cast(c) => {
+                matches!(&*c.ty, syn::Type::Path(p) if p.path.is_ident("i32"))
+            }
+            syn::Expr::Binary(b) => {
+                matches!(b.op, syn::BinOp::Shr(_) | syn::BinOp::Shl(_)) && of(&b.left)
+            }
+            _ => false,
+        }
+    }
+    syn::parse_str::<syn::Expr>(e).is_ok_and(|x| of(&x))
 }
 
 /// What [`cast`] casts: `e`, or what its outer casts to a type at least
@@ -189,12 +225,11 @@ pub fn asr(x: &str, c: u32) -> String {
     if sign_clear(x) {
         return format!("{x} >> {c}");
     }
-    format!("({} >> {c}) as u32", cast_paren(x, "i32"))
-}
-
-/// [`cast`] in parentheses.
-fn cast_paren(x: &str, ty: &str) -> String {
-    format!("({})", cast(x, ty))
+    let s = to_i32(x);
+    match unwrap(&s) != s.trim() {
+        true => format!("({s} >> {c}) as u32"),
+        false => format!("(({s}) >> {c}) as u32"),
+    }
 }
 
 /// Whether `x` is `p & k` (either side the constant) with a constant `k`
@@ -230,6 +265,7 @@ mod tests {
             count("(v1 as i16 as u32) as u8; x as u32x; y as usize; z as u64"),
             4
         );
+        assert_eq!(count("prim::sext(v1, 12) as i32"), 2);
     }
 
     #[test]
@@ -248,6 +284,13 @@ mod tests {
         assert_eq!(cast("(v1 as u16 as u32)", "u8"), "v1 as u8");
         assert_eq!(cast("(v1 as u8 as u32)", "u16"), "v1 as u8 as u16");
         assert_eq!(cast("v3", "i32"), "v3 as i32");
+        assert_eq!(
+            to_i32("(((v1 as i32) >> 16) as u32)"),
+            "((v1 as i32) >> 16)"
+        );
+        assert_eq!(to_i32("(v1 as i16 as u32)"), "v1 as i16 as i32");
+        assert_eq!(to_i32("(v1 as i32 as u32)"), "v1 as i32");
+        assert_eq!(to_i32("v1"), "v1 as i32");
     }
 
     #[test]
@@ -297,6 +340,10 @@ mod tests {
             "(((v8 & 0x80000000u32) as i32) >> 8) as u32"
         );
         assert_eq!(asr("v4", 8), "((v4 as i32) >> 8) as u32");
+        assert_eq!(
+            asr("(((v4 as i32) >> 8) as u32)", 4),
+            "(((v4 as i32) >> 8) >> 4) as u32"
+        );
     }
 
     /// Each rewrite is the same value as what it replaces, over every

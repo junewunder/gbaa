@@ -80,7 +80,8 @@
 //! second at 0 on the C programs.
 //!
 //! Casts (`super::casts`, native/lift-cast-types): `casts`, the integer
-//! casts (` as u8` to ` as i64`) the function modules print (barred).
+//! casts (` as u8` to ` as i64`, and each `prim::sext(`: native/lift-signed-values)
+//! the function modules print (barred).
 //! A value printed at a width is compared, narrowed and shifted in it.
 //!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
@@ -149,7 +150,9 @@
 //! Both only where the names files give `[locals]` or prototypes.
 //! `lets_named` (`native/lift-let-names`): the values printed as their
 //! own `let` that took a name from what they hold, not `vN` (no bar: it
-//! should rise; [`super::value_names`]).
+//! should rise; [`super::value_names`]); `lets_signed`
+//! (`native/lift-signed-values`), the `let`s declared `i32` where that
+//! saves casts (no bar; [`super::signed`]).
 //! Pointer variables (`native/lift-pointer-types`, [`super::ref_binds`]):
 //! `refs_bound_named` and `refs_bound_proven`, the parameters and `let`s
 //! declared the `Ref<T>` their accesses make of them, by where `T` came
@@ -420,6 +423,7 @@ pub const UNBARRED: &[&str] = &[
     "values_named",
     "locals_named",
     "lets_named",
+    "lets_signed",
     "refs_bound_named",
     "refs_bound_proven",
     "proven_types_agree",
