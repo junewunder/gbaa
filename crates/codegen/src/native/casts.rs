@@ -301,7 +301,10 @@ mod tests {
             "((v1 as i16 as i32) >> 16) as u32"
         );
         assert_eq!(asr("(v8 & 0xf00u32)", 8), "(v8 & 0xf00u32) >> 8");
-        assert_eq!(asr("(v8 & !0x80000000u32)", 8), "(v8 & !0x80000000u32) >> 8");
+        assert_eq!(
+            asr("(v8 & !0x80000000u32)", 8),
+            "(v8 & !0x80000000u32) >> 8"
+        );
         assert_eq!(
             asr("(v8 & !0x1u32)", 8),
             "(((v8 & !0x1u32) as i32) >> 8) as u32"
