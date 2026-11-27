@@ -5917,7 +5917,14 @@
       "id": "native/lift-pointer-returns",
       "title": "A result that holds a pointer returns Ref<T>",
       "needs": ["native/lift-pointer-signatures"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-27T07:33:21Z",
+          "by": "60eb6360",
+          "text": "Split from {unit:native/lift-pointer-signatures} (params only). ref_params::lift is the place: c-chain-gcc memcpy ends return dst.addr() (dst: Ref<u8>); its caller assigns r0 = memcpy(..). Check: lift-check, Metroid route, a returns_addr metric."
+        }
+      ]
     }
   ]
 }
