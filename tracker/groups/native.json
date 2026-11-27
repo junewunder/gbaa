@@ -5200,6 +5200,17 @@
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
       "priority": 74,
+      "record": {
+        "state": "claimed",
+        "by": "cc1f7d5d",
+        "session": "cc1f7d5d-c8fb-42b8-90cb-131be267e186",
+        "host": "quack",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T12:01:49Z",
+        "branch": "unit/native/fnref-dense-keys-left",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T09:21:01Z",
@@ -5211,7 +5222,8 @@
           "by": "91d18000",
           "text": "Checker of {unit:native/fnref-dense}: dense_ids' usable doesn't exclude flows with lost ROM reads (Val::lost_rom), whose values may carry an unrecorded key into a compare; none of the C/agb programs or Metroid has any. Before a game that does: no dense IDs then (Flow needs a flag)."
         }
-      ]
+      ],
+      "round": "2026-11-27T12:01:49Z"
     },
     {
       "id": "native/lift-field-base",
