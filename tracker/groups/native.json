@@ -5912,6 +5912,12 @@
           "text": "Left by {unit:native/lift-returns-past-holes}: shape::shapes still gives 0xf to a callee of a caller in another code context (ROM vs IWRAM copy) or one whose run was cut short (blind). Measure results_several, tuple_calls on Metroid, Emerald; judged as that unit."
         }
       ]
+    },
+    {
+      "id": "native/lift-pointer-returns",
+      "title": "A result that holds a pointer returns Ref<T>",
+      "needs": ["native/lift-pointer-signatures"],
+      "uses": ["heavy"]
     }
   ]
 }
