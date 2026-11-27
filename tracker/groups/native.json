@@ -5201,23 +5201,10 @@
       "uses": ["heavy"],
       "priority": 74,
       "record": {
-        "state": "done",
-        "by": "31b3c691",
-        "checker": "verifier-3e9a71c4",
-        "at": "2026-11-27T14:41:32Z",
-        "evidence": "Review's fix: just lift-check run to completion on head 016bdd65 (holds latest origin/main, refetched): exit 0, 'lift-check: passed', ~28 min; just check passed. Verifier rebuilt on this head: c-fnptr-gcc fn_keys_left 0 (bar 0); c-list-agbcc/gcc 4 each, held by kActs read through gPool's one object cell, follow-up {unit:native/fnref-struct-fields}; Metroid fn_keys_left 331 -> 152 (125 words not proven: 64 arithmetic on pile reads, 33 never read, 13 used as an address by the IWRAM switch copy, 13 stored outside RAM, 2 called in part; 14 code constants; 13 proven words of functions with an unproven one), within mods bars; route-check --native --dense on units/metroid-native.toml: pass, 2700 frames, 0 differences, dense build's records the same but RAM. Raised lift-check bars all explained in the toml.",
-        "branch": "unit/native/fnref-dense-keys-left",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T17:55:26Z",
-          "by": "manual",
-          "host": "quack",
-          "pid": 4000180,
-          "start": "125627797",
-          "lane": "quack/3",
-          "beats": true
-        },
-        "pushed": true
+        "state": "blocked",
+        "why": "the loop's review asked for fixes a second time, so it waits for the overseer rather than going round again: - The card requires `just lift-check` to pass on the tree that lands, and the head that would land (136d51ab) has not been checked. The Evidence says lift-check passed on 016bdd65. After that run, merge 136d51ab brought in main's Modern-GCC switch recovery change ({unit:native/gcc-switch-recovery})…",
+        "by": "manual",
+        "at": "2026-11-27T18:02:19Z"
       },
       "notes": [
         {
@@ -5237,15 +5224,15 @@
         }
       ],
       "review": {
-        "fixes": 1,
-        "at": "2026-11-27T14:09:25Z",
-        "findings": "- The card requires lift-check to be green, but it was never completed on the tree that would land. The branch includes merge 0ce35c2c, which brought in main's lifter changes ({unit:native/lift-lend-wider}), and those touch the same function flow this unit changes. The Evidence says the merged-tree `just lift-check` was stopped at the 2-hour mark and asks for a rerun. The only completed lift-check ran before the merge. `just check` and lift-metrics on the merged tree don't cover lift-check's dense routes or its planted faults. Nothing under work/ shows a later finished run. Fix: on the current branch head (016bdd65 or later), run `just lift-check` to completion as a long job. If it passes, record it in the Evidence. If it fails, fix the cause, or rebase the bars in crates/codegen/lift-check.toml if the merge legitimately moved them, then rerun until green.",
+        "fixes": 2,
+        "at": "2026-11-27T18:02:19Z",
+        "findings": "- The card requires `just lift-check` to pass on the tree that lands, and the head that would land (136d51ab) has not been checked. The Evidence says lift-check passed on 016bdd65. After that run, merge 136d51ab brought in main's Modern-GCC switch recovery change ({unit:native/gcc-switch-recovery}). That change alters Recovery, so discovery leaves new code to the lift's gap decoding. It also re-barred lift-check metrics on the same rows this branch edits: on the agb rows gap_targets +1 and load_computed_unknown/store_computed_unknown +2 (crates/codegen/lift-check.toml:28-35 and :235-238), and on six C rows store_computed_ram and pointer_unexplained. This branch changes store_computed_unknown and fn_keys_left on those same rows. The two sets of bars merged without a text conflict, but nobody has measured the combined lifter against them, including the dense routes and planted faults. This is the same gap the previous review raised. `just check` doesn't cover it, and nothing under work/ shows a later finished run. Fix: on 136d51ab or later, run `just lift-check` to completion as a long job. If it passes, record the head and the result in the Evidence. If a bar moved because the two changes interact, rebase it in crates/codegen/lift-check.toml with a comment giving the old value, the new value and the cause, then rerun until it passes. If Metroid's fn_keys_left changes, also rerun the Metroid dense measurement and `route-check --native --dense` on units/metroid-native.toml.",
         "sent": {
-          "evidence": "Branch unit/native/fnref-dense-keys-left (6ee0a11b, merge 0ce35c2c, memory 016bdd65). c-fnptr-gcc fn_keys_left 4 -> 0 (bars lowered): indexed_obj puts gCallbacks[j-1] (anchor+0x54+4j) in gCallbacks, not gNumCallbacks. Metroid 331 -> 152 (addr_only: 80 constants only used as load addresses; a hole's number from a Part/Cmp piece is RomDull: ~100); what holds the 152: 125 words not proven (64 arithmetic on pile reads, 33 never read, 13 used as an address in the IWRAM switch copy at 0x030016ca, 13 stored outside RAM, 2 called in part), 14 code constants, 13 proven words of non-dense functions. Emerald 11146 (main) -> 11141. Pre-merge: just lift-check passed (all programs, packed and dense routes, planted faults). Merged tree: just check passed, lift-metrics 0 over 0 under, Metroid's dense build passes route-check --native --dense on units/metroid-native.toml (2700 frames). The merged lift-check rerun was stopped at the 2-hour mark: rerun it. c-list's 4 and 4: kActs read back through gPool's one object cell; follow-up {unit:native/fnref-struct-fields}. Metroid/Emerald casts, locals_noted, unread_lets (Emerald for_counter_arith) over their private bars on main's lifter too. After merge: lower mods/metroid/lift-bars.toml fn_keys_left to 152.",
-          "by": "cc1f7d5d",
+          "evidence": "Review's fix: just lift-check run to completion on head 016bdd65 (holds latest origin/main, refetched): exit 0, 'lift-check: passed', ~28 min; just check passed. Verifier rebuilt on this head: c-fnptr-gcc fn_keys_left 0 (bar 0); c-list-agbcc/gcc 4 each, held by kActs read through gPool's one object cell, follow-up {unit:native/fnref-struct-fields}; Metroid fn_keys_left 331 -> 152 (125 words not proven: 64 arithmetic on pile reads, 33 never read, 13 used as an address by the IWRAM switch copy, 13 stored outside RAM, 2 called in part; 14 code constants; 13 proven words of functions with an unproven one), within mods bars; route-check --native --dense on units/metroid-native.toml: pass, 2700 frames, 0 differences, dense build's records the same but RAM. Raised lift-check bars all explained in the toml.",
+          "by": "31b3c691",
           "host": "quack",
           "branch": "unit/native/fnref-dense-keys-left",
-          "change": "f4aa6c981b1b9e2ea66c3f5962b0ea81255065e6"
+          "change": "be16b1ffc58c50d2798c4972a131a2c6854d687a"
         }
       },
       "round": "2026-11-27T12:01:49Z"
