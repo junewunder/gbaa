@@ -4472,3 +4472,4 @@
 {"at":"2026-11-27T09:21:01Z","actor":"loop","tag":"bec3cb4c","host":"quack","cmd":"note","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: note: From {unit:native/lift-proto-r3-align}: main_cb_run's pushed r3 no longer reads a parameter; c-fnptr-gcc fn_keys_left 6->4, fn_ids_dense 7->9, call_fn_four_complete 2->0. Metroid's lift not rerun."}
 {"at":"2026-11-27T09:21:21Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-lift-proto-r3-align","text":"new unit: Merge main on quack lane 3"}
 {"at":"2026-11-27T09:21:26Z","actor":"loop","tag":"6ae9bbdc","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-lift-proto-r3-align","text":"Merge main on quack lane 3: claimed"}
+{"at":"2026-11-27T09:34:26Z","actor":"loop","tag":"6ae9bbdc","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-proto-r3-align","text":"Merge main on quack lane 3: done"}

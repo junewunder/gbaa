@@ -860,15 +860,22 @@
       "lane": "quack/3",
       "branch": "unit/native/lift-proto-r3-align",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "6ae9bbdc",
-        "session": "6ae9bbdc-506b-4448-a7cd-ff95918d9cb0",
-        "host": "quack",
-        "pid": 2118754,
-        "start": "121115208",
-        "at": "2026-11-27T09:21:26Z",
+        "at": "2026-11-27T09:34:26Z",
+        "evidence": "Merged origin/main into unit/native/lift-proto-r3-align (8003511a). lift-check.toml conflict on mosaic-modes/native-bios-more bars settled: merged lift measures the branch's values, bars lowered to them; lift-metrics 0 over; just check exit 0.",
         "branch": "unit/native/lift-proto-r3-align",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T09:34:26Z",
+          "by": "6ae9bbdc",
+          "host": "quack",
+          "pid": 2118754,
+          "start": "121115208",
+          "beats": true,
+          "session": "6ae9bbdc-506b-4448-a7cd-ff95918d9cb0",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-27T09:21:26Z"
     }
