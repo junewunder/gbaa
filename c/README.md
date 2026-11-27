@@ -61,7 +61,7 @@ changed ROM needs its file made again, or its lift has no names.
 | `borrow/`   | stack structs lent to callees in another file (`cells.c`): a pointer tested for null, an array in a struct written and read at an index |
 | `div/`      | signed and unsigned `/` and `%`: by constants, by divisors that may be -1, by ones not proven nonzero; libgcc's calls, agbcc's and modern GCC's |
 
-The eleven programs (twenty-two ROMs) are in the lifter's check (`just
+The twelve programs (twenty-four ROMs) are in the lifter's check (`just
 lift-check`, `crates/codegen/lift-check.toml`'s `c-*` tables, routes
 `units/c-<name>-<cc>-600.toml`), each with a planted store. A new program:
 copy `template/`, write its `SCENE.md`, run `just c-tests`, then add its

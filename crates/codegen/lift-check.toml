@@ -4716,7 +4716,8 @@ route = "units/c-borrow-agbcc-600.toml"
 # by agbcc (GCC 2.95) with `just c-tests`: stack structs lent to callees in another
 # file that test the pointer for null (mark_or) and index an array in it
 # (cell_set, cell_get). Before native/lift-lend-wider the compare and the sum
-# took both pointers out (1 of 4 pointer parameters borrowed, 1 host local).
+# took both pointers out (0 of 2 pointer parameters borrowed, 0 lent slots, 0
+# host locals; after: 3 of 4, 2 slots, 2 host locals).
 # The planted store is AgbMain's gMarks += m; --plant-lent makes cell_set's
 # store at an index one more.
 planted_store = 0x08000356
@@ -4825,7 +4826,8 @@ route = "units/c-borrow-gcc-600.toml"
 # by modern GCC with `just c-tests`: stack structs lent to callees in another
 # file that test the pointer for null (mark_or) and index an array in it
 # (cell_set, cell_get). Before native/lift-lend-wider the compare and the sum
-# took both pointers out (1 of 4 pointer parameters borrowed, 1 host local).
+# took both pointers out (0 of 2 pointer parameters borrowed, 0 lent slots, 0
+# host locals; after: 3 of 4, 2 slots, 2 host locals).
 # The planted store is AgbMain's gMarks += m; --plant-lent makes cell_set's
 # store at an index one more.
 planted_store = 0x08000332
