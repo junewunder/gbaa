@@ -4527,3 +4527,4 @@
 {"at":"2026-11-27T17:43:04Z","actor":"loop","tag":"0a34a83d","host":"quack","cmd":"claim","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: claimed"}
 {"at":"2026-11-27T17:43:08Z","actor":"loop","tag":"e716ec2e","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-fnref-dense-keys-left","text":"Merge main on quack lane 3: claimed"}
 {"at":"2026-11-27T17:43:14Z","actor":"loop","tag":"6f3bca57","host":"quack","cmd":"claim","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: claimed"}
+{"at":"2026-11-27T17:55:18Z","actor":"loop","tag":"e716ec2e","host":"quack","cmd":"done","id":"merge/quack-lane3-native-fnref-dense-keys-left","text":"Merge main on quack lane 3: done"}
