@@ -5364,7 +5364,19 @@
       "check": "recorded",
       "needs": ["native/imperium-first-stops"],
       "uses": ["heavy"],
-      "priority": 75
+      "priority": 75,
+      "record": {
+        "state": "claimed",
+        "by": "b8f4fb73",
+        "session": "b8f4fb73-99d6-4484-bd81-775b5de4bd4e",
+        "host": "quack",
+        "pid": 2117526,
+        "start": "121114149",
+        "at": "2026-11-27T11:44:27Z",
+        "branch": "unit/native/gcc-switch-recovery",
+        "beats": true
+      },
+      "round": "2026-11-27T11:44:27Z"
     },
     {
       "id": "native/lift-mod-run-ab",
