@@ -1064,6 +1064,76 @@ fn a_borrower_passing_its_pointer_on_is_a_pass() {
     assert_eq!(l.objects, BTreeMap::from([(1, vec![(-12, -8)])]));
 }
 
+/// A callee whose load through r0 is guarded by `test` of what `of`
+/// makes from r0 (`cmp r0, #0; bne`'s Z): whether it borrows r0.
+fn borrows_under(of: impl FnOnce(&mut B, ValueId) -> ValueId, test: fn(ValueId) -> Op) -> bool {
+    let mut c = B::default();
+    let p = c.get(0);
+    let x = of(&mut c, p);
+    let z = c.op(test(x));
+    c.insts.push(Inst {
+        op: Op::Load {
+            width: Width::Word,
+            addr: p,
+        },
+        guard: Some(z),
+    });
+    lends_of(&lender(c)).borrowed.contains_key(&2)
+}
+
+#[test]
+fn a_null_check_of_a_borrowed_pointer_keeps_it_borrowed() {
+    // native/lift-lend-wider: a frame address is never 0 or negative.
+    assert!(borrows_under(|_, p| p, Op::IsZero));
+    assert!(borrows_under(|_, p| p, |p| Op::TestBit { v: p, n: 31 }));
+    // `cmp r0, #0`'s carry and overflow: r0 + !0 + 1.
+    let cmp = |b: &mut B, p| {
+        let m = b.k(!0);
+        let one = b.op(Op::Bit(true));
+        b.op(Op::AdcCarry { a: p, b: m, c: one })
+    };
+    assert!(borrows_under(cmp, Op::BNot));
+    // A test of anything else made from it is a use.
+    assert!(!borrows_under(
+        |b, p| {
+            let four = b.k(4);
+            b.add(p, four)
+        },
+        Op::IsZero
+    ));
+    assert!(!borrows_under(|_, p| p, |p| Op::TestBit { v: p, n: 3 }));
+}
+
+#[test]
+fn an_access_at_an_index_reaches_to_the_saved_registers() {
+    // The callee stores through r0 + a global's value: `p[gI] = 5`.
+    let mut c = B::default();
+    let p = c.get(0);
+    let g = c.k(0x0300_0000);
+    let i = c.ld(g);
+    let q = c.add(p, i);
+    let five = c.k(5);
+    c.st(q, five);
+    let l = lends_of(&lender(c));
+    assert_eq!(l.borrowed, BTreeMap::from([(2, 1)]));
+    assert_eq!(l.index[&2].values().copied().collect::<Vec<_>>(), vec![i.0]);
+    // Its object runs from the address lent, -16, to the saved r4 at -8:
+    // the `Lent` checks the index against that.
+    assert_eq!(l.lent, BTreeMap::from([(1, BTreeSet::from([-16, -12]))]));
+    assert_eq!(l.objects, BTreeMap::from([(1, vec![(-16, -8)])]));
+}
+
+#[test]
+fn an_index_made_from_the_pointer_is_a_use() {
+    let mut c = B::default();
+    let p = c.get(0);
+    let three = c.k(3);
+    let i = c.op(Op::Bin(BinOp::Xor, p, three));
+    let q = c.add(p, i);
+    c.ld(q);
+    assert!(lends_of(&lender(c)).borrowed.is_empty());
+}
+
 #[test]
 fn a_callee_storing_its_pointer_borrows_nothing() {
     // `*(0x03000000) = r0`: the address reaches RAM.
@@ -1103,4 +1173,155 @@ fn a_callee_another_caller_passes_ram_borrows_nothing() {
     let l = lends_of(&fns);
     assert!(l.borrowed.is_empty());
     assert!(l.lent.is_empty());
+}
+
+/// `native/lift-stack-typed-locals`: function 1 lends its frame from -16
+/// (sp after the prologue, slot 0) in r0 to function 2, then loads the
+/// word at -12; function 2 loads and stores the word at r0 + 4, or
+/// passes r0 plus `on` on to function 3, which does.
+fn typed_lender(on: Option<u32>) -> Fns {
+    let mut a = B::default();
+    a.prologue();
+    let l = a.sp(0);
+    a.set(0, l);
+    let mut b = B::default();
+    let l = b.sp(4);
+    b.ld(l);
+    let access = |c: &mut B, k: u32| {
+        let p = c.get(0);
+        let four = c.k(4 - k);
+        let q = c.add(p, four);
+        let x = c.ld(q);
+        c.st(q, x);
+    };
+    let mut fns = vec![func(
+        1,
+        vec![
+            (
+                1,
+                a,
+                Edge::Call {
+                    target: Some(2),
+                    ret: 3,
+                },
+            ),
+            (3, b, Edge::Return),
+        ],
+    )];
+    match on {
+        None => {
+            let mut c = B::default();
+            access(&mut c, 0);
+            fns.push(func(2, vec![(2, c, Edge::Return)]));
+        }
+        Some(k) => {
+            let mut c = B::default();
+            let p = c.get(0);
+            let kk = c.k(k);
+            let q = c.add(p, kk);
+            c.set(0, q);
+            fns.push(func(
+                2,
+                vec![
+                    (
+                        2,
+                        c,
+                        Edge::Call {
+                            target: Some(3),
+                            ret: 4,
+                        },
+                    ),
+                    (4, B::default(), Edge::Return),
+                ],
+            ));
+            let mut d = B::default();
+            access(&mut d, k);
+            fns.push(func(3, vec![(3, d, Edge::Return)]));
+        }
+    }
+    fns
+}
+
+/// The names: function 1's `p`, a `struct P` at slot 0, whose field at 4
+/// is `b_ty`.
+fn typed_maps(b_ty: &str) -> crate::native::fields::Maps {
+    let text = format!(
+        r#"
+[map]
+rom_sha1 = "0000000000000000000000000000000000000000"
+source = "test"
+format = 1
+
+[functions]
+0x00000001 = {{ name = "Lender", size = 16 }}
+
+[locals]
+0x00000001 = [
+  {{ name = "p", slot = 0, from = 0x00000000, to = 0x00000100, type = "struct P" }},
+]
+
+[types."struct P"]
+kind = "struct"
+size = 8
+fields = [
+  {{ name = "a", off = 0, size = 4, type = "u32" }},
+  {{ name = "b", off = 4, size = 4, type = "{b_ty}" }},
+]
+"#
+    );
+    let m =
+        crate::names::SourceMap::from_texts("0000000000000000000000000000000000000000", &[&text])
+            .unwrap();
+    crate::native::fields::Maps {
+        types: m.typed.clone(),
+        locals: m.locals.clone(),
+    }
+}
+
+fn typed_of(fns: &Fns, b_ty: &str) -> crate::native::lent_types::LentTypes {
+    let l = lends_of(fns);
+    let maps = typed_maps(b_ty);
+    let bases = BTreeMap::from([(1, -16)]);
+    crate::native::lent_types::of_lends(&l, &frames_of(fns), &bases, Some(&maps))
+}
+
+#[test]
+fn a_lent_local_takes_its_variables_type_where_every_access_fits() {
+    let fns = typed_lender(None);
+    let t = typed_of(&fns, "u32");
+    assert_eq!(t.untyped, 0);
+    let x = &t.objects[&1][&-16];
+    assert_eq!((x.var.as_str(), x.c.as_str()), ("p", "struct P"));
+    assert_eq!(t.params.keys().copied().collect::<Vec<_>>(), vec![(2, 0)]);
+    // As Frame::locals takes it: the variable's bytes, not the object's.
+    assert_eq!(
+        t.spans(&lends_of(&fns), 1, Some(&typed_maps("u32").types)),
+        vec![(-16, -8)]
+    );
+}
+
+#[test]
+fn a_lent_local_an_access_doesnt_fit_stays_bytes() {
+    // Field b is two halfwords: the word accesses at 4 are no one field.
+    let t = typed_of(&typed_lender(None), "u16 [2]");
+    assert_eq!(t.untyped, 1);
+    assert!(t.objects.is_empty() && t.params.is_empty());
+}
+
+#[test]
+fn a_typed_lent_local_passes_on_as_what_its_pointer_points_at() {
+    let t = typed_of(&typed_lender(Some(0)), "u32");
+    assert_eq!(t.untyped, 0);
+    assert_eq!(
+        t.params.keys().copied().collect::<Vec<_>>(),
+        vec![(2, 0), (3, 0)]
+    );
+    // Passed on 4 bytes in, the pointer is to field b, a u32.
+    let t = typed_of(&typed_lender(Some(4)), "u32");
+    assert_eq!(t.untyped, 0);
+    assert_eq!(t.params[&(3, 0)], crate::types::Ty::U32);
+    // Passed on 2 bytes in, it points into field a, at no object: bytes.
+    let t = typed_of(&typed_lender(Some(2)), "u32");
+    assert_eq!(t.untyped, 1);
+    assert!(t.params.is_empty());
 }
