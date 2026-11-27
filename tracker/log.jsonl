@@ -4467,3 +4467,4 @@
 {"at":"2026-11-27T08:53:03Z","actor":"loop","tag":"f259740d","host":"quack","cmd":"done","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: done"}
 {"at":"2026-11-27T09:02:27Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: on main"}
 {"at":"2026-11-27T09:02:34Z","actor":"loop","tag":"dad7fa92","host":"quack","cmd":"claim","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: claimed"}
+{"at":"2026-11-27T09:13:00Z","actor":"loop","tag":"255e28cf","host":"quack","cmd":"add-unit","id":"native/lift-call-entry-flags","text":"new unit: A direct call passes the flags its callee reads at entry"}

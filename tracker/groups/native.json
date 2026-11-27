@@ -5957,6 +5957,13 @@
       "detail": "Found by {unit:native/lift-libgcc-div}. The summaries take a guarded write as maybe: modern GCC's __udivsi3 (ARM) sets r3 by moveq r3,#8 then movne r3,#1, then lslcc r3,r3,#4 reads it, so r3 counts as read as it came (report: 'read at 0x0800046c, in 0x08000434' in c-div-gcc). Every __aeabi_* division then passes r3 and returns it, the prototypes of c-div-gcc's sdiv, smod, udiv, umod and consts are refused, and 3 of its 9 division calls stay calls (libgcc_div_calls 3). Two adjacent writes of one register under opposite conditions of the same flags, nothing setting flags between, write it on every path. Done when: c-div-gcc's libgcc_div_calls falls to 0 and its proto_shapes_refused falls, lift-check passes, Mirror's and Metroid's native routes 0 differences.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-call-entry-flags",
+      "title": "A direct call passes the flags its callee reads at entry",
+      "detail": "Found by {unit:native/lift-libgcc-div}. Modern GCC's __aeabi_idivmod (ARM) does cmp r1,#0, then bl .divsi3_skip_div0_test, whose first rsbmi r1,r1,#0 reads that N flag. The lift's call goes through f_08000558, which enters x_ by Regs::call with every flag false, so a negative divisor isn't negated: c-div-gcc's smod gave -923 for -923 % -2 (fn-check --interp-every 1: 72 of 472 runs differ). Silent: no hole names it. Fix: a direct call of a function whose extended entry reads a flag as it came passes the caller's flags (or is a hole). Check: c/div's smod given its divisor that may be -1 back (m1 * ((f >> 3 & 7) + 2), see its comment), c-div-gcc passes lift-check, fn-check of smod agrees with the interpreter.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
