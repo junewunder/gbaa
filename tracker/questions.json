@@ -2022,7 +2022,12 @@
         "by": "6056824b",
         "host": "quack"
       },
-      "answer": null
+      "answer": null,
+      "withdrawn": {
+        "at": "2026-11-27T05:43:49Z",
+        "by": "1c8e564b",
+        "why": "Asked before the helpers design; folded into the re-asked shared-helpers question, at the owner's ask"
+      }
     },
     {
       "id": "q/getmondata-s-argument-calls-prove",
