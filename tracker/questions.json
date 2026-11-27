@@ -2201,6 +2201,51 @@
         "by": "1c8e564b",
         "why": "Re-asked with GetMonData's prototype unit folded in, its prove and trust-pret options kept"
       }
+    },
+    {
+      "id": "q/helpers-shared-by-many-functions",
+      "title": "Repeated inlined code: who names the shared helper?",
+      "context": "From the helpers design (docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures'). Games inline the same code many times: Mirror's task struct lookup (katam's TaskGetStructPtr macro) 1,070 times. In every option a clone count finds the repeats mechanically. The lifter then prints one helper and a call at each exact match, its body the repeated code itself, so it stays exact. Function or macro is decided by the code: a macro only where it leaves its loop or function.",
+      "options": [
+        {
+          "key": "a",
+          "label": "An LLM names each helper, the lifter applies it",
+          "changes": "the LLM picks from the clone list and writes one private entry per helper (name, one example site, inputs, outputs); the lifter prints it at every match; Mirror's lookup becomes the first; a helper body written by the LLM gets its own test"
+        },
+        {
+          "key": "b",
+          "label": "Fully automatic: the lifter names them",
+          "changes": "every repeat past a size and count bar becomes a helper with a generated name (by shape, e.g. h_3f2a); no LLM step and no LLM-written bodies, so the body test unit is dropped; Mirror's lookup is one of them",
+          "drops": ["native/fn-check-helper"],
+          "releases": ["native/lift-clone-count", "native/lift-helper-match", "native/lift-task-struct"]
+        },
+        {
+          "key": "c",
+          "label": "No lifter helpers: LLM rewrites carry their own",
+          "changes": "the lifter only gets the clone count; each rewrite has its own copy, so the 1,070 sites shrink only as their functions get rewritten",
+          "drops": ["native/lift-helper-match", "native/fn-check-helper", "native/lift-task-struct"],
+          "releases": ["native/lift-clone-count"]
+        },
+        {
+          "key": "d",
+          "label": "Not now",
+          "changes": "the four units wait; the lift stays as today",
+          "parks": true
+        }
+      ],
+      "default": "a",
+      "blocks": [
+        "native/lift-clone-count",
+        "native/lift-helper-match",
+        "native/fn-check-helper",
+        "native/lift-task-struct"
+      ],
+      "asked": {
+        "at": "2026-11-27T05:44:31Z",
+        "by": "1c8e564b",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }
