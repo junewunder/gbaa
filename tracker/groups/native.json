@@ -5577,15 +5577,22 @@
       "uses": ["heavy"],
       "priority": 78,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "0ae44a23",
-        "session": "0ae44a23-a652-4d3c-a437-d2a510cdbb69",
-        "host": "quack",
-        "pid": 2117956,
-        "start": "121114680",
-        "at": "2026-11-27T12:24:24Z",
+        "at": "2026-11-27T13:04:19Z",
+        "evidence": "A null check of a borrowed pointer (Lent::addr gives the nonzero NOWHERE), an index checked against the Lent's length (pN.idx(x)), and a struct return's unread pointer keep a parameter borrowed. 'lent slots' lines, origin/main 5138865e -> this branch: c-borrow-agbcc and -gcc 0 slots, 0 of 2 pointer params, 0 host locals -> 2 slots, 3 of 4, 2 host locals (rerun on main per the review; lift-check.toml comments now say the same); c-chain-agbcc 0 slots, 0 of 14 -> 10 slots, 5 of 14, 2 host locals; c-chain-gcc 5 slots, 4 of 15, 1 host local -> 6 slots, 6 of 15, 2 host locals. sp_accesses_escaping_slot bars lowered: c-chain-agbcc 35->20, native-tasks 657->656, native-save 657->656, native-bios-region 651->650, native-serial 664->663; c-borrow rows new at 2. Review fixes: c/README twelve programs (twenty-four ROMs). Merged origin/main 5138865e (typed Lent: an indexed access stays bytes; lines_prelude 1506; lent_locals_untyped +1 on six rows the wider lend newly lends). On b07b9394: just check passed; just lift-check passed (0 differences on every route, every planted fault caught, c-borrow's --plant-lent on both builds). Not handled (noted): a bare-parameter index, a p++ walk.",
         "branch": "unit/native/lift-lend-wider",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T13:04:19Z",
+          "by": "0ae44a23",
+          "host": "quack",
+          "pid": 2117956,
+          "start": "121114680",
+          "beats": true,
+          "session": "0ae44a23-a652-4d3c-a437-d2a510cdbb69",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
