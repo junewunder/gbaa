@@ -5200,6 +5200,17 @@
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
       "priority": 74,
+      "record": {
+        "state": "claimed",
+        "by": "31b3c691",
+        "session": "31b3c691-891e-4851-9fe2-b360d9d11a4b",
+        "host": "quack",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T14:09:31Z",
+        "branch": "unit/native/fnref-dense-keys-left",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T14:09:25Z",
