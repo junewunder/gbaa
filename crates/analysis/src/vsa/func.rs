@@ -11,10 +11,11 @@ use super::domain::{AbsVal, CLOBBER, Dom, JOIN, MAX_SET, Src, Sym, gcd};
 use super::exec::{self, Exit, ExitKind, State, writes_pc};
 use crate::program::{Insn, Program};
 
-/// A merge point is widened once it has been joined into this many times,
-/// and only if it is a loop head (the target of a backward edge). Widening
-/// anywhere else would throw away the bound a check just established, before
-/// the jump that uses it.
+/// A merge point is widened once one backward edge into it (a loop's) has
+/// been joined this many times. Widening anywhere else would throw away the
+/// bound a check just established, before the jump that uses it; counting
+/// per edge keeps a switch inside a loop, whose cases each come back with
+/// their own constant index, from widening the index at the head.
 pub const WIDEN_AFTER: u32 = 6;
 /// Instructions executed per function before giving up on a fixpoint.
 pub const STEP_CAP: u64 = 2_000_000;
@@ -208,6 +209,8 @@ pub struct FuncResult {
     pub ret_sp: Vec<Option<i32>>,
     /// The `bl`s taken as jumps (decision 5a's far-jump rule).
     pub far_jumps: BTreeSet<u32>,
+    /// Their targets.
+    pub far_targets: BTreeSet<u32>,
     /// The `bl`s taken as calls that never return.
     pub no_returns: BTreeSet<u32>,
     /// Some path ran into data, an undefined instruction or bytes that
@@ -505,7 +508,7 @@ fn fixpoint<'p, 'f>(
         span: None,
     };
     let mut states: HashMap<u32, State> = HashMap::new();
-    let mut visits: HashMap<u32, u32> = HashMap::new();
+    let mut visits: HashMap<(u32, u32), u32> = HashMap::new();
     let mut work: BTreeSet<u32> = BTreeSet::new();
     states.insert(entry, State::entry(entry));
     work.insert(entry);
@@ -532,7 +535,7 @@ fn fixpoint<'p, 'f>(
                     work.insert(to);
                 }
                 Some(old) => {
-                    let n = visits.entry(to).or_default();
+                    let n = visits.entry((to, at)).or_default();
                     *n += 1;
                     let widen = *n > WIDEN_AFTER && to <= at;
                     let j = old.join(&st, |r| Sym::new(JOIN, to, 0, r), widen);
@@ -831,6 +834,7 @@ impl Analysis<'_, '_> {
         if what == Bl::Jump {
             if self.record {
                 self.res.far_jumps.insert(insn.addr);
+                self.res.far_targets.insert(target);
             }
             out.push((target, st));
             return out;

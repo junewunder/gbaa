@@ -9,7 +9,10 @@
 //! about `u` is redone whenever `u`'s answer changes.
 //!
 //! A jump counts as resolved only if every function context reaching it
-//! resolves it; its targets are then the union over the contexts.
+//! resolves it; its targets are then the union over the contexts. A root
+//! that is part of another function (a far jump's target the function's
+//! analysis runs through) doesn't count where the function's analysis
+//! reaches the jump ([`Engine::collect`]).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
@@ -215,6 +218,15 @@ impl Engine {
     }
 
     /// The recovery over the analyses of `roots` (each analysed already).
+    ///
+    /// A root that some analysis takes a `bl` to as a far jump, and that
+    /// the analysis of a whole function (a root no `bl` jumps to) runs
+    /// through and none calls, is part of that function: a cold block past
+    /// it, a continuation entry inside it. Its own analysis starts without
+    /// the function's registers and frame (modern GCC's table base spilled
+    /// to the stack), so where an analysis of a whole function reaches a
+    /// jump too, the part's result for it doesn't count: every way into
+    /// the part is in some such analysis.
     pub fn collect(&self, roots: impl IntoIterator<Item = Key>) -> Recovery {
         let mut rec = Recovery {
             analyses: self.analyses,
@@ -224,10 +236,33 @@ impl Engine {
             ..Recovery::default()
         };
         let mut seen = HashSet::new();
-        for k in roots {
-            if !seen.insert(k) {
-                continue;
-            }
+        let roots: Vec<Key> = roots.into_iter().filter(|k| seen.insert(*k)).collect();
+        // Far jumps are Thumb `bl`s.
+        let far_targets: HashSet<Key> = roots
+            .iter()
+            .flat_map(|k| self.results[k].far_targets.iter().map(|&t| (t, true)))
+            .collect();
+        let far = |k: &Key| far_targets.contains(k);
+        // What the analyses of whole functions reach.
+        let whole: HashSet<Key> = roots
+            .iter()
+            .filter(|k| !far(k) && !self.results[k].capped)
+            .flat_map(|k| self.results[k].insns.iter().map(|&(a, _)| (a, k.1)))
+            .collect();
+        let called: HashSet<Key> = roots
+            .iter()
+            .filter(|k| !far(k))
+            .flat_map(|k| self.results[k].calls.iter().map(|&t| (t & !1, t & 1 != 0)))
+            .collect();
+        let part: HashSet<Key> = roots
+            .iter()
+            .filter(|k| far(k) && whole.contains(k) && !called.contains(k))
+            .copied()
+            .collect();
+        // The parts' jump results, used only where no whole function's
+        // analysis reaches the jump.
+        let mut parts: BTreeMap<u32, JumpRes> = BTreeMap::new();
+        for &k in &roots {
             let r = &self.results[&k];
             rec.reached += r.reached;
             rec.far_jumps.extend(&r.far_jumps);
@@ -245,10 +280,15 @@ impl Engine {
                 let e = rec.accesses.entry(a).or_insert(x);
                 *e = e.join(x);
             }
+            let jumps = if part.contains(&k) {
+                &mut parts
+            } else {
+                &mut rec.jumps
+            };
             for (&a, res) in &r.jumps {
                 // Without a fixpoint nothing is known.
                 let res = if r.capped { &JumpRes::Unresolved } else { res };
-                let merged = match (rec.jumps.remove(&a), res) {
+                let merged = match (jumps.remove(&a), res) {
                     (None, r) => r.clone(),
                     (Some(JumpRes::Resolved(old)), JumpRes::Resolved(new)) => {
                         JumpRes::Resolved(union(old, new))
@@ -264,8 +304,11 @@ impl Engine {
                     (Some(JumpRes::Resolved(_)), r) => r.clone(),
                     (Some(failed), _) => failed,
                 };
-                rec.jumps.insert(a, merged);
+                jumps.insert(a, merged);
             }
+        }
+        for (a, res) in parts {
+            rec.jumps.entry(a).or_insert(res);
         }
         rec
     }

@@ -27,10 +27,11 @@ pub struct State {
     pub flags: [Bit; 4],
     pub stack: BTreeMap<i32, AbsVal>,
     /// The lowest frame offset a pointer into the frame may have escaped
-    /// at: a value made from sp went somewhere other than sp (another
-    /// register, memory; an operation that loses track of it escapes
-    /// `i32::MIN`). From then on a call, or a store through an unknown
-    /// pointer, may write the frame from there up (see
+    /// at: a value made from sp went where the analysis no longer sees it
+    /// (memory, a call's argument registers, a join with another value; an
+    /// operation that loses track of it escapes `i32::MIN`). A copy in
+    /// another register is still seen. From then on a call, or a store
+    /// through an unknown pointer, may write the frame from there up (see
     /// [`State::forget_frame`]).
     pub escaped: Option<i32>,
 }
@@ -74,14 +75,26 @@ impl State {
     /// What a call does to the caller's state (the AAPCS): r0 to r3, r12
     /// and lr are clobbered, and so are the flags. If a pointer into the
     /// frame has escaped, so is the stack: the callee may write it
-    /// (`int x; get(&x); switch (x)`). `at` names the new unknowns.
+    /// (`int x; get(&x); switch (x)`): a pointer the call gets in r0 to
+    /// r3 escapes. `at` names the new unknowns.
     pub fn clobber_call(&mut self, at: u32, salt: u32) {
+        for r in 0..4 {
+            let v = &self.regs[r];
+            if frame_addr(v) {
+                self.escape(v.off as i32);
+            }
+        }
         self.retire(at, salt);
         for r in [0, 1, 2, 3, 12, 14] {
             self.regs[r] = AbsVal::top(Sym::new(CLOBBER, at, salt, r as u32));
         }
         self.flags = std::array::from_fn(|_| Bit::Top);
         self.forget_frame();
+    }
+
+    /// Note that a pointer to frame offset `lo` escaped.
+    pub fn escape(&mut self, lo: i32) {
+        self.escaped = Some(self.escaped.map_or(lo, |e| e.min(lo)));
     }
 
     /// What a write through a pointer that may be into the frame does: the
@@ -119,7 +132,7 @@ impl State {
     /// `x - y`) still share one unknown after the join, so a relation such
     /// as `r0 = r5 - 1` survives. A flag predicate over `A` on one side and
     /// `B` on the other survives too, if it says the same thing about the
-    /// shared unknown. With `widen`, a set that changed goes straight to
+    /// shared unknown. With `widen`, a set the join grows goes straight to
     /// unknown.
     pub fn join(&self, o: &State, name: impl Fn(u32) -> Sym, widen: bool) -> State {
         // The locations both sides hold, paired.
@@ -157,10 +170,40 @@ impl State {
             .iter()
             .map(|((x, y, d), first, _, _)| (x != y || *d != 0).then(|| name(*first)))
             .collect();
+        // The derivations to join, paired: both sides' own, or one side's
+        // and the other side's constant derived the same way.
+        let pair = |a: &AbsVal, b: &AbsVal| -> Option<(Derived, Derived)> {
+            let synth = |v: &AbsVal, like: Derived| {
+                let k = like.op.invert(v.dom.konst()?.wrapping_sub(like.post))?;
+                Some(Derived {
+                    sym: AbsVal::konst(k).sym,
+                    off: 0,
+                    ..like
+                })
+            };
+            let p = match (a.derived, b.derived) {
+                (Some(x), Some(y)) => (x, y),
+                (Some(x), None) => (x, synth(b, x)?),
+                (None, Some(y)) => (synth(a, y)?, y),
+                (None, None) => return None,
+            };
+            (p.0.op == p.1.op && p.0.post == p.1.post).then_some(p)
+        };
+        let paired =
+            |x: &Derived, y: &Derived| groups.iter().position(|g| (g.0.0, g.0.1) == (x.sym, y.sym));
+        // Bases no location pairs (an `ldrsh` on each path, held only
+        // through the value extended from it) get an unknown of their own,
+        // per (A, B, x - y) as the locations' groups do, named 0xc00 on
+        // (clear of the locations' numbers): the joined value is still
+        // derived the same way, from it. With its first one's offset.
+        let mut bases: Vec<(Key, u32)> = Vec::new();
+        let base_name = |g: usize| name(0xc00 + g as u32);
         // A kept unknown that is also a new name here is a stale copy of an
-        // older value: rename its group too.
+        // older value: rename its group, or give its base a new unknown,
+        // too.
         loop {
-            let made: Vec<Sym> = names.iter().flatten().copied().collect();
+            let mut made: Vec<Sym> = names.iter().flatten().copied().collect();
+            made.extend((0..bases.len()).map(base_name));
             let mut changed = false;
             for (g, n) in names.iter_mut().enumerate() {
                 if n.is_none() && made.contains(&groups[g].0.0) {
@@ -168,21 +211,32 @@ impl State {
                     changed = true;
                 }
             }
+            for &(_, a, b) in &pairs {
+                let Some((x, y)) = pair(a, b) else { continue };
+                let key = (x.sym, y.sym, x.off.wrapping_sub(y.off));
+                let kept = x == y && !made.contains(&x.sym);
+                if paired(&x, &y).is_none()
+                    && !kept
+                    && bases.len() < 0x400
+                    && !bases.iter().any(|g| g.0 == key)
+                {
+                    bases.push((key, x.off));
+                    changed = true;
+                }
+            }
             if !changed {
                 break;
             }
         }
+        let mut made: Vec<Sym> = names.iter().flatten().copied().collect();
+        made.extend((0..bases.len()).map(base_name));
         // Each group's unknown, and its offset in the joined state: a kept
         // unknown keeps the offsets; a new one is the first location's
         // value, so offsets are relative to it.
-        let made: Vec<Sym> = names.iter().flatten().copied().collect();
         // A derivation survives if its bases are paired the same way.
-        let derived = |x: Option<Derived>, y: Option<Derived>| {
-            let (x, y) = (x?, y?);
-            if x.op != y.op {
-                return None;
-            }
-            match groups.iter().position(|g| (g.0.0, g.0.1) == (x.sym, y.sym)) {
+        let derived = |a: &AbsVal, b: &AbsVal| {
+            let (x, y) = pair(a, b)?;
+            match paired(&x, &y) {
                 Some(g) => {
                     let (_, _, xa, xb) = groups[g];
                     let d = x.off.wrapping_sub(xa);
@@ -194,11 +248,21 @@ impl State {
                         Some(n) => Derived {
                             sym: n,
                             off: d,
-                            op: x.op,
+                            ..x
                         },
                     })
                 }
-                None => (x == y && !made.contains(&x.sym)).then_some(x),
+                None => {
+                    let key = (x.sym, y.sym, x.off.wrapping_sub(y.off));
+                    match bases.iter().position(|g| g.0 == key) {
+                        Some(g) => Some(Derived {
+                            sym: base_name(g),
+                            off: x.off.wrapping_sub(bases[g].1),
+                            ..x
+                        }),
+                        None => (x == y).then_some(x),
+                    }
+                }
             }
         };
         let joined = |i: usize| {
@@ -208,7 +272,7 @@ impl State {
                 None => (a.sym, a.off),
                 Some(n) => (n, a.off.wrapping_sub(groups[g].2)),
             };
-            let d = derived(a.derived, b.derived);
+            let d = derived(a, b);
             if a == b && names[g].is_none() && d == a.derived {
                 a.clone()
             } else {
@@ -259,7 +323,7 @@ impl State {
                 Bit::Top
             }
         };
-        State {
+        let mut out = State {
             regs,
             flags: std::array::from_fn(flag),
             stack,
@@ -267,7 +331,26 @@ impl State {
                 (Some(a), Some(b)) => Some(a.min(b)),
                 (a, b) => a.or(b),
             },
+        };
+        // A frame address joined with anything but itself is lost: it
+        // escapes. (So does one held only on one side.) Not sp's own: sp
+        // is no pointer a callee is given.
+        for &(loc, a, b) in &pairs {
+            if loc != 13 && (frame_addr(a) || frame_addr(b)) && !(a.sym == b.sym && a.off == b.off)
+            {
+                for v in [a, b] {
+                    if frame_addr(v) {
+                        out.escape(v.off as i32);
+                    }
+                }
+            }
         }
+        for (k, v) in self.stack.iter().chain(&o.stack) {
+            if frame_addr(v) && !(self.stack.contains_key(k) && o.stack.contains_key(k)) {
+                out.escape(v.off as i32);
+            }
+        }
+        out
     }
 
     /// Every name the state refers to: held values, the bases of derived
@@ -357,6 +440,12 @@ impl State {
             }
         }
     }
+}
+
+/// Whether `v` is sp's entry value plus a constant: an address in the
+/// frame, its offset `v.off`.
+fn frame_addr(v: &AbsVal) -> bool {
+    v.sym.kind() == ENTRY && v.sym.index() == 13
 }
 
 /// The location number of the stack slot at offset `k` (see
@@ -564,12 +653,42 @@ impl<'p> Exec<'p> {
         if let Some(lo) = lo
             && let Some(st) = self.cur.as_mut()
         {
-            st.escaped = Some(st.escaped.map_or(lo, |e| e.min(lo)));
+            st.escape(lo);
         }
+    }
+
+    /// Note the escape of a sum of a frame address and an index (`add r3,
+    /// sp, #68; strb r5, [r3, r7]`), if it is one: it points into the
+    /// local there, not below it, as C can't reach the frame below a local
+    /// from it (see [`State::forget_frame`]). GCC biases the address down
+    /// and the index up (`buf - 33`, indexed from 33): the local starts at
+    /// the sum's lowest value.
+    fn frame_index(&mut self, a: V, b: V) -> bool {
+        let (x, y) = (self.val(a), self.val(b));
+        let (fa, fb) = (x.sym == self.sp0, y.sym == self.sp0);
+        if fa == fb {
+            return false;
+        }
+        let (p, i) = if fa { (x, y) } else { (y, x) };
+        let low = match &i.dom {
+            Dom::Top => Some(0),
+            d if d.max() < 0x8000_0000 => Some(d.min()),
+            _ => None,
+        };
+        let lo = low.and_then(|l| (p.off as i32).checked_add(l as i32));
+        if let Some(st) = self.cur.as_mut() {
+            st.escape(lo.unwrap_or(i32::MIN));
+        }
+        true
     }
 
     fn binop(&mut self, a: V, b: V, d: Dom, keep_src: bool) -> V {
         self.escape(&[a, b]);
+        self.binop_kept(a, b, d, keep_src)
+    }
+
+    /// [`Exec::binop`] whose operands' escape is already noted.
+    fn binop_kept(&mut self, a: V, b: V, d: Dom, keep_src: bool) -> V {
         let (x, y) = (self.val(a), self.val(b));
         let src = if y.dom.konst().is_some() {
             x.src
@@ -638,6 +757,7 @@ impl<'p> Exec<'p> {
             sym: x.sym,
             off: x.off,
             op,
+            post: 0,
         });
     }
 
@@ -652,13 +772,63 @@ impl<'p> Exec<'p> {
     ///   same unknown, so a bound on the copy bounds `x`, and through
     ///   [`DOp::Sext`] the value sign-extended from it; `asr` by `n` is
     ///   its sign extension.
+    ///
+    /// And through a value whose low bits are known clear (`x = y << m`):
+    ///
+    /// - `x >> k` for `k < m` is `(x >> m) << (m - k)`, nothing lost: if a
+    ///   location holds `x >> m` (modern GCC bounds `lsrs r3, r2, #24` and
+    ///   indexes with `lsrs r3, r2, #22`), the shift is derived from it
+    ///   and takes its bound;
+    /// - `asr` by `m` is the sign extension of `y`'s low `32 - m` bits, an
+    ///   unknown of its own, so a join with another sign-extended value
+    ///   still knows both are extended.
     fn relate_shift(&mut self, r: V, x: &AbsVal, kind: ShiftType, n: Option<u32>) {
         let op = n.and_then(|n| Self::shift_op(kind, n & 0xff));
         let base = |d: Derived| AbsVal {
             off: d.off,
             ..AbsVal::top(d.sym)
         };
-        match (op, x.derived) {
+        // Only a derivation with nothing added after it says what x is.
+        let xd = x.derived.filter(|d| d.post == 0);
+        match (op, xd) {
+            (Some(DOp::Lsr(k)), Some(d)) if matches!(d.op, DOp::LslExact(m) if k < m) => {
+                let DOp::LslExact(m) = d.op else {
+                    unreachable!()
+                };
+                self.derive(r, &base(d), Some(DOp::LslExact(m - k)));
+                self.refine(r);
+                return;
+            }
+            (Some(DOp::Lsr(k)), Some(d)) if matches!(d.op, DOp::Lsl(m) if k < m) => {
+                let DOp::Lsl(m) = d.op else { unreachable!() };
+                let high = Some(Derived {
+                    sym: x.sym,
+                    off: x.off,
+                    op: DOp::Lsr(m),
+                    post: 0,
+                });
+                let w = self
+                    .cur
+                    .as_ref()
+                    .and_then(|st| st.locations().find(|(_, v)| v.derived == high))
+                    .map(|(_, v)| v.clone());
+                match w {
+                    Some(w) => {
+                        self.derive(r, &w, Some(DOp::LslExact(m - k)));
+                        self.refine(r);
+                    }
+                    None => self.derive(r, x, op),
+                }
+                return;
+            }
+            (Some(DOp::Asr(n)), Some(d)) if d.op == DOp::Lsl(n) => {
+                let low = AbsVal::new(Dom::si(1, 0, u32::MAX >> n), self.fresh());
+                self.derive(r, &low, Some(DOp::Sext(32 - n)));
+                return;
+            }
+            _ => {}
+        }
+        match (op, xd) {
             (Some(DOp::Lsl(n)), Some(d)) if d.op == DOp::Sext(32 - n) => {
                 self.derive(r, &base(d), Some(DOp::LslExact(n)));
             }
@@ -673,6 +843,25 @@ impl<'p> Exec<'p> {
                 self.derive(r, &base(d), Some(DOp::Sext(32 - n)));
             }
             _ => self.derive(r, x, op),
+        }
+    }
+
+    /// Narrow `r`, derived from an unknown, to what a location holding
+    /// that unknown allows.
+    fn refine(&mut self, r: V) {
+        let Some(d) = self.vals[r.0 as usize].derived else {
+            return;
+        };
+        let Some(base) = self.cur.as_ref().and_then(|st| {
+            st.locations()
+                .find(|(_, v)| v.sym == d.sym)
+                .map(|(_, v)| v.dom.add_const(v.off.wrapping_neg()))
+        }) else {
+            return;
+        };
+        let v = &self.vals[r.0 as usize];
+        if let Some(n) = v.assume_derived(d.sym, &base) {
+            self.vals[r.0 as usize] = n;
         }
     }
 
@@ -757,8 +946,11 @@ impl Sem for Exec<'_> {
             let v = y.add_const(k);
             return self.put(v);
         }
-        let d = Self::pairwise(&x.dom, &y.dom, u32::wrapping_add);
-        self.binop(a, b, d.unwrap_or(Dom::Top), true)
+        let d = Self::pairwise(&x.dom, &y.dom, u32::wrapping_add).unwrap_or(Dom::Top);
+        if self.frame_index(a, b) {
+            return self.binop_kept(a, b, d, true);
+        }
+        self.binop(a, b, d, true)
     }
 
     fn sub(&mut self, a: V, b: V) -> V {
@@ -855,7 +1047,9 @@ impl Sem for Exec<'_> {
                 return self.add_const_flags(b, k, c);
             }
         }
-        self.escape(&[a, b]);
+        if !(c.konst() == Some(false) && self.frame_index(a, b)) {
+            self.escape(&[a, b]);
+        }
         let cs: &[bool] = match c.konst() {
             Some(c) => &[c][..],
             None => &[false, true],
@@ -1050,10 +1244,9 @@ impl Sem for Exec<'_> {
         self.put(v)
     }
 
+    /// A frame address copied into a register is still seen (and escapes
+    /// only where it goes from there: see [`State::escaped`]).
     fn set_reg(&mut self, r: Reg, v: V) {
-        if r != Reg::SP {
-            self.escape_at(&[v], true);
-        }
         let v = self.val(v).clone();
         self.state().set_reg(r, v);
     }

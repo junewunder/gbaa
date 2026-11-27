@@ -149,6 +149,15 @@ impl Dom {
         })
     }
 
+    pub fn min(&self) -> u32 {
+        match self {
+            Dom::Top => 0,
+            Dom::Const(k) => *k,
+            Dom::Set(v) => v[0],
+            Dom::Si { lo, .. } => *lo,
+        }
+    }
+
     pub fn max(&self) -> u32 {
         match self {
             Dom::Top => u32::MAX,
@@ -530,6 +539,25 @@ impl DOp {
         }
     }
 
+    /// An `x` with `eval(x) == k`, for the operations that have one: what
+    /// a constant is derived from when it meets a derived value at a join
+    /// (`sext16(h)` on one path, 0 on the other: `sext16(b)`, `b` being
+    /// `h` or 0).
+    pub fn invert(self, k: u32) -> Option<u32> {
+        let x = match self {
+            DOp::Sext(w) => k & (u32::MAX >> (32 - w as u32)),
+            DOp::Lsl(n) | DOp::LslExact(n) => k >> n,
+            DOp::Mul(m) if m != 0 && k.is_multiple_of(m) => k / m,
+            _ => return None,
+        };
+        let fits = match self {
+            DOp::LslExact(n) => (x as u64) < 1 << (32 - n),
+            DOp::Sext(w) => (x as u64) < 1 << w,
+            _ => true,
+        };
+        (fits && self.eval(x) == k).then_some(x)
+    }
+
     /// The operation over a set (`n` is 1 to 31 for the shifts).
     pub fn apply(self, d: &Dom) -> Dom {
         if let Some(e) = d.elems() {
@@ -558,14 +586,17 @@ impl DOp {
     }
 }
 
-/// How a value was computed from another: it is `op(sym + off)`. When a
-/// branch narrows `sym`, the value narrows with it, so an index scaled
-/// before its bounds check (`r4 = r6 * 4; cmp r6, #5`) is still bounded.
+/// How a value was computed from another: it is `op(sym + off) + post`.
+/// When a branch narrows `sym`, the value narrows with it, so an index
+/// scaled before its bounds check (`r4 = r6 * 4; cmp r6, #5`) is still
+/// bounded, and so is a table address made from it (`r9 = table + r6 * 4`,
+/// modern GCC's, ahead of a loop that checks r6: the `post`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Derived {
     pub sym: Sym,
     pub off: u32,
     pub op: DOp,
+    pub post: u32,
 }
 
 /// Where a value was read from ROM: `first..=last`, entries of `size`
@@ -628,14 +659,18 @@ impl AbsVal {
         AbsVal::new(Dom::Const(k), Sym::new(CONST, k, 0, 0))
     }
 
-    /// The value plus `k`: same unknown, offset moved.
+    /// The value plus `k`: same unknown, offset moved, and a derivation's
+    /// `post` with it.
     pub fn add_const(&self, k: u32) -> AbsVal {
         AbsVal {
             dom: self.dom.add_const(k),
             sym: self.sym,
             off: self.off.wrapping_add(k),
             src: self.src,
-            derived: None,
+            derived: self.derived.map(|d| Derived {
+                post: d.post.wrapping_add(k),
+                ..d
+            }),
         }
     }
 
@@ -670,7 +705,9 @@ impl AbsVal {
     pub fn assume_derived(&self, sym: Sym, base: &Dom) -> Option<AbsVal> {
         match self.derived {
             Some(d) if d.sym == sym => {
-                let dom = self.dom.intersect(&d.op.apply(&base.add_const(d.off)))?;
+                let dom = self
+                    .dom
+                    .intersect(&d.op.apply(&base.add_const(d.off)).add_const(d.post))?;
                 Some(AbsVal {
                     dom,
                     ..self.clone()
@@ -681,8 +718,9 @@ impl AbsVal {
     }
 
     /// This value's set joined with `o`'s, under name `sym + off`, derived
-    /// as `derived` says. With
-    /// `widen`, a set that changed goes straight to unknown.
+    /// as `derived` says. With `widen`, a set the join grows goes straight
+    /// to unknown (one that already holds `o`'s stays: a loop counter that
+    /// has settled while another location still grows).
     pub fn join_as(
         &self,
         o: &AbsVal,
@@ -693,10 +731,9 @@ impl AbsVal {
     ) -> AbsVal {
         let dom = if self.dom == o.dom {
             self.dom.clone()
-        } else if widen {
-            Dom::Top
         } else {
-            self.dom.join(&o.dom)
+            let j = self.dom.join(&o.dom);
+            if widen && j != self.dom { Dom::Top } else { j }
         };
         AbsVal {
             dom,
