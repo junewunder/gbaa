@@ -246,6 +246,8 @@ pub mod named;
 pub mod narrow;
 pub mod pc_marks;
 pub mod ref_binds;
+pub mod ref_params;
+pub mod ref_results;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -1859,6 +1861,24 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let printed = out.len();
     let never = cannot_exit(&out, &forced);
     no_result(&mut out, &never);
+    // Pointer parameters typed in their signatures (unit
+    // `native/lift-pointer-signatures`): not a stand-in's or a checked
+    // function's, nor one a mod's cut calls (by key or name: the cut's
+    // text is the mod's).
+    let ref_skip: BTreeSet<u32> = forced
+        .iter()
+        .copied()
+        .chain(out.iter().map(|o| o.0).filter(|k| {
+            let name = holes.fn_names.get(k).map(|n| format!("{n}("));
+            holes.cuts.values().any(|c| {
+                c.contains(&format!("f_{k:08x}")) || name.as_ref().is_some_and(|n| c.contains(n))
+            })
+        }))
+        .collect();
+    ref_params::lift(&mut out, &ref_skip);
+    // And results that hold a pointer, after the parameters (one it
+    // typed counts as held).
+    ref_results::lift(&mut out, &ref_skip);
     let plain = |k: u32| plain(&shapes.shaped, &never, k);
     let fns_reached: Vec<u32> = fns.iter().copied().filter(|k| reach.contains(k)).collect();
     let mut table = String::new();
@@ -2707,6 +2727,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .sum(),
     );
     m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
+    m.push("params_rebound", text().map(ref_params::rebound).sum());
     // libgcc's division (native/lift-libgcc-div): the calls printed as
     // `/` or `%` (no bar: it should rise) and those left as calls (barred).
     m.push("libgcc_divisions", soft.divisions);

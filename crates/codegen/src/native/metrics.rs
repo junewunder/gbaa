@@ -155,7 +155,12 @@
 //! declared the `Ref<T>` their accesses make of them, by where `T` came
 //! from (the names files', a heap run's; no bars: they should rise), and
 //! `ref_new_at_use`, the `Ref::<T>::new(…)` and `Ref::<T>::to(…)` still
-//! printed at a use (barred). Field bases (`native/lift-field-base`,
+//! printed at a use (barred). `params_rebound`
+//! (`native/lift-pointer-signatures`, [`super::ref_params`]): the `u32`
+//! parameters still bound again in their body (`let n: Ref<T> =
+//! Ref::new(n);`), not typed in the signature (barred, at 0 on the C
+//! programs).
+//! Field bases (`native/lift-field-base`,
 //! [`super::field_base`]): `field_bases`, the typed accesses through a
 //! register holding a field's address printed on its base's register (no
 //! bar), and `ref_to_at_use`, the `Ref::<T>::to(…)` left (barred).
