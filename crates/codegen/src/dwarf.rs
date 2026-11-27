@@ -444,8 +444,6 @@ pub(crate) fn fits(
     bits == 32 || !shift(32 - bits)
 }
 
-/// Each value's offset from `sp` at the block's start, where it is one:
-/// `sp` read, plus or minus constants.
 /// Where a function's `[locals]` stack slots count from: sp after its
 /// prologue, the lowest sp its entry block `insts` sets, as bytes from
 /// the entry sp (0 where it sets none). `Home::Slot(s)` is then `s` plus
@@ -464,6 +462,8 @@ pub fn prologue_sp(insts: &[analysis::ir::Inst]) -> Option<i32> {
     i32::try_from(low.unwrap_or(0)).ok()
 }
 
+/// Each value's offset from `sp` at the block's start, where it is one:
+/// `sp` read, plus or minus constants.
 fn sp_offsets(insts: &[analysis::ir::Inst]) -> Vec<Option<i64>> {
     let mut off: Vec<Option<i64>> = vec![None; insts.len()];
     let k = |v: ValueId| match insts[v.index()].op {
