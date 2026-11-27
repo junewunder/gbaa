@@ -2246,6 +2246,46 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/getmondata-narrow-calls",
+      "title": "GetMonData's two-argument calls: prove, test, or trust pret?",
+      "context": "Emerald's GetMonData has a two-argument and a three-argument prototype; the third (r2) is read only for some constant fields. Today the lift refuses a prototype on any proven read, so 876 of Emerald's 888 refused prototypes are these calls, printed with a junk third argument. Folds the earlier GetMonData question into the helpers design's call-forms question (docs/native-port-design.md).",
+      "options": [
+        {
+          "key": "a",
+          "label": "Declared by an LLM, checked by tests",
+          "changes": "a private form says which constant fields take the two-argument call; the per-function check reruns each such call with r2 random and needs the same result; loosens 'refuse only on a proven read' to 'a declared form stands until a test shows the read'"
+        },
+        {
+          "key": "b",
+          "label": "Proved by the lifter, per constant field",
+          "changes": "a new path-sensitive summary proves r2 unread for each field; exact, more work, no form file",
+          "drops": ["native/lift-call-forms"],
+          "releases": ["native/lift-proto-two-forms"]
+        },
+        {
+          "key": "c",
+          "label": "Trust pret's two-argument prototype",
+          "changes": "quick; untested, so a wrong one prints a call that drops a live argument",
+          "drops": ["native/lift-call-forms"],
+          "releases": ["native/lift-proto-two-forms"]
+        },
+        {
+          "key": "d",
+          "label": "Never",
+          "changes": "the calls keep the three-argument form with the junk argument",
+          "drops": ["native/lift-call-forms", "native/lift-proto-two-forms"]
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-call-forms", "native/lift-proto-two-forms"],
+      "asked": {
+        "at": "2026-11-27T05:44:34Z",
+        "by": "1c8e564b",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }
