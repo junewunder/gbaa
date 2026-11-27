@@ -463,7 +463,7 @@ stand-ins).
 | Pattern | In | Lift | Provable? | Unit |
 |---|---|---|---|---|
 | A field's address held in a register (`Ref::<T>::to(r, off)`) as its base's field | 8 | 12,035 | yes | `native/lift-field-base` (done: 14,153 to 2,157 at 341e0997, 11,996 field bases; the rest mostly a pointer loaded from memory into an object, a base register reused (as a loop counter), sums with a register index, and blocks after `call_fn`/`CallVia`, which kill every fact) |
-| A value chosen in each arm (`r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }`) as an `if`/`match` value; a break to the function's end as `return` | 13 (10 values, 4 returns) | 7,177 labelled blocks | yes | new: `native/lift-arm-values` |
+| A value chosen in each arm (`r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }`) as an `if`/`match` value; a break to the function's end as `return` | 13 (10 values, 4 returns) | 7,177 labelled blocks | yes | `native/lift-arm-values` (done: 7,195 to 5,433 on fd0c09f6's lift with the holes file, 34 breaks to returns and 1,728 blocks' code an `if`'s other arm; left by where the first break is: deeper in an `if`'s arm 3,320, in another labelled block 1,734, in a `match` arm 364, beside a match's mark 15. Metroid 3,306 to 2,274. A value chosen in each arm stays a register written in each; the arms now join at the `if`) |
 | A chain of `&` with constant masks as one mask (`x & !0x0c001f72`) | 3 | 386 | yes | new: `native/lift-mask-fold` |
 | The task struct lookup (katam's `TaskGetStructPtr`: `flags & 0x10`, IWRAM bytes or EWRAM words) as one helper | 4 | 1,070 | yes (the same expression); its name from the names files | new: `native/lift-task-struct` |
 | A call to libgcc's division (`__divsi3`) as `/` | 1 (and Metroid's FixedInverse) | 218 | yes, where only the quotient is read | `native/lift-libgcc-div` (done: 207 calls to 34 on 47ad536a's lift with the holes file, 173 printed as `/` or `%`; the rest have r2 or r3 live after them, read by a four-register function's return or a `call_fn`; modern GCC's routines wait on `native/summary-paired-guards`) |
@@ -498,7 +498,11 @@ the value, or the label's tail is the epilogue.
 
 **Mask chains.** Clearing flags bit by bit compiles to one `and` each, and
 the lift folds none: KirbyEnterStand's four masks are one,
-`!0x0c001f72`. Constant folding.
+`!0x0c001f72`. Constant folding. Done by `native/lift-mask-fold`: a chain
+whose links are each used once prints as one mask, an `&` mask with more
+bits set than clear as `!` its clear bits; an `&` then an `|` doesn't fold,
+and a link used again (stored, then masked on) stays a `let`. Mirror's
+`& 0x…u32) & 0x` 386 to 1, 1,178 links folded, 0 chains left.
 
 **The task struct lookup.** Every task function starts with the same two
 arms (katam's `TaskGetStructPtr`): 1,070 times in the lift. Recognising the

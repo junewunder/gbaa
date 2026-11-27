@@ -1316,9 +1316,9 @@ them.
   `g` and `Result<_, Exit>` allowed) unless its region leaves the enclosing
   function or loop, assigns caller locals that live on, or takes a place.
   Then it is a macro, and the lifter refuses `kind = "fn"`, naming why.
-  Mirror's lookup is a function once its arms print as a value
-  (`native/lift-arm-values`). Before then it is two labelled blocks
-  writing one register, a macro's case.
+  Mirror's lookup is a function once its arms print as a value; since
+  `native/lift-arm-values` they join at an `if`, each still writing one
+  register, a macro's case.
 
 **Signatures.** Callers print from the callee's shape, and since
 `native/lift-signature-holes` a names-file prototype sets that shape, refused
