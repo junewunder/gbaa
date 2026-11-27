@@ -4556,3 +4556,4 @@
 {"at":"2026-11-27T20:23:57Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: on main"}
 {"at":"2026-11-27T20:24:03Z","actor":"loop","tag":"3f97f4d2","host":"quack","cmd":"claim","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: claimed"}
 {"at":"2026-11-27T20:30:01Z","actor":"loop","tag":"fbd19bea","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: done"}
+{"at":"2026-11-27T20:30:14Z","actor":"session","tag":"manual","host":"quack","cmd":"edit","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: edited (detail, branch)"}
