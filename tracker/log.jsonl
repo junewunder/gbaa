@@ -4417,3 +4417,4 @@
 {"at":"2026-11-27T05:09:31Z","actor":"session","tag":"1c8e564b","host":"quack","cmd":"overseer","text":"overseer c5ca60 on quack attached, replacing fdddd3 on quack"}
 {"at":"2026-11-27T05:10:52Z","actor":"loop","tag":"40bebfcc","host":"quack","cmd":"claim","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: claimed"}
 {"at":"2026-11-27T05:10:59Z","actor":"loop","tag":"e25023a3","host":"quack","cmd":"claim","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: claimed"}
+{"at":"2026-11-27T05:11:03Z","actor":"loop","tag":"4569bc3e","host":"quack","cmd":"claim","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: claimed (picking up after 874a3e9d)"}

@@ -5649,17 +5649,17 @@
       "minMinutes": 120,
       "record": {
         "state": "claimed",
-        "by": "874a3e9d",
-        "session": "874a3e9d-8331-4255-9612-15026d84d306",
+        "by": "4569bc3e",
+        "session": "4569bc3e-9c54-4823-90a4-cc01493e31d0",
         "host": "quack",
-        "pid": 1981823,
-        "start": "101567893",
-        "at": "2026-11-25T05:42:07Z",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T05:11:03Z",
         "branch": "unit/native/lift-returns-past-holes",
-        "beats": true,
-        "handedBack": "2026-11-25T06:12:44Z",
+        "resumed": "874a3e9d",
+        "prevSession": "874a3e9d-8331-4255-9612-15026d84d306",
         "pushed": true,
-        "ended": "2026-11-25T06:12:55Z"
+        "beats": true
       },
       "notes": [
         {
