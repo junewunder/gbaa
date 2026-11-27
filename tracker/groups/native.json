@@ -6086,7 +6086,14 @@
     {
       "id": "native/lift-unread-addr-sums",
       "title": "Typed pointers' addr() sums nothing reads leave the lift",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-27T13:52:18Z",
+          "by": "e3bfa97a",
+          "text": "Metroid's lift at main c35506d4: unread_lets 28 (bar was 0): let vN = p.addr().wrapping_add(k) nothing reads, in SramRead_FromEwram, SramLoad_DemoRamValues, MellowInit, others; typed accesses took their reads. Raised to 28 in Metroid's bars by {unit:native/lift-lent-games}."
+        }
+      ]
     }
   ]
 }
