@@ -4564,3 +4564,4 @@
 {"at":"2026-11-27T20:55:31Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-27T20:55:31Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-aligned-params","text":"Untyped pointer loads drop rotates their callers prove 0: on main"}
 {"at":"2026-11-27T20:55:37Z","actor":"loop","tag":"76d60dff","host":"quack","cmd":"claim","id":"native/lift-frame-exact-irq-reach","text":"Exact sp: IRQ wrappers' reach narrowed on Metroid: claimed"}
+{"at":"2026-11-27T21:02:02Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane1-native-lift-signed-values","text":"new unit: Merge main on quack lane 1"}

@@ -906,6 +906,14 @@
           "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
         }
       ]
+    },
+    {
+      "id": "merge/quack-lane1-native-lift-signed-values",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/lift-signed-values` holds {unit:native/lift-signed-values}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/lift-signed-values"
     }
   ]
 }
