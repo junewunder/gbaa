@@ -5215,32 +5215,30 @@
       "needs": ["native/lift-pointer-registers"],
       "uses": ["heavy"],
       "priority": 83,
-      "record": {
-        "state": "done",
-        "by": "e15e6b46",
-        "at": "2026-11-27T07:31:43Z",
-        "evidence": "ref_to_at_use (new metric) on Mirror 14,153 at main 44b7fc4a -> 2,157 (field_bases 11,996); c-loops agbcc/gcc 2/1 -> 0, every lift-check row 0. just lift-check passed at e52acdcf; Mirror native route units/kirby-mirror-native.toml 3000 frames 0 differences (audio too) on that lift; after merging origin/main, just check passed and lift-metrics 0 over bars. Diff not reviewed by a subagent (loop reviews).",
-        "branch": "unit/native/lift-field-base",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T07:31:43Z",
-          "by": "e15e6b46",
-          "host": "quack",
-          "pid": 2117526,
-          "start": "121114149",
-          "beats": true,
-          "session": "e15e6b46-6045-4e7f-937b-d85ec0a7e582",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-27T07:36:42Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/llm-pilot.md:465: the pilot table's row for this unit gives the wrong result. It says \"done: 14,153 to 4,999 at 44b7fc4a\", but the card's Evidence and the earlier-attempt note (e15e6b46) both say…"
+        },
         {
           "at": "2026-11-27T07:31:45Z",
           "by": "e15e6b46",
           "text": "Mirror's 2,157 ::to( left: mostly a pointer loaded from memory into an object (vN, legit), a base register reused (wiz's r4 as a loop counter), sums with a register index, and blocks after call_fn/CallVia, which kill every fact (conservative)."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-27T07:36:42Z",
+        "findings": "- docs/research/llm-pilot.md:465: the pilot table's row for this unit gives the wrong result. It says \"done: 14,153 to 4,999 at 44b7fc4a\", but the card's Evidence and the earlier-attempt note (e15e6b46) both say ref_to_at_use on Mirror fell from 14,153 to 2,157 (with 11,996 field_bases). 4,999 looks like an intermediate measurement that never got updated. Change the row to the final figure (14,153 to 2,157, naming the commit it was measured on). Also make its account of what is left match the note: mostly a pointer loaded from memory into an object, a base register reused (for example as a loop counter), sums with a register index, and blocks after call_fn/CallVia, which kill every fact. Before writing the number down, re-run `just lift-metrics` on Mirror to confirm it.",
+        "sent": {
+          "evidence": "ref_to_at_use (new metric) on Mirror 14,153 at main 44b7fc4a -> 2,157 (field_bases 11,996); c-loops agbcc/gcc 2/1 -> 0, every lift-check row 0. just lift-check passed at e52acdcf; Mirror native route units/kirby-mirror-native.toml 3000 frames 0 differences (audio too) on that lift; after merging origin/main, just check passed and lift-metrics 0 over bars. Diff not reviewed by a subagent (loop reviews).",
+          "by": "e15e6b46",
+          "host": "quack",
+          "branch": "unit/native/lift-field-base",
+          "change": "02d1723e9922b846b9388c0ac7c716d27d28cf25"
+        }
+      },
       "round": "2026-11-27T05:23:29Z"
     },
     {
