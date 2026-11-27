@@ -5411,7 +5411,11 @@
       "title": "Rogue's lift builds: GenerateFloorLayout's r11 passed",
       "detail": "Split from {unit:native/rogue-imperium-build}, which closed Emerald Rogue's other 17 hard holes (tail-call rule, mods/emerald-rogue/holes.toml). The last: GenerateFloorLayout (0x081b42e1, rogue_adventurepaths.c) takes its struct Coords8 by value in r0, built in r11 with bics/orrs from r11 as it came (as Emerald's GetInitialPlayerAvatarState builds r7), so r0's top 16 bits are its caller's r11 and str r0, [r2, #8] stores them over the room's roomParams. The r11 is passed down untouched through 28 functions from 29 that a ROM word points at (task funcs, callbacks, script commands: CB1_Overworld 0x08159731, ScrCmd_warp 0x081f9ecd and a run of commands to 0x081fa135, Task_Hof_InitTeamSaveData 0x08123ffd, TryDoDiveWarp 0x08102545, …; gbaa-holes' summary hole lists them as 'zeroed through'). Exact needs each such pointer call site named by a [[takes]] (sites = the dispatchers that call them: RunTasks, CallCallbacks, the script command loop, …), so they pass their r11; or an owner decision that the lift may zero padding a struct by value carries (just ask). Done when: Rogue's lift has 0 hard holes and builds (just lift, --mem 4G), its first stop recorded (a unit filed if it isn't 600 of 600), holes-all --against main shows no game's hard holes up, just check passes. Sprint 2026-11-24 (foreman, in the owner's place, told to her): do the exact path, each pointer call site named by a [[takes]]. A site missed stops the program only at run time and GenerateFloorLayout doesn't run in 600 boot frames, so: the evidence lists every ROM word holding each of the 29 keys and the site that calls through it, and a route reaching an adventure start (from units/rogue-newgame.toml if it serves) runs with no stop. It edits mods/emerald-rogue/holes.toml, as {unit:native/gcc-switch-recovery} does: not beside it.",
       "check": "recorded",
-      "needs": ["native/gcc-switch-recovery", "native/lift-const-call-takes"],
+      "needs": [
+        "native/gcc-switch-recovery",
+        "native/lift-const-call-takes",
+        "native/rogue-adventure-route"
+      ],
       "uses": ["heavy"],
       "priority": 60,
       "record": {
