@@ -5565,6 +5565,13 @@
           "lane": "quack/3"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-27T19:52:31Z",
+          "by": "2500f465",
+          "text": "Left on Mirror: loads through loaded pointers and params of pointer-called functions (object callbacks), which caller facts can't cover soundly; next lever: a pointer's C type where names files give it. route-check now counts a planted build's native-stop as caught."
+        }
+      ],
       "round": "2026-11-27T18:02:24Z"
     },
     {
