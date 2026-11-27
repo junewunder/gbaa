@@ -5357,15 +5357,22 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "96b9b809",
-        "session": "96b9b809-b451-4144-bdf3-b48aba50d28b",
-        "host": "quack",
-        "pid": 3999615,
-        "start": "125627294",
-        "at": "2026-11-27T22:25:11Z",
+        "at": "2026-11-27T23:31:42Z",
+        "evidence": "Fix in the check: Spec::lr_left; compare_interp expects the sentinel return address in a popped-lr register the lift gives back as passed (decision recorded). Scout: just fn-check Mirror, llm-pilot.toml, 47 pilot keys incl. KirbyStand/TasksExec/TaskDestroy/TitleScreenMain, --runs 1 --frames 3200 --input the pilot's, interpreter on: 26 runs agree, 0 differ. 193 four-register popped-lr fns: base 4e3ae951^ 38 of 38 differ (34 r0, 4 r1, all the return address), fixed 11 agree, 27 differ only on r1/r2 scratch ({unit:native/fn-check-hole-demand}). just lift-check passed; just check passed after merging main (2cf17a9c).",
         "branch": "unit/native/fn-check-interp-pop-r0",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T23:31:42Z",
+          "by": "96b9b809",
+          "host": "quack",
+          "pid": 3999615,
+          "start": "125627294",
+          "beats": true,
+          "session": "96b9b809-b451-4144-bdf3-b48aba50d28b",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-27T22:25:11Z"
     },
