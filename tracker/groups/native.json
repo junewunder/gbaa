@@ -5958,6 +5958,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-27T22:35:13Z",
+          "by": "3f97f4d2",
+          "text": "Emerald's gbaa-lift alone takes ~22 min and ~10G on quack (GBAA_FOR_WHY on); Metroid's 90 s. Ending oamLength and link playerCount loops load the bound through a pointer a round's store or call may change: alias work, not filed."
+        },
+        {
           "at": "2026-11-24T20:30:01Z",
           "by": "1fbd91b3",
           "text": "From {unit:native/lift-for-ram-bounds}: C loops print as for, no game loop does. Metroid GBAA_FOR_WHY: shape fails first (step not of the counter 198, compare not of counter and bound 108). Emerald: IRQ handler's table calls likely make its writes anywhere (unchecked)."
