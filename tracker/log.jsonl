@@ -4421,3 +4421,4 @@
 {"at":"2026-11-27T05:18:12Z","actor":"loop","tag":"40bebfcc","host":"quack","cmd":"add-unit","id":"native/minish-stop-eeprom-wait","text":"new unit: Minish Cap's lift: past its EEPROM ready wait (frame 4)"}
 {"at":"2026-11-27T05:23:10Z","actor":"loop","tag":"40bebfcc","host":"quack","cmd":"done","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: done"}
 {"at":"2026-11-27T05:23:24Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: on main"}
+{"at":"2026-11-27T05:23:29Z","actor":"loop","tag":"e15e6b46","host":"quack","cmd":"claim","id":"native/lift-field-base","text":"A field address held in a register prints on its base: claimed"}
