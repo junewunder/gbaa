@@ -6242,6 +6242,14 @@
       "check": "recorded",
       "uses": ["heavy"],
       "tags": ["slow-check"]
+    },
+    {
+      "id": "native/lift-frame-exact-stack-code",
+      "title": "Exact sp: code run from the stack passes sp on as known",
+      "detail": "Metroid's IRQ rule holders 0x080051f9 and 0x080052cd (SramCheck, SramWriteUnchecked: report line 'IRQ rule of exact sp'): each copies a routine into its own frame and calls it by value at a frame address (0x08005252, 0x08005326), so its frame escapes and the call has no complete callee set. Say what the stack copy is (a holes-file [[copy]] onto the stack, or the lift calling the ROM original) so exact_sp sees the callee and no stored stack address. Check: just lift-check; Metroid's sp_irq_holders down by 2, native route 0 differences; just check. The IRQ rule goes off only when every holder is fixed ({unit:native/lift-frame-exact-irq-reach}).",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "tags": ["slow-check"]
     }
   ]
 }
