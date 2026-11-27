@@ -10828,6 +10828,19 @@ fn shapes_of(
                         && b.insns.iter().any(|(a, _)| jumps.restores.contains_key(a))
                 })
             });
+            // A stand-in that only forwards to a lifted function is a
+            // jump into it: its guest code never runs.
+            if let Some(k) = holes
+                .standins
+                .get(&f.entry)
+                .and_then(|(code, _)| shape::forwarded_to(code))
+                .filter(|k| all.contains(k))
+            {
+                e = shape::Edges {
+                    jumps: [k].into(),
+                    ..shape::Edges::default()
+                };
+            }
             e
         };
         let proto = |k: u32| {
