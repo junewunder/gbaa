@@ -1414,7 +1414,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   frames), the first differences, each naming the byte (by the names files' field, an integer whole in decimal:
   `IWRAM 0x03001530 gEquipment.maxEnergy (u16): 99 reference, 45 replacement`), and how many
   runs the interpreter (untimed, every Nth: 8) checked against the lift and whether it agreed (`--plant-reference`: the planted store in the
-  lift too, which only it catches). Fails on a difference, or a budget unspent when the program stops (its own line, with the panic) or `--frames` (18000) runs out.
+  lift too, which only it catches; a register of r0-r3 the ROM's code leaves only its return address in, `pop {r0}; bx r0`, which the lift
+  gives back as passed, is the return address in the interpreter: native/fn-check-interp-pop-r0). Fails on a difference, or a budget unspent when the program stops (its own line, with the panic) or `--frames` (18000) runs out.
   A mod's cut is the edit (native/lift-mod-run-edit-report): sides `lift` and `cut`, `differs from its lift (the edit)`, called under budget `the same as its lift`, neither a failure; with only cuts the last line is `N of M cuts differ from their lifts (the edit)` (a stop still exits 1). Stand-ins:
   `holes/fn-check/` (agb), `mods/<game>/fn-check.toml`. ARM returns
   without `bx`: `agb/native-arm-return`. Heavy: builds a generated crate.

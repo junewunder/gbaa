@@ -3775,6 +3775,13 @@ fn fn_check_texts(
             fields.push(&rest[..n]);
         }
     }
+    // A four-register function's r0-r3 that hold only its entry lr on
+    // every return ([`Summary::lr_left`]: agbcc's `pop {r0}; bx r0`): the
+    // lift gives them back as passed, the interpreter its return address.
+    let lr_left = match (shape, sum) {
+        (None, Some(s)) if s.returns => s.lr_left & 0xF,
+        _ => 0,
+    };
     let globals: Vec<String> = fields
         .iter()
         .map(|f| {
@@ -3785,7 +3792,7 @@ fn fn_check_texts(
         .collect();
     writeln!(
         t,
-        "pub static CHECK_{k:08x}: fn_check::Spec = fn_check::Spec {{ key: {k:#010x}, name: \"f_{k:08x}\", params: {params:#x}, results: {results:#x}, sig: {sig:?}, replacement: {replacement:?}, cut: {cut}, globals: &[{}], seed: {}, runs: {}, digest: {} }};",
+        "pub static CHECK_{k:08x}: fn_check::Spec = fn_check::Spec {{ key: {k:#010x}, name: \"f_{k:08x}\", params: {params:#x}, results: {results:#x}, lr_left: {lr_left:#x}, sig: {sig:?}, replacement: {replacement:?}, cut: {cut}, globals: &[{}], seed: {}, runs: {}, digest: {} }};",
         globals.join(", "),
         chk.seed,
         chk.runs,
