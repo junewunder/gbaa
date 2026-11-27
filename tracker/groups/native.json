@@ -5354,7 +5354,19 @@
       "id": "native/fn-check-interp-pop-r0",
       "title": "fn-check: lift and interpreter part on a popped lr in r0",
       "detail": "docs/research/llm-pilot.md, round two. just fn-check on Kirby & the Amazing Mirror (the route's presses, --input) with the interpreter on (every 8th run) fails 12 of 46 functions on the lift itself, each on 'r0 on return': the lift leaves r0 as it came, the interpreter has its sentinel return address (0x08000001), after a pop {r0}; bx r0 in a function whose summary has a hole, so the check compares r0-r3 (KirbyStand, TasksExec, TaskDestroy, TitleScreenMain, ...). The lift prints these returns 'returns {}' and drops the write; the compare reads all four. Decide which is right (the compare's register set under a hole, or the lift's result for a popped lr) and fix it; the pilot ran with --interp-every 0 meanwhile. Done when: the scout (mods/kirby-mirror/llm-pilot.toml's header command, --runs 1 over those keys) agrees with the interpreter, lift-check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "96b9b809",
+        "session": "96b9b809-b451-4144-bdf3-b48aba50d28b",
+        "host": "quack",
+        "pid": 3999615,
+        "start": "125627294",
+        "at": "2026-11-27T22:25:11Z",
+        "branch": "unit/native/fn-check-interp-pop-r0",
+        "beats": true
+      },
+      "round": "2026-11-27T22:25:11Z"
     },
     {
       "id": "native/standin-lift-names",
