@@ -1599,6 +1599,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         codes.iter().map(|c| (&c.ctx, &c.funcs[..], &c.frames)),
         holes,
         psr_fns.wrappers.iter().copied(),
+        settled.map_or(&no_sites, |(f, _, _)| &f.sites),
     );
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
@@ -7266,8 +7267,37 @@ impl FnPrinter<'_, '_> {
         if !matches!(px.plan, Plan::Static(_) | Plan::Rekey(_)) {
             return Err("way in not a jump".into());
         }
+        // The block before the way in, by a plain jump its one way in (not
+        // the entry, which its caller enters too): its guards and loads
+        // hold at the way in ([`bounds::Before`]).
+        let before = (p != self.f.entry)
+            .then(|| {
+                let mut ins = Vec::new();
+                for (&k, b) in &self.f.blocks {
+                    for x in exits(self.ctx, b) {
+                        if self.jumps(&b.block.insts[x.index].op, &x).contains(&p) {
+                            ins.push((k, x));
+                        }
+                    }
+                }
+                match ins[..] {
+                    [(k, ref x)]
+                        if k != p && matches!(x.plan, Plan::Static(_) | Plan::Rekey(_)) =>
+                    {
+                        Some(bounds::Before {
+                            insts: &self.f.blocks[&k].block.insts,
+                            exit: x.index,
+                        })
+                    }
+                    _ => None,
+                }
+            })
+            .flatten();
         let mut why = String::new();
         let kept = 0x1fff & !(written | by_calls);
+        // sp too, where no block of the round sets it (a call gives it
+        // back): a bound in a stack slot ([`FnPrinter::loaded_bound`]).
+        let kept_sp = kept | u16::from(written & 1 << 13 == 0) << 13;
         for r in 0..13 {
             let bit = live::reg(r);
             let set = |i: &Inst| matches!(i.op, Op::SetReg(q, _) if q.index() == r);
@@ -7321,9 +7351,10 @@ impl FnPrinter<'_, '_> {
                     back: back.index,
                     way_in: &self.f.blocks[&p].block.insts,
                     enter: px.index,
-                    kept: kept & !(1 << r),
+                    kept: kept_sp & !(1 << r),
                     test: t,
                     via: &via,
+                    before,
                 });
                 if proven.is_ok() {
                     by = Some(t);
@@ -7339,7 +7370,7 @@ impl FnPrinter<'_, '_> {
             };
             let range = match &proven.load {
                 None => proven.range,
-                Some((li, a)) => match self.loaded_bound(latch, *li, a, &round) {
+                Some((li, a)) => match self.loaded_bound(l, *li, a, &round) {
                     Ok(t) => proven.range.replace(bounds::BOUND, &t),
                     Err(w) => {
                         why += &format!("r{r}: {w}; ");
@@ -7378,18 +7409,43 @@ impl FnPrinter<'_, '_> {
     /// [`writes`]) stores to its bytes: a global's in RAM, kept off them;
     /// one through a pointer, with nothing in RAM stored to, but for the
     /// callees' own frames, the BIOS's words at IWRAM's top and, if none
-    /// of its slots escape, this function's frame.
+    /// of its slots escape, this function's frame. One in a stack local
+    /// the frame prints as a Rust local (none lent, so only this
+    /// function's stores reach it), where no block of the round stores to
+    /// it: the local.
     fn loaded_bound(
         &self,
-        latch: &[Inst],
+        lk: u32,
         li: usize,
         a: &bounds::Sym,
         round: &[u32],
     ) -> Result<String, &'static str> {
+        let latch = &self.f.blocks[&lk].block.insts;
         let Op::Load { width, .. } = latch[li].op else {
             return Err("bound not a load");
         };
         let n = bytes(width);
+        let local = self.frame.and_then(|fr| fr.local_at(&self.locals, lk, li));
+        if a.base == Some(13) || local.is_some() {
+            let fr = self.frame.ok_or("bound in the frame's bytes")?;
+            let (lo, d, ln) = local.ok_or("bound in the frame's bytes")?;
+            if lo.lent || self.holes.shadow_locals {
+                return Err("bound in a lent local");
+            }
+            for k in round {
+                let insts = &self.f.blocks[k].block.insts;
+                for (i, inst) in insts.iter().enumerate() {
+                    if matches!(inst.op, Op::Store { .. })
+                        && fr
+                            .local_at(&self.locals, *k, i)
+                            .is_some_and(|(o, _, _)| o.lo == lo.lo)
+                    {
+                        return Err("bound's local stored to in a round");
+                    }
+                }
+            }
+            return Ok(self.local_read(&lo, d, ln));
+        }
         let mut w = self.ram_writes.irq.clone();
         for k in round {
             match self.ram_writes.by_block.get(&(self.f.entry, *k)) {

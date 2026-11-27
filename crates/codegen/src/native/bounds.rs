@@ -19,13 +19,18 @@
 //!   down), or not equal to it; the bound a constant or a register
 //!   nothing in the loop writes, which may be narrowed too, or a load
 //!   from an address one gives or a constant (unit
-//!   `native/lift-for-ram-bounds`: the way in loads the same bytes and
-//!   stores nothing after, and the printer shows no store in a round
-//!   reaches them, [`Proven::load`]);
+//!   `native/lift-for-ram-bounds`: the way in loads the same bytes, or
+//!   stores them, and stores nothing after, and the printer shows no
+//!   store in a round reaches them, [`Proven::load`]); a bound plus a
+//!   constant too, the same each round;
 //! - the way in leaves the counter its start, and its guards (each exit
 //!   before it not taken, its own taken) prove the range isn't empty: the
 //!   start below the bound (above it counting down), as the same compare
-//!   or one that implies it ([`implies`]);
+//!   or one that implies it ([`implies`]); or the guards of the block
+//!   before it, where that is its one way in ([`Before`]: agbcc's
+//!   preheader of hoisted constants; unit
+//!   `native/lift-for-ram-bounds-games`), the way in's loads that no
+//!   store precedes standing for the block before's of the same bytes;
 //! - no value wraps: a narrow counter's bound fits its width, as a
 //!   constant or a value narrowed as wide; a signed compare's range has
 //!   no negative value, so the `u32` range is the same.
@@ -211,6 +216,23 @@ pub fn eval(insts: &[Inst], regs: &mut [Option<Sym>; 16], end: usize) -> Vec<Opt
                     _ => None,
                 }
             }
+            // A word's or halfword's load at an address proven aligned (a
+            // constant or sp plus one, sp word-aligned as
+            // [`super::aligned`] takes it): its rotate by the address's low
+            // bits is 0, the load itself.
+            Op::Shift {
+                kind: ShiftType::Ror,
+                v,
+                amount,
+            } if let Some(l) = super::aligned::load_shift(insts, v, amount)
+                && let Op::Load { width, addr } = insts[l].op
+                && vals[addr.index()].as_ref().is_some_and(|a| {
+                    let m = if width == Width::Half { 1 } else { 3 };
+                    a.narrow.is_none() && matches!(a.base, None | Some(13)) && a.add & m == 0
+                }) =>
+            {
+                vals[l].clone()
+            }
             Op::Shift { kind, v, amount } => {
                 let c = konst(&vals, amount);
                 match (kind, insts[v.index()].op, c) {
@@ -230,6 +252,27 @@ pub fn eval(insts: &[Inst], regs: &mut [Option<Sym>; 16], end: usize) -> Vec<Opt
             }
             _ => None,
         };
+        // A load of RAM at a constant address, or of the frame, that an
+        // earlier one of the block's read with no store since, nor a CPSR
+        // write (which may let an IRQ in): its value (nothing else runs
+        // inside a block).
+        if let Op::Load { width, addr } = inst.op
+            && let Some(a) = vals[addr.index()].clone()
+            && a.narrow.is_none()
+            && match a.base {
+                None => matches!(a.add >> 24, 0x02 | 0x03),
+                Some(q) => q == 13,
+            }
+            && let Some(j) = (0..i).rev().find(|&j| {
+                clobbers(&insts[j].op)
+                    || matches!(insts[j].op, Op::Load { width: w, addr: x } if w == width
+                        && vals[x.index()].as_ref() == Some(&a))
+            })
+            && matches!(insts[j].op, Op::Load { .. })
+        {
+            vals[i] = vals[j].clone();
+            continue;
+        }
         // Any other pure value, or a load's (fixed once loaded): itself.
         if vals[i].is_none()
             && (super::pure(&inst.op) || matches!(inst.op, Op::Load { .. }))
@@ -386,6 +429,12 @@ pub enum Test<'a> {
     Top(&'a [Inst], usize, bool),
 }
 
+/// Whether `op` may change memory: a store, or a CPSR write (an IRQ the
+/// I bit held may run as it clears).
+fn clobbers(op: &Op) -> bool {
+    matches!(op, Op::Store { .. } | Op::SetCpsr { .. })
+}
+
 /// What [`prove`] needs of a loop, gathered by the printer.
 pub struct Loop<'a> {
     /// The counter's register.
@@ -406,6 +455,18 @@ pub struct Loop<'a> {
     /// the body, `r8 = r9 as u8` in the latch; unit
     /// `native/lift-for-step-via`).
     pub via: &'a [(usize, Sym)],
+    /// The block before the way in, where it is the way in's one way in.
+    pub before: Option<Before<'a>>,
+}
+
+/// The block before a loop's way in ([`Loop::before`]): its insts, and
+/// the index of its exit to the way in. Its guards and loads stand for
+/// the way in's too, where the way in stores nothing (unit
+/// `native/lift-for-ram-bounds-games`).
+#[derive(Clone, Copy)]
+pub struct Before<'a> {
+    pub insts: &'a [Inst],
+    pub exit: usize,
 }
 
 /// A proven range: the index of the latch's step, and the range's Rust;
@@ -432,15 +493,24 @@ fn text(s: &Sym, reg: usize) -> Option<String> {
         return Some(crate::print::word(k, false).to_string());
     }
     let q = s.base?;
+    // Plus a constant: the same each round, so the compare's wrapped sum.
+    let plus = |t: String| match s.add {
+        0 => t,
+        k if (k as i32) < 0 => format!(
+            "{t}.wrapping_sub({})",
+            crate::print::word(k.wrapping_neg(), false)
+        ),
+        k => format!("{t}.wrapping_add({})", crate::print::word(k, false)),
+    };
     // A load's ([`Proven::load`]): narrowed past its width, a cast.
     if q >= 16 {
-        return Some(BOUND.to_string());
+        return Some(plus(BOUND.to_string()));
     }
-    if q == reg || q >= 16 || s.add != 0 {
+    if q == reg {
         return None;
     }
     Some(match s.narrow {
-        None => format!("r{q}"),
+        None => plus(format!("r{q}")),
         Some((8, false)) => format!("(r{q} as u8 as u32)"),
         Some((16, false)) => format!("(r{q} as u16 as u32)"),
         Some(_) => return None,
@@ -560,7 +630,7 @@ pub fn why(l: &Loop) -> Result<Proven, &'static str> {
         Some(q) if q >= 16 && top => {
             return Err("bound loaded at the start");
         }
-        Some(q) if q >= 16 && b.add == 0 => {
+        Some(q) if q >= 16 && (b.add == 0 || b.narrow.is_none()) => {
             let Op::Load { width, addr } = l.latch[q - 16].op else {
                 return Err("bound written in the loop");
             };
@@ -589,7 +659,9 @@ pub fn why(l: &Loop) -> Result<Proven, &'static str> {
             };
             Some((q - 16, width, a, cast))
         }
-        Some(q) if q == r || q >= 16 || l.kept & 1 << q == 0 || b.add != 0 => {
+        Some(q)
+            if q == r || q >= 16 || l.kept & 1 << q == 0 || (b.add != 0 && b.narrow.is_some()) =>
+        {
             return Err("bound written in the loop");
         }
         _ => None,
@@ -604,11 +676,71 @@ pub fn why(l: &Loop) -> Result<Proven, &'static str> {
     // The way in: the counter's start, the bound there, and its guards.
     let mut regs: [Option<Sym>; 16] = std::array::from_fn(|q| Some(Sym::reg(q)));
     let pvals = eval(l.way_in, &mut regs, l.enter);
-    let s = regs[r].clone().ok_or("start unknown")?;
+    let mut s = regs[r].clone().ok_or("start unknown")?;
+    // The block before the way in, where it is its one way in: its
+    // values, and the way in's over them ([`Before`]).
+    let before = l.before.as_ref().map(|bf| {
+        let mut bregs: [Option<Sym>; 16] = std::array::from_fn(|q| Some(Sym::reg(q)));
+        let bvals = eval(bf.insts, &mut bregs, bf.exit);
+        (bf, bvals, bregs)
+    });
+    let way_in_stores = |j: usize| l.way_in[..j].iter().any(|i| clobbers(&i.op));
+    // A load of the block before's (`width` from `a`, over its start's
+    // registers) that no store follows, to its exit or in the way in
+    // before `upto`.
+    let before_load = |width: Width, a: &Sym, upto: usize| -> Option<Sym> {
+        let (bf, bvals, _) = before.as_ref()?;
+        if way_in_stores(upto) {
+            return None;
+        }
+        let k = (0..bf.exit).rev().find(|&k| {
+            matches!(bf.insts[k].op, Op::Load { width: w, addr } if w == width
+                && bvals[addr.index()].as_ref() == Some(a))
+        })?;
+        if bf.insts[k..bf.exit].iter().any(|i| clobbers(&i.op)) {
+            return None;
+        }
+        bvals[k].clone()
+    };
+    // A value of the way in's over the registers at the block before's
+    // start: a register's as that block leaves it; a load no store before
+    // it in the way in follows, as the block before's own load of the
+    // same bytes.
+    let in_before = |x: &Sym| -> Option<Sym> {
+        let (_, _, bregs) = before.as_ref()?;
+        let v = match x.base {
+            None => return Some(x.clone()),
+            Some(q) if q < 16 => bregs[q].clone()?,
+            Some(q) => {
+                let Op::Load { width, addr } = l.way_in[q - 16].op else {
+                    return None;
+                };
+                let a = pvals[addr.index()].clone()?;
+                let a = match a.base {
+                    None => a,
+                    Some(p) if p < 16 && a.narrow.is_none() => bregs[p].clone()?.plus(a.add)?,
+                    Some(_) => return None,
+                };
+                before_load(width, &a, q - 16)?
+            }
+        };
+        let v = match x.narrow {
+            None => v,
+            Some((n, sg)) => v.narrowed(n, sg)?,
+        };
+        if x.narrow.is_some() && x.add != 0 {
+            return None;
+        }
+        v.plus(x.add)
+    };
     let mut at_in: Option<Sym> = None;
-    let bp = match (&load, b.base) {
-        (_, None) => b.clone(),
-        // The way in loads the same bytes, and stores nothing after.
+    // The bound at the way in, and whether it is over the registers at
+    // the block before's start instead.
+    let (bp, bp_before) = match (&load, b.base) {
+        (_, None) => (b.clone(), false),
+        // The way in loads the same bytes, or stores them, and stores
+        // nothing else after; or it stores nothing and the block before
+        // loads them, storing nothing after.
         (Some((_, width, a, _)), _) => {
             let a = match a.base {
                 None => a.clone(),
@@ -617,53 +749,113 @@ pub fn why(l: &Loop) -> Result<Proven, &'static str> {
                     .and_then(|v| v.plus(a.add))
                     .ok_or("bound's address unknown at the way in")?,
             };
-            let j = (0..l.enter)
-                .rev()
-                .find(|&j| {
-                    matches!(l.way_in[j].op, Op::Load { width: w, addr } if w == *width
-                        && pvals[addr.index()].as_ref() == Some(&a))
-                })
-                .ok_or("bound not loaded at the way in")?;
-            if l.way_in[j..l.enter]
-                .iter()
-                .any(|i| matches!(i.op, Op::Store { .. }))
-            {
-                return Err("a store after the way in's load");
-            }
             if a.as_const().is_some() {
                 at_in = Some(a.clone());
             }
-            let v = pvals[j].clone().ok_or("bound unknown at the way in")?;
-            match b.narrow {
-                None => v,
-                Some((n, sg)) => v.narrowed(n, sg).ok_or("bound unknown at the way in")?,
+            let found = (0..l.enter).rev().find(|&j| match l.way_in[j].op {
+                Op::Load { width: w, addr } | Op::Store { width: w, addr, .. } => {
+                    w == *width && pvals[addr.index()].as_ref() == Some(&a)
+                }
+                _ => false,
+            });
+            let narrow_as = |v: Sym| match b.narrow {
+                None => v.plus(b.add),
+                Some((n, sg)) => v.narrowed(n, sg),
+            };
+            match found {
+                Some(j) => {
+                    if l.way_in[j + 1..l.enter].iter().any(|i| clobbers(&i.op)) {
+                        return Err("a store after the way in's load");
+                    }
+                    let v = match l.way_in[j].op {
+                        // The bytes stored: the value, narrowed to them.
+                        Op::Store { value, width, .. } => {
+                            let v = pvals[value.index()].clone();
+                            match width {
+                                Width::Byte => v.and_then(|v| v.narrowed(8, false)),
+                                Width::Half => v.and_then(|v| v.narrowed(16, false)),
+                                Width::Word => v,
+                            }
+                        }
+                        _ => pvals[j].clone(),
+                    };
+                    let v = v.ok_or("bound unknown at the way in")?;
+                    (narrow_as(v).ok_or("bound unknown at the way in")?, false)
+                }
+                None => {
+                    let ab = in_before(&a).ok_or("bound not loaded at the way in")?;
+                    let v = before_load(*width, &ab, l.enter)
+                        .ok_or("bound not loaded at the way in")?;
+                    (narrow_as(v).ok_or("bound unknown at the way in")?, true)
+                }
             }
         }
         (None, Some(q)) => {
             let v = regs[q].clone().ok_or("bound unknown at the way in")?;
-            match b.narrow {
-                None => v,
+            let v = match b.narrow {
+                None => v.plus(b.add).ok_or("bound unknown at the way in")?,
                 Some((n, sg)) => v.narrowed(n, sg).ok_or("bound unknown at the way in")?,
-            }
+            };
+            (v, false)
         }
     };
-    let need = if up {
-        Cmp::new(s.clone(), Rel::Lt, bp.clone(), signed)
-    } else {
-        Cmp::new(bp.clone(), Rel::Lt, s.clone(), signed)
+    let cmp = |s: &Sym, bp: &Sym| {
+        if up {
+            Cmp::new(s.clone(), Rel::Lt, bp.clone(), signed)
+        } else {
+            Cmp::new(bp.clone(), Rel::Lt, s.clone(), signed)
+        }
     };
-    let shown = top
-        || need.decided().unwrap_or_else(|| {
-            let pforms = cond::forms(&l.way_in[..=l.enter]);
-            let mut facts = Vec::new();
-            for (i, inst) in l.way_in[..=l.enter].iter().enumerate() {
-                let (Op::Exit(_), Some(g)) = (inst.op, inst.guard) else {
-                    continue;
-                };
-                facts.extend(Cmp::of(&pforms, &pvals, g, i != l.enter));
-            }
-            facts.iter().any(|f| implies(f, &need))
+    // The guards of a block's exits up to `exit`, the way on: each
+    // before it not taken, its own taken.
+    let guards = |insts: &[Inst], vals: &[Option<Sym>], exit: usize| {
+        let forms = cond::forms(&insts[..=exit]);
+        let mut facts = Vec::new();
+        for (i, inst) in insts[..=exit].iter().enumerate() {
+            let (Op::Exit(_), Some(g)) = (inst.op, inst.guard) else {
+                continue;
+            };
+            facts.extend(Cmp::of(&forms, vals, g, i != exit));
+        }
+        facts
+    };
+    let need = cmp(&s, &bp);
+    let mut shown = top
+        || (!bp_before
+            && need.decided().unwrap_or_else(|| {
+                guards(l.way_in, &pvals, l.enter)
+                    .iter()
+                    .any(|f| implies(f, &need))
+            }));
+    // Else the block before's guards, over its start's registers.
+    let mut bp = bp;
+    if !shown
+        && let Some((bf, bvals, _)) = &before
+        && let Some(sb) = in_before(&s)
+        && let Some(bb) = if bp_before {
+            Some(bp.clone())
+        } else {
+            in_before(&bp)
+        }
+    {
+        let need = cmp(&sb, &bb);
+        shown = need.decided().unwrap_or_else(|| {
+            guards(bf.insts, bvals, bf.exit)
+                .iter()
+                .any(|f| implies(f, &need))
         });
+        if shown {
+            // A constant there is the start's and the bound's.
+            if sb.as_const().is_some() {
+                s = sb;
+            }
+            if bb.as_const().is_some() || bp_before {
+                bp = bb;
+            }
+        }
+    } else if bp_before {
+        return Err("range not shown non-empty");
+    }
     if !shown {
         return Err("range not shown non-empty");
     }
@@ -900,6 +1092,7 @@ mod tests {
             kept: 1 << 5,
             test: Test::Back,
             via: &[],
+            before: None,
         };
         assert_eq!(
             prove(&lp),
@@ -936,6 +1129,43 @@ mod tests {
             .map(|p| p.range),
             Some("0..r5".into())
         );
+        // The guard in the block before a way in that only jumps on
+        // (agbcc's preheader of hoisted constants, unit
+        // native/lift-for-ram-bounds-games): its facts hold there.
+        let jump = vec![
+            i(Op::Const(7)),
+            i(Op::SetReg(Reg(6), v(0))),
+            i(Op::Const(0x0800_0100)),
+            i(Op::Exit(Exit::Jump(v(2)))),
+        ];
+        let after = Loop {
+            way_in: &jump,
+            enter: 3,
+            ..lp
+        };
+        assert_eq!(prove(&after), None);
+        assert_eq!(
+            prove(&Loop {
+                before: Some(Before {
+                    insts: &w,
+                    exit: 17
+                }),
+                ..after
+            })
+            .map(|p| (p.range, p.start)),
+            Some(("0..r5".into(), Some(0)))
+        );
+        // Its guard on the other way out: nothing.
+        assert_eq!(
+            prove(&Loop {
+                before: Some(Before {
+                    insts: &w,
+                    exit: 15
+                }),
+                ..after
+            }),
+            None
+        );
         // r5 written in the loop: not a bound.
         assert_eq!(prove(&Loop { kept: 0, ..lp }), None);
         let l8 = latch(true);
@@ -967,6 +1197,7 @@ mod tests {
             kept: 1 << 5,
             test: Test::Exit(16),
             via: &[],
+            before: None,
         };
         assert_eq!(prove(&lp).map(|p| p.range), Some("0..r5".into()));
         // As the jump back's own guard, it is the wrong way round.
@@ -1057,6 +1288,7 @@ mod tests {
             kept: 1 << 5,
             test: Test::Top(&out, 10, true),
             via: &[],
+            before: None,
         };
         let clamped = Some("0..(r5 as i32).max(0) as u32".to_string());
         assert_eq!(prove(&lp).map(|p| p.range), clamped);
@@ -1106,6 +1338,7 @@ mod tests {
             kept: 1 << 5,
             test: Test::Back,
             via: &[],
+            before: None,
         };
         assert_eq!(prove(&lp), None);
         let via = [(6, one)];
@@ -1174,6 +1407,7 @@ mod tests {
             kept: 0,
             test: Test::Back,
             via: &[],
+            before: None,
         };
         assert_eq!(
             prove(&lp),
@@ -1199,7 +1433,7 @@ mod tests {
         let mut stored = w.clone();
         stored[3] = i(Op::Store {
             width: Width::Byte,
-            addr: v(0),
+            addr: v(4),
             value: v(2),
         });
         assert_eq!(
@@ -1208,6 +1442,51 @@ mod tests {
                 ..lp
             }),
             Err("a store after the way in's load")
+        );
+        // One to its bytes gives the bound (unit
+        // native/lift-for-ram-bounds-games): here the byte loaded.
+        let mut kept = w.clone();
+        kept.insert(
+            4,
+            i(Op::Store {
+                width: Width::Byte,
+                addr: v(0),
+                value: v(1),
+            }),
+        );
+        let kept: Vec<Inst> = kept
+            .into_iter()
+            .map(|mut x| {
+                let up = |y: ValueId| if y.0 >= 4 { v(y.0 + 1) } else { y };
+                x.op = match x.op {
+                    Op::Adc { a, b, c } => Op::Adc {
+                        a: up(a),
+                        b: up(b),
+                        c: up(c),
+                    },
+                    Op::IsZero(y) => Op::IsZero(up(y)),
+                    Op::TestBit { v: y, n } => Op::TestBit { v: up(y), n },
+                    Op::AdcOverflow { a, b, c } => Op::AdcOverflow {
+                        a: up(a),
+                        b: up(b),
+                        c: up(c),
+                    },
+                    Op::BBin(o, a, b) => Op::BBin(o, up(a), up(b)),
+                    Op::Exit(Exit::Jump(y)) => Op::Exit(Exit::Jump(up(y))),
+                    op => op,
+                };
+                x.guard = x.guard.map(up);
+                x
+            })
+            .collect();
+        assert_eq!(
+            why(&Loop {
+                way_in: &kept,
+                enter: 16,
+                ..lp
+            })
+            .map(|p| p.range),
+            Ok(format!("0..{BOUND}"))
         );
     }
 
@@ -1255,5 +1534,64 @@ mod tests {
             Sym::konst(0xff).narrowed(8, true),
             Some(Sym::konst(u32::MAX))
         );
+    }
+
+    /// A second load of a RAM constant's bytes with no store between is
+    /// the first's value; a word's rotate by an aligned address's low
+    /// bits is the load (unit native/lift-for-ram-bounds-games).
+    #[test]
+    fn loads_repeated_and_aligned_rotates() {
+        let w = armv4t::sem::Width::Word;
+        let b = vec![
+            i(Op::Const(0x0300_0010)),
+            i(Op::Load {
+                width: armv4t::sem::Width::Byte,
+                addr: v(0),
+            }),
+            i(Op::Load {
+                width: armv4t::sem::Width::Byte,
+                addr: v(0),
+            }),
+            i(Op::Store {
+                width: w,
+                addr: v(0),
+                value: v(1),
+            }),
+            i(Op::Load {
+                width: armv4t::sem::Width::Byte,
+                addr: v(0),
+            }),
+            // ldr from sp + 4: and 3, lsl 3, ror.
+            i(Op::GetReg(Reg(13))),
+            i(Op::Const(4)),
+            i(Op::Bin(BinOp::Add, v(5), v(6))),
+            i(Op::Load {
+                width: w,
+                addr: v(7),
+            }),
+            i(Op::Const(3)),
+            i(Op::Bin(BinOp::And, v(7), v(9))),
+            i(Op::Shift {
+                kind: ShiftType::Lsl,
+                v: v(10),
+                amount: v(9),
+            }),
+            i(Op::Shift {
+                kind: ShiftType::Ror,
+                v: v(8),
+                amount: v(11),
+            }),
+        ];
+        let mut regs: [Option<Sym>; 16] = std::array::from_fn(|q| Some(Sym::reg(q)));
+        let vals = eval(&b, &mut regs, b.len());
+        assert_eq!(vals[2], vals[1]);
+        assert_ne!(vals[4], vals[1]);
+        assert_eq!(vals[12], vals[8]);
+        assert_eq!(vals[8].as_ref().and_then(|s| s.base), Some(16 + 8));
+        // At sp + 2, it may rotate: not the load.
+        let mut odd = b.clone();
+        odd[6] = i(Op::Const(2));
+        let vals = eval(&odd, &mut regs, odd.len());
+        assert_ne!(vals[12], vals[8]);
     }
 }

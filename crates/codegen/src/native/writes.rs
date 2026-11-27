@@ -7,7 +7,8 @@
 //! stores and those Recovery's value sets bound reach, or `any`: a store
 //! it can't place, a call through a pointer, a BIOS call that writes
 //! memory (all but the arithmetic ones), an I/O store that may start a
-//! DMA. Its callees' (direct calls, tail jumps and falls into another
+//! DMA. A call through a pointer whose callee set the function flow
+//! gives complete calls those (unit `native/lift-for-ram-bounds-games`). Its callees' (direct calls, tail jumps and falls into another
 //! function) are joined in, to a fixed point; a stand-in's or one outside
 //! the context is `any`. Not counted:
 //! - a store to its own stack frame (sp-relative, below its entry sp):
@@ -296,6 +297,7 @@ fn local(
     holes: &Holes,
     f: &Func,
     frame: Option<&super::Frame>,
+    sites: &BTreeMap<u32, super::fnref::Site>,
 ) -> (BTreeMap<u32, Writes>, Vec<u32>) {
     let mut by_block = BTreeMap::new();
     let mut callees = Vec::new();
@@ -439,7 +441,17 @@ fn local(
                     }
                     w.any = true;
                 }
-                Plan::CallVia { .. } | Plan::Dynamic { ret: Some(_), .. } => w.any = true,
+                // A call through a pointer: its callees where the function
+                // flow's set is complete (unit
+                // `native/lift-for-ram-bounds-games`), else anywhere.
+                Plan::CallVia { .. } | Plan::Dynamic { ret: Some(_), .. } => {
+                    match sites.get(&x.at) {
+                        Some(s) if s.complete && !s.tail => {
+                            callees.extend(s.callees.iter().copied())
+                        }
+                        _ => w.any = true,
+                    }
+                }
                 Plan::Dynamic {
                     ret: None, target, ..
                 } => {
@@ -475,17 +487,20 @@ impl RamWrites {
 }
 
 /// [`RamWrites`] over every code context (`codes`: each one's functions
-/// and frames), the IRQ handlers' `irq` entries.
+/// and frames), the IRQ handlers' `irq` entries; `sites` the settled
+/// function flow's callee sets of the calls through a pointer
+/// ([`super::fnref::Flow::sites`]), none where it didn't run or settle.
 pub fn ram_writes<'a>(
     codes: impl IntoIterator<Item = (&'a Ctx<'a>, &'a [Func], &'a BTreeMap<u32, super::Frame>)>,
     holes: &Holes,
     irq: impl IntoIterator<Item = u32>,
+    sites: &BTreeMap<u32, super::fnref::Site>,
 ) -> RamWrites {
     let mut by_block = BTreeMap::new();
     let mut own: BTreeMap<u32, (Writes, Vec<u32>)> = BTreeMap::new();
     for (ctx, funcs, frames) in codes {
         for f in funcs {
-            let (bs, cs) = local(ctx, holes, f, frames.get(&f.entry));
+            let (bs, cs) = local(ctx, holes, f, frames.get(&f.entry), sites);
             let mut w = Writes::default();
             for (k, b) in bs {
                 w.join(&b);

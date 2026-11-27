@@ -127,7 +127,9 @@
 //! of (unit `native/lift-for-bounds`), or tested at its start, which may
 //! leave before the first round (unit `native/lift-for-top-tested`); the
 //! bound may be loaded from RAM each round where nothing in a round stores
-//! to it (unit `native/lift-for-ram-bounds`). The report counts both
+//! to it (unit `native/lift-for-ram-bounds`), or from a stack local, its
+//! range shown by a guard in the block before the way in too (unit
+//! `native/lift-for-ram-bounds-games`). The report counts both
 //! (`loops_for`, `loops_not_for`). A measure by hand too. `GBAA_FOR_WHY=1`
 //! prints to stderr why each loop of several blocks stays a `loop`, and
 //! each one's range that doesn't.
