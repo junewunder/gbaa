@@ -5550,15 +5550,22 @@
       "uses": ["heavy"],
       "priority": 78,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "099043e1",
-        "session": "099043e1-82fa-435a-9c0d-4e225afd9d61",
-        "host": "quack",
-        "pid": 2118754,
-        "start": "121115208",
-        "at": "2026-11-27T09:38:54Z",
+        "at": "2026-11-27T10:44:47Z",
+        "evidence": "Struct return's unread hidden pointer now borrowed (the lend env takes the shapes: params known, a return escapes only in what the shape gives back), and an echo calls by Regs only where read. c-chain-agbcc 'lent slots' before: 0 escaping slots in 0 functions (0 of 14 borrowed), 0 sp-relative accesses, 0 host locals, 0 Lent accesses; after: 10 slots in 2 functions (5 of 14), 13 sp-relative, 2 host locals, 16 Lent accesses; sp_accesses_escaping_slot bar 35 -> 20 (30 bars lowered in all). Other C rows' lines unchanged (c-chain-gcc 4 of 15, c-lent 1 of 1). Null checks and indexes: no C row's lent pointer meets one (GBAA_LEND_DEBUG survey), so they went to {unit:native/lift-lend-null-index}. just lift-check passed (all programs, 0 differences, every planted fault caught, incl. a new --plant-lent=0x080003d6 on c-chain-agbcc, caught at frame 28); after merging main, lift-check on c-div/c-chain rows passed; just check passed twice (exit 0).",
         "branch": "unit/native/lift-lend-wider",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T10:44:47Z",
+          "by": "099043e1",
+          "host": "quack",
+          "pid": 2118754,
+          "start": "121115208",
+          "beats": true,
+          "session": "099043e1-82fa-435a-9c0d-4e225afd9d61",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-27T09:38:54Z"
     },
