@@ -1259,12 +1259,6 @@ doc comments of `frame::lend` and `native::code_lends`).
   memory: no sp, no `bank_sp` (`native/lift-frame-gone`'s rule, with lent
   slots counted as locals; `FnPrinter::needs_bank`). A slot whose address reaches RAM keeps the
   guest stack, sp exact where it must be (`native/lift-frame-exact-narrow`).
-  Where the IRQ handlers need it (`exact_sp`'s IRQ rule) every store that
-  may run them keeps it too; the report names each function the IRQ
-  wrappers reach that needs it itself, and the count, `sp_irq_holders`,
-  is barred (`native/lift-frame-exact-irq-reach`: the wrappers' return
-  past their `msr` proven, the handler table read from ROM, a stand-in's
-  `sp_to`; at 0 the rule is off).
 - **Checked by** the native check as today's locals are: it compares RAM,
   and a lent local's bytes reach RAM only through code the lift prints.
   `--shadow-locals` keeps a lent local in the frame's bytes too (the

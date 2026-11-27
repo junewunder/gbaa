@@ -14305,12 +14305,14 @@ why = "a table"
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
         assert!(Holes::parse("[[standin]]\nwhy = \"no entry\"\n").is_err());
         // What a stand-in passes sp on to (native/lift-frame-exact-irq-reach).
-        let h = Holes::parse(
+        let hs = Holes::parse(
             "[[standin]]\nentry = 0x030016c5\nwhy = \"w\"\ncode = \"\"\nsp_to = [0x08057f7d]\n",
         )
         .unwrap();
-        assert_eq!(h.sp_to.get(&0x030016c5), Some(&vec![0x08057f7d]));
-        assert!(Holes::parse("[[standin]]\nentry = 1\nwhy = \"w\"\ncode = \"\"\nsp_to = 2\n").is_err());
+        assert_eq!(hs.sp_to.get(&0x030016c5), Some(&vec![0x08057f7d]));
+        assert!(
+            Holes::parse("[[standin]]\nentry = 1\nwhy = \"w\"\ncode = \"\"\nsp_to = 2\n").is_err()
+        );
         assert_eq!(h.skip_fn_flow, None);
         let h = Holes::parse("skip_fn_flow = \"too slow\"\n").unwrap();
         assert_eq!(h.skip_fn_flow.as_deref(), Some("too slow"));
