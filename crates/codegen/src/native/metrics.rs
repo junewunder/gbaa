@@ -160,6 +160,12 @@
 //! parameters still bound again in their body (`let n: Ref<T> =
 //! Ref::new(n);`), not typed in the signature (barred, at 0 on the C
 //! programs).
+//! Proven pointer types (`native/lift-proven-pointer-types`,
+//! [`super::proven_types`]): `proven_types_agree`, `_disagree` and
+//! `_unproven`, the prototypes' struct and union pointer parameters whose
+//! accesses the lift proves with no names file's type are all fields of
+//! DWARF's type, aren't, or are none (no bars: a measurement; only where
+//! the names files give types).
 //! Field bases (`native/lift-field-base`,
 //! [`super::field_base`]): `field_bases`, the typed accesses through a
 //! register holding a field's address printed on its base's register (no
@@ -410,6 +416,9 @@ pub const UNBARRED: &[&str] = &[
     "lets_named",
     "refs_bound_named",
     "refs_bound_proven",
+    "proven_types_agree",
+    "proven_types_disagree",
+    "proven_types_unproven",
     "field_bases",
     "libgcc_divisions",
 ];
