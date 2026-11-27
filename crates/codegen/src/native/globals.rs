@@ -794,8 +794,13 @@ impl Obj {
     /// A store of `width` bytes of `v` through the pointer `a`, as a
     /// statement.
     pub fn store(&self, a: &str, width: u32, v: &str) -> String {
+        self.store_fitting(a, width, v, false)
+    }
+
+    /// [`Obj::store`], `fits` as [`store_fitting`]'s.
+    pub fn store_fitting(&self, a: &str, width: u32, v: &str, fits: bool) -> String {
         match self {
-            Obj::Pin(p, off) => format!("pin({a}, {off:#x}); {}", store(p, width, v)),
+            Obj::Pin(p, off) => format!("pin({a}, {off:#x}); {}", store_fitting(p, width, v, fits)),
             Obj::Index { elem: 4, .. } => format!("{} = {v};", self.elem(a)),
             Obj::Index { elem, .. } => format!("{} = {v} as u{};", self.elem(a), elem * 8),
         }
@@ -850,6 +855,13 @@ pub fn load(p: &Place, width: u32) -> String {
 /// A store of `width` bytes of the `u32` expression `v` to `p`, as a
 /// statement.
 pub fn store(p: &Place, width: u32, v: &str) -> String {
+    store_fitting(p, width, v, false)
+}
+
+/// [`store`], where `fits` says `v` already fits in `width` bytes (an `&`
+/// with a mask no wider; native/lift-mask-fold), so a store into part of
+/// an element doesn't mask it again.
+pub fn store_fitting(p: &Place, width: u32, v: &str, fits: bool) -> String {
     if !p.parts.is_empty() {
         let mut s = format!("{{ let pv: u32 = {v};");
         let mut at = 0;
@@ -876,6 +888,8 @@ pub fn store(p: &Place, width: u32, v: &str) -> String {
     let (s, m) = (p.shift, mask(width));
     let keep = !(m << s) & mask(p.elem);
     match s {
+        0 if fits => format!("{0} = {0} & {keep:#x} | {v} as {t};", p.place),
+        _ if fits => format!("{0} = {0} & {keep:#x} | ({v} << {s}) as {t};", p.place),
         0 => format!("{0} = {0} & {keep:#x} | ({v} & {m:#x}) as {t};", p.place),
         _ => format!(
             "{0} = {0} & {keep:#x} | (({v} & {m:#x}) << {s}) as {t};",
@@ -900,7 +914,7 @@ pub fn store_const(p: &Place, width: u32, c: u32) -> Option<String> {
     })
 }
 
-fn mask(width: u32) -> u32 {
+pub(super) fn mask(width: u32) -> u32 {
     if width == 4 {
         u32::MAX
     } else {

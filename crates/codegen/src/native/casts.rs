@@ -210,12 +210,21 @@ fn sign_clear(x: &str) -> bool {
     if !matches!(b.op, syn::BinOp::BitAnd(_)) {
         return false;
     }
-    let small = |e: &syn::Expr| match e {
+    let lit = |e: &syn::Expr| match e {
         syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Int(i),
             ..
-        }) => i.base10_parse::<u32>().is_ok_and(|k| k < 0x8000_0000),
-        _ => false,
+        }) => i.base10_parse::<u32>().ok(),
+        _ => None,
+    };
+    // A mask as it is, or as `!` its clear bits (native/lift-mask-fold).
+    let small = |e: &syn::Expr| match e {
+        syn::Expr::Unary(syn::ExprUnary {
+            op: syn::UnOp::Not(_),
+            expr,
+            ..
+        }) => lit(expr).is_some_and(|k| k >= 0x8000_0000),
+        e => lit(e).is_some_and(|k| k < 0x8000_0000),
     };
     small(&b.left) || small(&b.right)
 }
@@ -292,6 +301,14 @@ mod tests {
             "((v1 as i16 as i32) >> 16) as u32"
         );
         assert_eq!(asr("(v8 & 0xf00u32)", 8), "(v8 & 0xf00u32) >> 8");
+        assert_eq!(
+            asr("(v8 & !0x80000000u32)", 8),
+            "(v8 & !0x80000000u32) >> 8"
+        );
+        assert_eq!(
+            asr("(v8 & !0x1u32)", 8),
+            "(((v8 & !0x1u32) as i32) >> 8) as u32"
+        );
         assert_eq!(
             asr("(v8 & 0x80000000u32)", 8),
             "(((v8 & 0x80000000u32) as i32) >> 8) as u32"
