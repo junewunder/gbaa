@@ -4522,3 +4522,4 @@
 {"at":"2026-11-27T14:41:32Z","actor":"loop","tag":"31b3c691","host":"quack","cmd":"done","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: done, checked by verifier-3e9a71c4"}
 {"at":"2026-11-27T14:41:45Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-fnref-dense-keys-left","text":"new unit: Merge main on quack lane 3"}
 {"at":"2026-11-27T14:41:48Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
+{"at":"2026-11-27T17:42:29Z","actor":"session","tag":"1d676ccd","host":"quack","cmd":"overseer","text":"overseer d3f284 on quack attached, replacing c5ca60 on quack"}
