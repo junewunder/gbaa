@@ -2195,7 +2195,12 @@
         "by": "485d4a85",
         "host": "quack"
       },
-      "answer": null
+      "answer": null,
+      "withdrawn": {
+        "at": "2026-11-27T05:43:56Z",
+        "by": "1c8e564b",
+        "why": "Re-asked with GetMonData's prototype unit folded in, its prove and trust-pret options kept"
+      }
     }
   ]
 }
