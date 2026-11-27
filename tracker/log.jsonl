@@ -4486,3 +4486,4 @@
 {"at":"2026-11-27T10:44:47Z","actor":"loop","tag":"099043e1","host":"quack","cmd":"done","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: done"}
 {"at":"2026-11-27T10:53:08Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-27T10:53:14Z","actor":"loop","tag":"d794da8a","host":"quack","cmd":"claim","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: claimed"}
+{"at":"2026-11-27T11:09:41Z","actor":"loop","tag":"f30e1648","host":"quack","cmd":"decide","text":"decided: A proven pointer type agrees with whole fields side by side","d":"d/a-proven-pointer-type-agrees-with-whole-fields"}

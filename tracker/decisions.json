@@ -1650,6 +1650,14 @@
       "at": "2026-11-27T06:32:35Z",
       "scope": ["native/lift-lent-frameless"],
       "until": "2026-11-27T21:59:59Z"
+    },
+    {
+      "id": "d/a-proven-pointer-type-agrees-with-whole-fields",
+      "title": "A proven pointer type agrees with whole fields side by side",
+      "why": "From Pointer types the lift proves, scored against DWARF ({unit:native/lift-proven-pointer-types}): 'agrees' counts an access that is several whole fields side by side (agbcc's word store over four u8 fields, a word-wise struct copy) as a field, besides exact fields and bitfield bytes; strictly, Metroid's SamusData failed on its joined stores alone. Carried accesses go callee to caller, then caller to callee at offset 0, never up again after down: a copy or fill taking any pointer had merged every caller's type (Metroid 302/137 to 428/7 agree/disagree). Parameters scored: prototype pointers to a struct or union.",
+      "by": "f30e1648",
+      "at": "2026-11-27T11:09:41Z",
+      "scope": ["native/lift-proven-pointer-types"]
     }
   ]
 }
