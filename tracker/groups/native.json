@@ -5216,15 +5216,22 @@
       "uses": ["heavy"],
       "priority": 83,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e15e6b46",
-        "session": "e15e6b46-6045-4e7f-937b-d85ec0a7e582",
-        "host": "quack",
-        "pid": 2117526,
-        "start": "121114149",
-        "at": "2026-11-27T05:23:29Z",
+        "at": "2026-11-27T07:31:43Z",
+        "evidence": "ref_to_at_use (new metric) on Mirror 14,153 at main 44b7fc4a -> 2,157 (field_bases 11,996); c-loops agbcc/gcc 2/1 -> 0, every lift-check row 0. just lift-check passed at e52acdcf; Mirror native route units/kirby-mirror-native.toml 3000 frames 0 differences (audio too) on that lift; after merging origin/main, just check passed and lift-metrics 0 over bars. Diff not reviewed by a subagent (loop reviews).",
         "branch": "unit/native/lift-field-base",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T07:31:43Z",
+          "by": "e15e6b46",
+          "host": "quack",
+          "pid": 2117526,
+          "start": "121114149",
+          "beats": true,
+          "session": "e15e6b46-6045-4e7f-937b-d85ec0a7e582",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-27T05:23:29Z"
     },
