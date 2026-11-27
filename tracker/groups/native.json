@@ -5384,17 +5384,17 @@
       "priority": 75,
       "record": {
         "state": "claimed",
-        "by": "b8f4fb73",
-        "session": "b8f4fb73-99d6-4484-bd81-775b5de4bd4e",
+        "by": "6b36b822",
+        "session": "6b36b822-c156-474e-9d49-ae006e3ac667",
         "host": "quack",
         "pid": 2117526,
         "start": "121114149",
-        "at": "2026-11-27T11:44:27Z",
+        "at": "2026-11-27T13:51:03Z",
         "branch": "unit/native/gcc-switch-recovery",
-        "beats": true,
-        "handedBack": "2026-11-27T13:50:35Z",
+        "resumed": "b8f4fb73",
+        "prevSession": "b8f4fb73-99d6-4484-bd81-775b5de4bd4e",
         "pushed": true,
-        "ended": "2026-11-27T13:50:56Z"
+        "beats": true
       },
       "notes": [
         {
