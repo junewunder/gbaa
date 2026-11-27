@@ -4459,3 +4459,4 @@
 {"at":"2026-11-27T07:38:40Z","actor":"loop","tag":"f259740d","host":"quack","cmd":"claim","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: claimed"}
 {"at":"2026-11-27T07:39:56Z","actor":"loop","tag":"e08f2de2","host":"quack","cmd":"done","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: done"}
 {"at":"2026-11-27T07:45:07Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: on main"}
+{"at":"2026-11-27T07:45:11Z","actor":"loop","tag":"bec3cb4c","host":"quack","cmd":"claim","id":"native/lift-proto-r3-align","text":"GCC's push of r3 to align the stack reads no parameter: claimed"}

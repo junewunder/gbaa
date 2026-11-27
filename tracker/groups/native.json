@@ -5727,7 +5727,19 @@
       "detail": "From {unit:native/lift-signature-holes}: GCC's prologue pushes r3 only to keep sp 8-byte aligned, and its pop puts it back; the summaries count the push as a read of r3 (Cause::Reads), so a prototype that doesn't pass r3 is refused (c-fnptr-gcc's cb_objects and main_cb_run, c-loops-gcc's draw_global and draw_row: proto_shapes_refused 2 each). A pushed register whose slot only its own pop reads, and that the function doesn't return, is no read. Check: those rows' proto_shapes_refused 2 -> 0, bars lowered; just lift-check passes; just check passes. Sprint 2026-11-24: c-loops-gcc's proto_shapes_refused is 4 now, not 2 (heal_rows): c-fnptr-gcc 2 to 0, c-loops-gcc 4 to 0, and if the two newer ones aren't r3 pushes say what they are. The dead save slot is also what holds {unit:native/fnref-dense-keys-left} (main_cb_run's pushed r3).",
       "check": "recorded",
       "uses": ["heavy"],
-      "priority": 81
+      "priority": 81,
+      "record": {
+        "state": "claimed",
+        "by": "bec3cb4c",
+        "session": "bec3cb4c-6cb6-4fe8-9825-96f4c2d0acc7",
+        "host": "quack",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T07:45:11Z",
+        "branch": "unit/native/lift-proto-r3-align",
+        "beats": true
+      },
+      "round": "2026-11-27T07:45:11Z"
     },
     {
       "id": "native/lift-proto-two-forms",
