@@ -4577,3 +4577,4 @@
 {"at":"2026-11-27T22:03:21Z","actor":"loop","tag":"691120b3","host":"quack","cmd":"review","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: waiting for a second check"}
 {"at":"2026-11-27T22:03:28Z","actor":"loop","tag":"691120b3","host":"quack","cmd":"decide","text":"decided: native-entry-jump casts bar 323 to 324 at a main merge","d":"d/native-entry-jump-casts-bar-323-to-324-at-a"}
 {"at":"2026-11-27T22:18:32Z","actor":"loop","tag":"3f97f4d2","host":"quack","cmd":"add-unit","id":"native/lift-for-irq-mode-stack","text":"new unit: Emerald's IRQ stores placed: its System-mode push"}
+{"at":"2026-11-27T22:25:05Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: back to ready: the loop's review asked for fixes"}

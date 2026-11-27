@@ -5200,26 +5200,12 @@
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
       "priority": 74,
-      "record": {
-        "state": "review",
-        "by": "691120b3",
-        "at": "2026-11-27T22:03:21Z",
-        "evidence": "Review fix done: just lift-check passed to the end on 136d51ab and on 1bac55f5 (each later main merged; native-entry-jump bars took main's side, --lower-bars lowered 3 each time); just check passed on 038013a9 and 1bac55f5. Metroid on 1bac55f5's lifter: fn_keys_left 152 (was 331), fn_words_not_proven 125, dense build passes route-check --native --dense on units/metroid-native.toml, 2700 frames, 0 differences. c-fnptr-gcc fn_keys_left 0; c-list-agbcc/gcc 4 and 4, held by kActs read back through gPool's one object cell, filed as {unit:native/fnref-struct-fields}. Final head adafa5ae merges main's lift-signed-values: casts on native-entry-jump 324 against main's 323, raised with cause in the toml; lift-metrics 0 over, 0 under there; full lift-check not rerun on adafa5ae.",
-        "branch": "unit/native/fnref-dense-keys-left",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T22:03:21Z",
-          "by": "691120b3",
-          "host": "quack",
-          "pid": 3999615,
-          "start": "125627294",
-          "beats": true,
-          "session": "691120b3-6674-473f-ba9f-07d85c799410",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-27T22:25:05Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - The card's 'Done when' says `just lift-check` must be green on the tree that lands, but the head that would land (adafa5ae) was never checked. The Evidence says so itself: \"full lift-check not rerun on adafa5a…"
+        },
         {
           "at": "2026-11-27T22:03:19Z",
           "by": "691120b3",
@@ -5229,17 +5215,19 @@
           "at": "2026-11-27T18:02:47Z",
           "by": "1d676ccd",
           "text": "Review is right: lift-check ran on 016bdd65, not on 136d51ab, which merges in Recovery's change. Run just lift-check to the end on the current head as a long job; rebar with old/new/cause if they interact; rerun Metroid dense + route-check if fn_keys_left moves."
-        },
-        {
-          "at": "2026-11-27T14:09:25Z",
-          "by": "manual",
-          "text": "The loop's review asked for fixes before landing (all on the card): - The card requires lift-check to be green, but it was never completed on the tree that would land. The branch includes merge 0ce35c2c, which brought in main's lifter changes ({unit:native/lift-lend-wider}), and…"
         }
       ],
       "review": {
-        "fixes": 0,
-        "at": "2026-11-27T18:02:19Z",
-        "findings": "- The card requires `just lift-check` to pass on the tree that lands, and the head that would land (136d51ab) has not been checked. The Evidence says lift-check passed on 016bdd65. After that run, merge 136d51ab brought in main's Modern-GCC switch recovery change ({unit:native/gcc-switch-recovery}). That change alters Recovery, so discovery leaves new code to the lift's gap decoding. It also re-barred lift-check metrics on the same rows this branch edits: on the agb rows gap_targets +1 and load_computed_unknown/store_computed_unknown +2 (crates/codegen/lift-check.toml:28-35 and :235-238), and on six C rows store_computed_ram and pointer_unexplained. This branch changes store_computed_unknown and fn_keys_left on those same rows. The two sets of bars merged without a text conflict, but nobody has measured the combined lifter against them, including the dense routes and planted faults. This is the same gap the previous review raised. `just check` doesn't cover it, and nothing under work/ shows a later finished run. Fix: on 136d51ab or later, run `just lift-check` to completion as a long job. If it passes, record the head and the result in the Evidence. If a bar moved because the two changes interact, rebase it in crates/codegen/lift-check.toml with a comment giving the old value, the new value and the cause, then rerun until it passes. If Metroid's fn_keys_left changes, also rerun the Metroid dense measurement and `route-check --native --dense` on units/metroid-native.toml."
+        "fixes": 1,
+        "at": "2026-11-27T22:25:05Z",
+        "findings": "- The card's 'Done when' says `just lift-check` must be green on the tree that lands, but the head that would land (adafa5ae) was never checked. The Evidence says so itself: \"full lift-check not rerun on adafa5ae\". `just check` wasn't rerun there either; its last run was on 1bac55f5. adafa5ae merges in main's lifter change, Lifted values keep their sign ({unit:native/lift-signed-values}). The two changes interact: the combined lifter gives native-entry-jump 324 casts, while the branch alone gives 306 and main alone gives 323 (crates/codegen/lift-check.toml:4452-4455). So the combined lifter's output differs from both sides, and `just lift-metrics` alone doesn't show that the dense routes, the planted faults or the fn_keys_left bars still pass. Earlier reviews found the same gap twice, on 016bdd65 and again on 136d51ab. Fix: on adafa5ae or a later head, run `just lift-check` to completion as a long job, then run `just check`. Record the head and both results in the Evidence. If a bar moves because the two changes interact, rebar it in crates/codegen/lift-check.toml with a comment giving the old value, the new value and the cause, then rerun. If Metroid's fn_keys_left differs from 152 (measured on 1bac55f5's lifter), rerun the Metroid dense measurement and `route-check --native --dense` on units/metroid-native.toml, and record the new numbers. If main moves again before landing, repeat this on the final merge head rather than carrying forward results from an earlier head.",
+        "sent": {
+          "evidence": "Review fix done: just lift-check passed to the end on 136d51ab and on 1bac55f5 (each later main merged; native-entry-jump bars took main's side, --lower-bars lowered 3 each time); just check passed on 038013a9 and 1bac55f5. Metroid on 1bac55f5's lifter: fn_keys_left 152 (was 331), fn_words_not_proven 125, dense build passes route-check --native --dense on units/metroid-native.toml, 2700 frames, 0 differences. c-fnptr-gcc fn_keys_left 0; c-list-agbcc/gcc 4 and 4, held by kActs read back through gPool's one object cell, filed as {unit:native/fnref-struct-fields}. Final head adafa5ae merges main's lift-signed-values: casts on native-entry-jump 324 against main's 323, raised with cause in the toml; lift-metrics 0 over, 0 under there; full lift-check not rerun on adafa5ae.",
+          "by": "691120b3",
+          "host": "quack",
+          "branch": "unit/native/fnref-dense-keys-left",
+          "change": "898e430bcb4b15ec0d7b2b73636833a4dd27f71e"
+        }
       },
       "round": "2026-11-27T12:01:49Z"
     },
