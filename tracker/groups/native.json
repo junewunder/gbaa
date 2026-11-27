@@ -5540,19 +5540,8 @@
         "by": "76d60dff",
         "at": "2026-11-27T22:49:09Z",
         "evidence": "Report line 'IRQ rule of exact sp' names each holder (why, way from a wrapper); new barred metric sp_irq_holders. Metroid holders 9 -> 6: both IRQ wrappers' returns proven past their msr (saves walk banks sp/lr), the handler table read from ROM (7 handlers, not 59), stand-in 0x030016c5 via sp_to (mods 159554a). Left, filed as named follow-ups: IWRAM sound ARM halves {unit:native/lift-frame-exact-jumper-lr}, BitFill {unit:native/lift-frame-exact-dma-channel}, SramCheck/SramWriteUnchecked {unit:native/lift-frame-exact-stack-code}; so the rule stays on and sp_arith_exact stays 1194 (main's lift at 21828077 also 1194; only callee_saves_unproven +2, entry_lr_returns +2, lines -12 differ). Metroid native route (units/metroid-native.toml) 2700 frames, 0 differences; just lift-check passed (every program, planted faults caught); just check passed after merging origin/main (98b987cb).",
-        "branch": "unit/native/lift-frame-exact-irq-reach",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T22:49:09Z",
-          "by": "76d60dff",
-          "host": "quack",
-          "pid": 4000180,
-          "start": "125627797",
-          "beats": true,
-          "session": "76d60dff-006a-4940-9c23-33b45a52e28a",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-27T22:54:58Z"
       },
       "notes": [
         {
@@ -5560,8 +5549,7 @@
           "by": "76d60dff",
           "text": "mods/metroid/lift-bars.toml was already over its bars at main 21828077 on 8 metrics unrelated to this unit (casts, lines_prelude, rom_refs, loops_not_for, load/store_computed_ram, pointer_unexplained, bitfield_arith): measured by main's own lift."
         }
-      ],
-      "round": "2026-11-27T20:55:37Z"
+      ]
     },
     {
       "id": "native/game-lift-bars-refresh",
