@@ -891,25 +891,13 @@
       "check": "recorded",
       "lane": "quack/3",
       "branch": "unit/native/lift-aligned-params",
-      "record": {
-        "state": "done",
-        "by": "fbd19bea",
-        "at": "2026-11-27T20:30:01Z",
-        "evidence": "Merged origin/main (c5f6343a): lift-check.toml bar conflicts took the higher bar, then just lift-metrics --lower-bars lowered 35 bars with no metric over its bar; just check passed (exit 0).",
-        "branch": "unit/native/lift-aligned-params",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T20:30:01Z",
-          "by": "fbd19bea",
-          "host": "quack",
-          "pid": 4000180,
-          "start": "125627797",
-          "beats": true,
-          "session": "fbd19bea-0702-4986-8640-76d47a400383",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
+      "notes": [
+        {
+          "at": "2026-11-27T20:30:16Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
+        }
+      ],
       "round": "2026-11-27T20:08:05Z"
     }
   ]
