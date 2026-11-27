@@ -5642,15 +5642,22 @@
       "uses": ["heavy"],
       "priority": 82,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "60eb6360",
-        "session": "60eb6360-a06d-4d1f-a63e-b90c7ecb9021",
-        "host": "quack",
-        "pid": 2117956,
-        "start": "121114680",
-        "at": "2026-11-27T06:41:55Z",
+        "at": "2026-11-27T07:33:30Z",
+        "evidence": "On bbabd07d (main 0b20d8c/dc0bef5 already in): just lift-check passed, 42 of 42 programs 0 differences, every planted fault caught; params_rebound new, barred 0 on all 42 rows; lines lowered on the 14 C rows that had a rebound parameter (lift-metrics --lower-bars, 60 bars). just lift Metroid: 600 of 600 frames, no stop, params_rebound 0, 35 signatures take a Ref; route-check --native units/metroid-native.toml: pass, 2700 frames, 0 differences. just lift Emerald: 600 of 600, no stop, params_rebound 1 (callers disagree), 321 signatures take a Ref. just check passed. Return values split to {unit:native/lift-pointer-returns}.",
         "branch": "unit/native/lift-pointer-signatures",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T07:33:30Z",
+          "by": "60eb6360",
+          "host": "quack",
+          "pid": 2117956,
+          "start": "121114680",
+          "beats": true,
+          "session": "60eb6360-a06d-4d1f-a63e-b90c7ecb9021",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-27T06:41:55Z"
     },
