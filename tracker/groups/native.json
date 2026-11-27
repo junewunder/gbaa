@@ -3859,19 +3859,8 @@
         "by": "40bebfcc",
         "at": "2026-11-27T05:23:10Z",
         "evidence": "On main 44b7fc4a (branch has no changes of its own; all three needs landed): just lift on Minish Cap: 7607 functions, 0 hard holes, builds; first stop 4 of 600 frames, time limit 120 s, at pc 0x080b1769 in EEPROMWrite's ready-bit wait, filed as {unit:native/minish-stop-eeprom-wait}. just check passed (exit 0). No code changed, so no holes-all.",
-        "branch": "unit/native/minish-builds",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T05:23:10Z",
-          "by": "40bebfcc",
-          "host": "quack",
-          "pid": 2117526,
-          "start": "121114149",
-          "beats": true,
-          "session": "40bebfcc-9609-4be1-9269-de4c0a9a6616",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-27T05:23:24Z"
       },
       "notes": [
         {
@@ -3889,8 +3878,7 @@
           "by": "c2d4d707",
           "text": "hard 10 -> 4 by holes file only (mods a6294ff; no code, so no holes-all; lift 13 min at peak 1.2G, --mem 4G). Left: ZeldaFollowAction r5 (needs {unit:native/lift-takes-across-copies}), 3 longjmp ({unit:native/lift-longjmp}; 0x03005f24's struct is 0x03003dd0)."
         }
-      ],
-      "round": "2026-11-20T12:50:57Z"
+      ]
     },
     {
       "id": "native/moonbeam-builds",
