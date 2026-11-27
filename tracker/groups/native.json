@@ -5201,15 +5201,22 @@
       "uses": ["heavy"],
       "priority": 74,
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "691120b3",
-        "session": "691120b3-6674-473f-ba9f-07d85c799410",
-        "host": "quack",
-        "pid": 3999615,
-        "start": "125627294",
-        "at": "2026-11-27T19:57:22Z",
+        "at": "2026-11-27T22:03:21Z",
+        "evidence": "Review fix done: just lift-check passed to the end on 136d51ab and on 1bac55f5 (each later main merged; native-entry-jump bars took main's side, --lower-bars lowered 3 each time); just check passed on 038013a9 and 1bac55f5. Metroid on 1bac55f5's lifter: fn_keys_left 152 (was 331), fn_words_not_proven 125, dense build passes route-check --native --dense on units/metroid-native.toml, 2700 frames, 0 differences. c-fnptr-gcc fn_keys_left 0; c-list-agbcc/gcc 4 and 4, held by kActs read back through gPool's one object cell, filed as {unit:native/fnref-struct-fields}. Final head adafa5ae merges main's lift-signed-values: casts on native-entry-jump 324 against main's 323, raised with cause in the toml; lift-metrics 0 over, 0 under there; full lift-check not rerun on adafa5ae.",
         "branch": "unit/native/fnref-dense-keys-left",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T22:03:21Z",
+          "by": "691120b3",
+          "host": "quack",
+          "pid": 3999615,
+          "start": "125627294",
+          "beats": true,
+          "session": "691120b3-6674-473f-ba9f-07d85c799410",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
