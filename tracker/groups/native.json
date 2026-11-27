@@ -5296,19 +5296,8 @@
         "by": "357babd6",
         "at": "2026-11-27T20:10:39Z",
         "evidence": "Review fix: lift-check finished. The 4 programs the 2 h run left (native-serial, native-spike, native-takes, native-tasks) ran via just lift-check --only on 9ff2d647: each native pass 600 frames 0 differences, planted fault/hole caught, 'lift-check: passed'; the other 42 passed in the earlier run, so all 46 pass. just lift-metrics --metric mask_chains: 0 on all 46 programs, at bar, 0 over. Earlier evidence stands: just check, Mirror native route 0 differences, Mirror '& 0x…u32) & 0x' count fallen near 0, review. Branch up to date with origin/main (fd0c09f6).",
-        "branch": "unit/native/lift-mask-fold",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T20:10:39Z",
-          "by": "357babd6",
-          "host": "quack",
-          "pid": 4001563,
-          "start": "125628685",
-          "beats": true,
-          "session": "357babd6-e1cb-47c4-b3fa-2639e0d6f666",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-27T20:23:57Z"
       },
       "notes": [
         {
@@ -5321,20 +5310,7 @@
           "by": "0a34a83d",
           "text": "Fold is FnPrinter::mask_link (native.rs): links per block in self.links, folded only over an inlined (one-use) link. GBAA_MASK_WHY=1 prints chains left. Global part stores skip their width mask for a fitting & link (globals::store_fitting). Mirror lift ~80 s, route ~15 min."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-27T19:57:16Z",
-        "findings": "- Card's Done when says 'lift-check passes', but the Evidence says `just lift-check` stopped at the 2 h mark after 43 of 46 programs passed. The last 3 programs never ran, and that check was split off into a new unit, 'Lift-check passes with the mask fold on main' ({unit:native/lift-mask-fold-lift-check}), which the card didn't ask for. The new barred metric mask_chains = 0 is also recorded in crates/codegen/lift-check.toml for all rows, so the rows for those 3 programs were never confirmed. What to do: run `just lift-check` to completion on this branch, or run just the 3 programs it didn't reach, if the recipe can take a subset. Record that all 46 pass, with mask_chains at 0 on each, in this unit's evidence. Then drop or close the split-off unit. Don't land with that check still open.",
-        "sent": {
-          "evidence": "On 9ff2d647 (main merged, up to date): Mirror's '& 0x…u32) & 0x' in src/*.rs 386 to 1 (a byte store of x & !0x40, which doesn't fit its width); masks_folded 1178, new barred mask_chains 0 on Mirror and every lift-check row (177 links used again, stored then masked on, stay lets by the card's one-use rule). Mirror native route (units/kirby-mirror-native.toml) on c9a6df3c: 3000 frames, 0 differences, audio the same. just check passed on 9ff2d647. Codegen unit test mask_chains_print_as_one_mask covers and-, or-chains, and-then-or not folding, a used-again link, a fold past a register write; no C program has a chain. lift-metrics: bitfield_* unchanged, all bars hold. just lift-check stopped at the 2 h mark after 43 of 46 programs passed, none failed: the rest is {unit:native/lift-mask-fold-lift-check}. Loop's diff review pending.",
-          "by": "0a34a83d",
-          "host": "quack",
-          "branch": "unit/native/lift-mask-fold",
-          "change": "47ebc3c6e538a6c7847c44b284964a8c4f031d28"
-        }
-      },
-      "round": "2026-11-27T17:43:04Z"
+      ]
     },
     {
       "id": "native/lift-task-struct",
