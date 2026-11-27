@@ -6004,6 +6004,13 @@
       "detail": "Split from {unit:native/lift-lend-wider}, which made a struct return's unread pointer borrowed but found no C row whose lent pointer meets a null check or an index (GBAA_LEND_DEBUG lists frame addresses passed: only c-chain's ctx and rect_union's buffer, and c-jump's setjmp buffer). Grow c/lent with both (if (p) p->n++; a stack array walked by a checked index), then widen frame::lend: a compare of a borrowed pointer with 0 prints as its known outcome (never null; the lift's pN.addr() is 0 natively, so the printer must fold it), an index bounded by the Lent's length. Check: c-lent rows gain borrowers, sp_accesses_escaping_slot bars lowered with each row's 'lent slots' line before and after; just lift-check 0 differences, every planted fault caught; just check.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/names-stack-pieces",
+      "title": "A stack struct in DWARF pieces gets its names-file slot",
+      "detail": "From {unit:native/lift-stack-typed-locals}: a lent local is typed only where the names file gives its variable a slot. Modern GCC gives c-chain-gcc frame()'s struct Ctx ctx only as a location list of DW_OP_piece entries (piece 12, fbreg -32, piece 2, ...), so pret-names writes no slot and ctx stays [u8; N] (lent_locals_untyped 1). Wanted: pret-names takes a variable's slot from a piece at fbreg plus its piece offset where the pieces agree, names/c-*-gcc.toml made again; c-chain-gcc's ctx then a Local<t::Ctx, N>, its bar lowered. Check: just lift-check 0 differences, every planted fault caught (c-chain-gcc's --plant-lent then through a typed Lent); just check.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
