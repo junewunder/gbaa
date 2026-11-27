@@ -84,8 +84,17 @@
 # take a dense function's ID (`DENSE`, empty at --fn-ids rom). fn_keys_left
 # (native/fnref-dense): the function words and code constants a --fn-ids dense
 # build leaves as keys, at the values measured; 0 on the C programs but
-# c-fnptr-gcc, whose callback words a frame's pushed r3 holds in the stacks'
-# cell (an indirect call's callee assumed to read the caller's frame).
+# c-list-agbcc and c-list-gcc (4 each: kActs' words, which the flow reads
+# back through a node's next, gPool's one object cell holding every field).
+# native/fnref-dense-keys-left: c-fnptr-gcc 4 -> 0 (an index from a global
+# too small for one step, remove_callback's gCallbacks[j - 1] from
+# gNumCallbacks, is in the object above), and on the agb programs the
+# changes net 1-2 lower on seven, but native-bios-calls 58 -> 59 (its heap
+# header arithmetic now makes IWRAM's start, a RAM function's key, as a
+# constant); call_fn_four_complete raised by 2 on native-copy-takes,
+# native-dma, native-entry-jump and native-irq-wrapper with call_fn_complete
+# (two more call sites with a complete callee set, still passing r0-r3), and
+# native-entry-jump's casts 305 -> 306 with a register it now types Ref.
 # proto_shapes_refused (native/lift-signature-holes): the functions whose
 # names-file prototype the summaries prove wrong, which keep the summaries'
 # shape (c-fnptr-gcc and c-loops-gcc: 2 each, GCC's push of r3 to keep the
@@ -298,7 +307,7 @@ branches_on_raw_flags = 22
 entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
-fn_keys_left = 59
+fn_keys_left = 58
 rom_static_fn_keys = 3
 rom_refs = 17
 sp_accesses_callers_frame = 4
@@ -398,8 +407,8 @@ jumps_by_value = 8
 branches_on_raw_flags = 36
 entry_lr_returns_call_fn = 0
 gap_targets = 22
-fn_words_not_proven = 58
-fn_keys_left = 62
+fn_words_not_proven = 57
+fn_keys_left = 61
 rom_static_fn_keys = 3
 rom_refs = 16
 sp_accesses_callers_frame = 8
@@ -903,7 +912,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
-fn_keys_left = 58
+fn_keys_left = 59
 rom_static_fn_keys = 3
 rom_refs = 17
 
@@ -1145,7 +1154,7 @@ libgcc_div_calls = 0
 results_several = 9
 tuple_calls = 16
 io_unnamed = 19
-lines = 13221
+lines = 13216
 lines_prelude = 1482
 ref_new_at_use = 2
 params_rebound = 0
@@ -1172,8 +1181,8 @@ compare_trees_left = 10
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 291
-value_lets = 4261
-reg_local_writes = 2212
+value_lets = 4260
+reg_local_writes = 2210
 unpacked_unread = 0
 regs_call_entries = 15
 proto_shapes_refused = 0
@@ -1221,7 +1230,7 @@ sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 757
 sp_accesses_callers_frame = 2
 call_fn_calls = 65
-call_fn_four_complete = 58
+call_fn_four_complete = 60
 jumps_by_value = 8
 branches_on_raw_flags = 22
 # A fall into the next function after a call to a panic whose summary may
@@ -1229,7 +1238,7 @@ branches_on_raw_flags = 22
 entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
-fn_keys_left = 67
+fn_keys_left = 65
 rom_static_fn_keys = 3
 rom_refs = 16
 
@@ -1429,8 +1438,8 @@ call_fn_four_complete = 58
 jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 59
-fn_keys_left = 63
+fn_words_not_proven = 58
+fn_keys_left = 62
 rom_static_fn_keys = 3
 rom_refs = 17
 gap_targets = 11
@@ -1734,12 +1743,12 @@ sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 679
 sp_accesses_callers_frame = 7
 call_fn_calls = 65
-call_fn_four_complete = 58
+call_fn_four_complete = 60
 jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 60
-fn_keys_left = 68
+fn_words_not_proven = 59
+fn_keys_left = 67
 rom_static_fn_keys = 3
 rom_refs = 17
 gap_targets = 5
@@ -2036,12 +2045,12 @@ sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 674
 sp_accesses_callers_frame = 7
 call_fn_calls = 64
-call_fn_four_complete = 56
+call_fn_four_complete = 58
 jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 58
-fn_keys_left = 61
+fn_words_not_proven = 57
+fn_keys_left = 60
 rom_static_fn_keys = 4
 rom_refs = 17
 gap_targets = 5
@@ -2273,7 +2282,7 @@ bitfield_joined = 0
 # lines raised 634 -> 635 (native/lift-pointer-types): with its prototype's
 # parameter name, bounce_update rebinds `obj` as Ref<t::Obj> in its body, until
 # native/lift-pointer-signatures types the parameter in the signature.
-lines = 632
+lines = 625
 lines_prelude = 1482
 ref_new_at_use = 5
 params_rebound = 0
@@ -2353,8 +2362,8 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 3
-fn_keys_left = 4
+fn_words_not_proven = 0
+fn_keys_left = 0
 rom_static_fn_keys = 0
 rom_refs = 0
 gap_targets = 0
@@ -4097,12 +4106,12 @@ libgcc_div_calls = 0
 results_several = 8
 tuple_calls = 14
 io_unnamed = 19
-lines = 18230
+lines = 18229
 lines_prelude = 1482
 ref_new_at_use = 0
 params_rebound = 0
 ref_to_at_use = 0
-casts = 305
+casts = 306
 texts_left = 0
 functions = 116
 functions_iwram = 3
@@ -4123,15 +4132,15 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-load_rotates_left = 296
-value_lets = 6409
+load_rotates_left = 290
+value_lets = 6402
 reg_local_writes = 3065
 unpacked_unread = 0
 regs_call_entries = 17
 proto_shapes_refused = 0
 unread_lets = 0
 adc_sums = 0
-bank_sp_calls = 260
+bank_sp_calls = 259
 sp_arith_unescaped = 0
 sp_arith_exact = 34
 lr_returned = 0
@@ -4152,7 +4161,7 @@ load_computed_rom = 0
 load_computed_display = 0
 load_computed_sram = 0
 load_computed_other = 0
-load_computed_unknown = 710
+load_computed_unknown = 704
 store_const_ram = 0
 store_const_io = 25
 store_const_rom = 0
@@ -4166,19 +4175,19 @@ store_computed_rom = 0
 store_computed_display = 0
 store_computed_sram = 0
 store_computed_other = 0
-store_computed_unknown = 355
+store_computed_unknown = 350
 pointer_unexplained = 0
-ref_unexplained = 46
+ref_unexplained = 35
 sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 662
 sp_accesses_callers_frame = 9
 call_fn_calls = 63
-call_fn_four_complete = 56
+call_fn_four_complete = 58
 jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 59
-fn_keys_left = 64
+fn_words_not_proven = 57
+fn_keys_left = 62
 rom_static_fn_keys = 3
 rom_refs = 17
 gap_targets = 5

@@ -200,8 +200,10 @@
 //! and an access the function's own code makes at a literal plus a
 //! constant plus a scaled index is in the object at literal plus
 //! constant ([`BASED`], [`G::rebased`]: GCC adds the index to the anchor
-//! first) (a `memcpy` through `&s` past such a literal
-//! inside `s` leaves those stores in `s`'s object, and a load there at a
+//! first), and one from an object too small for one step of the index
+//! is in the object a step or more above ([`indexed_obj`]: C's `a[j - 1]`
+//! with the `- 1` folded into the global below) (a `memcpy` through
+//! `&s` past such a literal inside `s` leaves those stores in `s`'s object, and a load there at a
 //! constant address misses them); a pointer isn't made of its bytes in
 //! registers (a byte copy through memory is a number); a function called
 //! from where the run can't see (`loose`) is passed, besides what the
@@ -1255,6 +1257,8 @@ fn ram_indexed_block(
             && s > 0
         {
             found.insert(i | BASED, (l, k));
+            // (And the index's step, [`indexed_obj`].)
+            found.insert(i | BASED | VALUE, (s, 0));
         }
         v.push(r);
     }
@@ -1492,6 +1496,35 @@ fn ram_obj(a: u32) -> (u32, u32) {
             .map(|(&o, &e)| (o, e))
             .unwrap_or((base, ram_top(a)))
     })
+}
+
+/// The object RAM address `c` plus an index of step `s` the run doesn't
+/// know is in: `c`'s ([`ram_obj`]), but where that object can't hold one
+/// step from `c` (a byte global, `gNumCallbacks`, indexed by 4), the
+/// object starting one to four steps above it that holds a step: C's
+/// `gCallbacks[j - 1]` with the `- 1` folded into the global below
+/// (GCC's `anchor + 0x54 + 4 * j`). What this takes on trust, as
+/// [`G::rebased`] does: the index isn't negative from there, and the
+/// array starts on a step from `c`.
+fn indexed_obj(c: u32, s: u32) -> u32 {
+    let (o, e) = ram_obj(c);
+    if s <= 1 || e.wrapping_sub(c) >= s {
+        return o;
+    }
+    let top = ram_top(c);
+    for n in 1..=4u32 {
+        let Some(t) = n.checked_mul(s).and_then(|d| c.checked_add(d)) else {
+            break;
+        };
+        if t >= top {
+            break;
+        }
+        let (o2, e2) = ram_obj(t);
+        if o2 == t && e2 - t >= s {
+            return t;
+        }
+    }
+    o
 }
 
 /// Where what is stored somewhere in object `o` is kept: a cell of its
@@ -4136,17 +4169,29 @@ impl G {
     /// not negative from the literal plus the constant (`gNext[i - 3]`
     /// from an anchor, with the `- 3` folded into the constant, would be
     /// the global three entries below).
+    /// An object too small for one of the index's steps is the one
+    /// above, at either end ([`indexed_obj`]: the sum's own arithmetic
+    /// may have made that of the literal).
     fn rebased(&self, f: u32, block: u32, i: usize, mut v: Val) -> Val {
         let Some(&(l, k)) = self.based.get(&(f, block, i | BASED)) else {
             return v;
         };
+        let s = self
+            .based
+            .get(&(f, block, i | BASED | VALUE))
+            .map_or(1, |x| x.0);
         let l = ram_canon(l);
         if k >= 0x8000_0000 || l.checked_add(k).is_none_or(|at| at >= ram_top(l)) {
             return v;
         }
-        let (from, to) = (Tok::Ram(ram_obj(l).0), Tok::Ram(ram_obj(l + k).0));
-        if from != to && v.toks.contains(&from) {
-            v.toks.remove(&from);
+        let to = Tok::Ram(indexed_obj(l + k, s));
+        let mut moved = false;
+        for from in [Tok::Ram(ram_obj(l).0), Tok::Ram(indexed_obj(l, s))] {
+            if from != to && v.toks.remove(&from) {
+                moved = true;
+            }
+        }
+        if moved {
             v.toks.insert(to);
         }
         v
@@ -4705,7 +4750,16 @@ enum R {
 
 impl Run<'_, '_> {
     fn classify(&mut self, c: u32, origin: Origin) -> Tok {
-        if self.img.is_fn(c) {
+        // A constant the code makes that only a load or store takes as its
+        // address is no function's ([`addr_only`]).
+        let datum = |f: &FnIn| match origin {
+            Origin::Code(b, i) => f
+                .blocks
+                .get(&b)
+                .is_some_and(|blk| addr_only(blk.insts, i as usize)),
+            Origin::Word(_) => false,
+        };
+        if self.img.is_fn(c) && !datum(self.f) {
             if let Origin::Code(..) = origin {
                 self.g.flow.consts.insert(origin, c);
             }
@@ -5072,7 +5126,7 @@ impl Run<'_, '_> {
                     // that varies (a loop's index or walked pointer, not
                     // one field's offset): somewhere in its object, as an
                     // index stays in its array.
-                    R::T(Tok::Num(c)) => match left_object(self.img, op, x, y) {
+                    R::T(Tok::Num(c)) => match left_object(self.img, op, x, y, steps) {
                         Some((t, on_x)) if varies[usize::from(!on_x)] => toks.push(t),
                         _ => {
                             let t = self.classify(c, site);
@@ -5127,12 +5181,24 @@ impl Run<'_, '_> {
                         }
                     }
                     R::Hole(why, num) => {
+                        let mut piece = false;
                         for t in [x, y].into_iter().flatten() {
-                            if let Tok::Fn { origin, .. } = t {
+                            if let Tok::Fn { origin, form, .. } = t {
                                 holes.push((origin, why));
+                                piece |= matches!(form, Form::Part | Form::Cmp);
                             }
                         }
                         match num {
+                            // Of a piece of an address (a byte of it), or a
+                            // difference, the number made of its key is
+                            // none it is: one in ROM is somewhere there,
+                            // which no op makes a function's key again
+                            // (`native/fnref-dense-keys-left`: Metroid's
+                            // `(byte & ~3) | 1` of a pointer's byte was its
+                            // whole key, a constant of its own).
+                            Some(c) if piece && self.img.word(c).is_some() => {
+                                toks.push(Tok::RomDull)
+                            }
                             Some(c) => toks.push(num_tok(self.img, c)),
                             None => out.unk = true,
                         }
@@ -6609,6 +6675,35 @@ impl Once {
     }
 }
 
+/// Whether inst `i`'s value is taken only as the address of the block's
+/// loads and stores (and by one at least): a constant made so is a
+/// datum's address, though it be a function's key (Metroid's
+/// `0x030016c4 + 1`, a byte of an IWRAM struct where a routine is
+/// copied at other times). Never a register's value, stored, compared
+/// or called, it meets no function's address, so it stays the number
+/// it is in a dense build (`native/fnref-dense-keys-left`) and the
+/// function keeps its ID: the load reads what it read.
+fn addr_only(insts: &[Inst], i: usize) -> bool {
+    let mut any = false;
+    for inst in &insts[i + 1..] {
+        if inst.guard.is_some_and(|g| g.index() == i) {
+            return false;
+        }
+        match inst.op {
+            Op::Load { addr, .. } if addr.index() == i => any = true,
+            Op::Store { addr, value, .. } if addr.index() == i || value.index() == i => {
+                if value.index() == i {
+                    return false;
+                }
+                any = true;
+            }
+            op if op.operands().iter().any(|v| v.index() == i) => return false,
+            _ => {}
+        }
+    }
+    any
+}
+
 /// The operands whose [`Val::lost_rom`] a word-valued op's result takes
 /// (a dropped address through a load or arithmetic may still be one).
 fn lost_from(op: &Op) -> Vec<ValueId> {
@@ -6804,10 +6899,15 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
     // made, and a RAM address is a number as any other.)
     match (op, x, y) {
         _ if !ram_on() => {}
-        (BinOp::Add | BinOp::Sub, Some(Num(c)), None) if is_ram(c) => {
+        (BinOp::Add, Some(Num(c)), None) if is_ram(c) => {
+            return R::T(Ram(indexed_obj(c, steps[1])));
+        }
+        (BinOp::Sub, Some(Num(c)), None) if is_ram(c) => {
             return R::T(Ram(ram_obj(c).0));
         }
-        (BinOp::Add, None, Some(Num(c))) if is_ram(c) => return R::T(Ram(ram_obj(c).0)),
+        (BinOp::Add, None, Some(Num(c))) if is_ram(c) => {
+            return R::T(Ram(indexed_obj(c, steps[0])));
+        }
         (BinOp::Add | BinOp::Sub, Some(Ram(o)), None) | (BinOp::Add, None, Some(Ram(o))) => {
             return R::T(Ram(o));
         }
@@ -6938,7 +7038,16 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
 /// object ([`ram_parts`]) for another's: a pointer somewhere in the
 /// address's object, and whether the address was `x`. (A result outside
 /// RAM is two values' tokens paired, not a pointer moved: a number.)
-fn left_object(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> Option<(Tok, bool)> {
+///
+/// `steps`: each side's stride; added to an address whose object can't
+/// hold one step of the amount's, the object above ([`indexed_obj`]).
+fn left_object(
+    img: &dyn Image,
+    op: BinOp,
+    x: Option<Tok>,
+    y: Option<Tok>,
+    steps: [u32; 2],
+) -> Option<(Tok, bool)> {
     if !ram_on() {
         return None;
     }
@@ -6955,7 +7064,11 @@ fn left_object(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> Op
         _ => return None,
     };
     let o = ram_obj(p).0;
-    (is_ram(r) && img.word(r).is_none() && ram_obj(r).0 != o).then_some((Tok::Ram(o), on_x))
+    let to = match op {
+        BinOp::Add => indexed_obj(p, steps[usize::from(on_x)]),
+        _ => o,
+    };
+    (is_ram(r) && img.word(r).is_none() && ram_obj(r).0 != o).then_some((Tok::Ram(to), on_x))
 }
 
 fn gcd(a: u32, b: u32) -> u32 {
