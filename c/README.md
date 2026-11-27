@@ -58,6 +58,7 @@ changed ROM needs its file made again, or its lift has no names.
 | `jump/`     | errors thrown with `longjmp` out of a recursion to an outer and an inner `setjmp` (`setjmp.s`: the ARM pair behind Thumb entries, a program's own assembly) |
 | `resume/`   | restores that load sp and pc from a block of their own (`resume.s`): a search bailing out to its guard (`ldr sp; ldr pc`), a loop's step dropped from below and the loop going on (`ldr sp; b` into it) |
 | `lent/`     | a stack struct whose callee reads only its last byte: the address lent lies before the bytes lent (Emerald's RTC status) |
+| `borrow/`   | stack structs lent to callees in another file (`cells.c`): a pointer tested for null, an array in a struct written and read at an index |
 | `div/`      | signed and unsigned `/` and `%`: by constants, by divisors that may be -1, by ones not proven nonzero; libgcc's calls, agbcc's and modern GCC's |
 
 The eleven programs (twenty-two ROMs) are in the lifter's check (`just

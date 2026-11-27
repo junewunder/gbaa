@@ -745,9 +745,10 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
 /// (native/lift-lent-print; docs/native-port-design.md, "Stack locals
 /// passed by address"): the local's bytes as cells, so two arguments may
 /// be the same object beside `g: &mut Game`, and the offset in it. It is
-/// no number: nothing compares or stores it. An access past its end stops
-/// the program, naming the function. `--shadow-locals` lifts carry its guest address (`addr`;
-/// else 0), whose bytes they keep too.
+/// no number: nothing stores it, and only a null check compares it. An
+/// access past its end (an index's too) stops the program, naming the
+/// function. `--shadow-locals` lifts carry its guest address (`addr`;
+/// else [`Lent::NOWHERE`]), whose bytes they keep too.
 #[derive(Clone, Copy)]
 pub struct Lent<'a> {
     b: &'a [std::cell::Cell<u8>],
@@ -774,10 +775,20 @@ impl<'a> Lent<'a> {
         Lent { at: self.at + k, ..self }
     }
 
-    /// Its guest address (`--shadow-locals`), else 0.
-    pub fn addr(self) -> u32 {
-        if self.guest == 0 { 0 } else { self.guest.wrapping_add(self.at as u32) }
+    /// At index `i` (`p[i]`, a C index's bytes): checked as any access is.
+    pub fn idx(self, i: u32) -> Lent<'a> {
+        Lent { at: self.at.wrapping_add(i as i32), ..self }
     }
+
+    /// Its guest address (`--shadow-locals`), else `NOWHERE`: a frame
+    /// address is neither 0 nor negative, so a null check of it prints as
+    /// it came (native/lift-lend-wider).
+    pub fn addr(self) -> u32 {
+        if self.guest == 0 { Self::NOWHERE } else { self.guest.wrapping_add(self.at as u32) }
+    }
+
+    /// The address of a `Lent` without one: IWRAM's first byte.
+    pub const NOWHERE: u32 = 0x0300_0000;
 
     fn bytes(self, k: i32, n: usize, f: u32) -> &'a [std::cell::Cell<u8>] {
         let o = self.at + k;

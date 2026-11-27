@@ -1238,10 +1238,11 @@ doc comments of `frame::lend` and `native::code_lends`).
 - **A borrowed parameter** is a direct callee's r0-r3, never a pointer
   call's (`call_fn`), whose value the callee only adds constants to,
   loads and stores through (at a constant offset, or at an index: a
-  checked one), and passes on in r0-r3 to another borrowed parameter. A
+  checked one: `pN.idx(i)`), tests for null (never true of a frame
+  address), and passes on in r0-r3 to another borrowed parameter. A
   store, a return in a result its shape gives back (not a struct return's
-  unread hidden pointer), a compare, a BIOS or pointer call, a join with
-  another value: it isn't borrowed. Every caller passes a lent slot or a
+  unread hidden pointer), any other compare, a BIOS or pointer call, a
+  join with another value: it isn't borrowed (`native/lift-lend-wider`). Every caller passes a lent slot or a
   borrowed parameter of its own (one type a parameter), by a call, not
   `x_`'s `Regs` (a tail call, a taker's, an echo read): the greatest set.
 - **A lent slot** is an escaping one whose only escapes are passes of an
@@ -1252,9 +1253,10 @@ doc comments of `frame::lend` and `native::code_lends`).
 - **A pointer to a host local** is a `Lent<'_>`, the prelude's
   `&[Cell<u8>]` and an offset in it (copyable, aliasable: two arguments
   may be one object, as `rect_union(&a, &a)`, beside `g: &mut Game`).
-  It has no guest address: nothing compares or stores it (a register
-  copy left reads `pN.addr()`, 0), and an access past its end panics,
-  naming the function. Other pointers stay guest addresses, unchanged.
+  It has no guest address: nothing stores it, and only a null check
+  compares it (a register copy left reads `pN.addr()`, `Lent::NOWHERE`,
+  IWRAM's first byte: nonzero, as a frame address is), and an access past
+  its end (an index's too) panics, naming the function. Other pointers stay guest addresses, unchanged.
 - **sp.** A function whose slots are all locals or lent keeps nothing in
   memory: no sp, no `bank_sp` (`native/lift-frame-gone`'s rule, with lent
   slots counted as locals; `FnPrinter::needs_bank`). A slot whose address reaches RAM keeps the

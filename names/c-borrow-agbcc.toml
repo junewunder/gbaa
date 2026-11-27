@@ -1,0 +1,177 @@
+# Names for c-borrow-agbcc.gba (c/borrow/, built by `just c-tests`), from its ELF's symbols and DWARF.
+# Written by `just c-names` (crates/pret-names). Don't edit.
+
+[map]
+rom_sha1 = "6a853f945a5cdbbeb92e2a34669e8fa6e8ee1090"
+source = "gbaa c/borrow/ (c-borrow-agbcc.elf, just c-tests)"
+format = 1
+#
+# Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
+# run address, with `rom` its source) or data addresses.
+
+# Our entries with a pret function symbol (`label`: an asm label) here.
+[functions]
+0x08000000 = { name = "_start", size = 0, file = "crt0.o" }
+0x08000160 = { name = "irq_handler", size = 0, file = "crt0.o" }
+0x0800018d = { name = "VBlankIntrWait", size = 0, file = "crt0.o" }
+0x08000191 = { name = "fill_rect", size = 102, file = "common-draw.o", src = "c/common/draw.c", proto = "void fill_rect(s32 x, s32 y, s32 w, s32 h, u16 color)" }
+0x08000271 = { name = "mark_or", size = 20, file = "borrow-cells.o", src = "c/borrow/cells.c", proto = "u32 mark_or(const struct Mark *m, u32 d)" }
+0x08000285 = { name = "cell_set", size = 10, file = "borrow-cells.o", src = "c/borrow/cells.c", proto = "void cell_set(struct Cells *c, u32 i, u32 v)" }
+0x08000291 = { name = "cell_get", size = 10, file = "borrow-cells.o", src = "c/borrow/cells.c", proto = "u32 cell_get(const struct Cells *c, u32 i)" }
+0x0800029d = { name = "tint", size = 44, file = "borrow-main.o", src = "c/borrow/main.c", proto = "u32 tint(u32 n)" }
+0x080002c9 = { name = "step", size = 68, file = "borrow-main.o", src = "c/borrow/main.c", proto = "void step(void)" }
+0x0800030d = { name = "AgbMain", size = 136, file = "borrow-main.o", src = "c/borrow/main.c", proto = "void AgbMain(void)" }
+
+# Our entries pret has no symbol for, inside one of its functions.
+[inside]
+
+# Our entries with no function name: a pret function in the other mode,
+# pret data (discovery took it for code), or nothing.
+[unnamed]
+
+# pret functions that aren't our entries, and why.
+[missed]
+0x080001f9 = { name = "plot", size = 42, why = "unreached; no ROM word points at it" }
+0x08000225 = { name = "memcpy", size = 40, why = "unreached; no ROM word points at it" }
+0x0800024d = { name = "memset", size = 34, why = "unreached; no ROM word points at it" }
+
+# Code copied out of ROM to run in RAM (BIOS copies discovery found), by
+# destination: the pret functions in it, keyed by run address.
+[copies]
+
+# pret's data: variables, tables and buffers in RAM and ROM.
+[data]
+0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
+0x03000000 = { name = "gDx", size = 4, aliases = ["__data_start"], type = "s32" }
+0x03000004 = { name = "gDy", size = 4, type = "s32" }
+0x03000008 = { name = "gY", size = 4, aliases = ["__data_end", "__bss_start"], type = "s32" }
+0x0300000c = { name = "gMarks", size = 4, type = "u32" }
+0x03000010 = { name = "gFrame", size = 4, type = "u32" }
+0x03000014 = { name = "gX", size = 4, type = "s32" }
+0x03000018 = { name = "__bss_end", size = 0 }
+
+# Each function's parameters and variables from DWARF: a register (`reg`)
+# or a stack slot (`slot`, an offset from sp after the prologue), over
+# [from, to). Variables agbcc gave no location are left out.
+[locals]
+0x08000191 = [
+  { name = "x", reg = 6, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "y", reg = 5, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "w", reg = 4, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "color", reg = 7, from = 0x08000190, to = 0x080001f6, type = "u16", param = true },
+  { name = "i", reg = 1, from = 0x08000190, to = 0x080001f6, type = "s32" },
+  { name = "j", reg = 2, from = 0x08000190, to = 0x080001f6, type = "s32" },
+  { name = "row", reg = 0, from = 0x08000190, to = 0x080001f6, type = "volatile u16 *" },
+]
+0x08000271 = [
+  { name = "m", reg = 0, from = 0x08000270, to = 0x08000284, type = "const struct Mark *", param = true },
+  { name = "d", reg = 1, from = 0x08000270, to = 0x08000284, type = "u32", param = true },
+]
+0x08000285 = [
+  { name = "c", reg = 0, from = 0x08000284, to = 0x0800028e, type = "struct Cells *", param = true },
+  { name = "i", reg = 1, from = 0x08000284, to = 0x0800028e, type = "u32", param = true },
+  { name = "v", reg = 2, from = 0x08000284, to = 0x0800028e, type = "u32", param = true },
+]
+0x08000291 = [
+  { name = "c", reg = 0, from = 0x08000290, to = 0x0800029a, type = "const struct Cells *", param = true },
+  { name = "i", reg = 1, from = 0x08000290, to = 0x0800029a, type = "u32", param = true },
+]
+0x0800029d = [
+  { name = "n", reg = 4, from = 0x0800029c, to = 0x080002c8, type = "u32", param = true },
+  { name = "m", slot = 0, from = 0x0800029c, to = 0x080002c8, type = "struct Mark" },
+  { name = "c", slot = 4, from = 0x0800029c, to = 0x080002c8, type = "struct Cells" },
+]
+0x0800030d = [
+  { name = "m", reg = 0, from = 0x0800030c, to = 0x08000394, type = "u32" },
+]
+
+# The line table: each row's address and its line, in the `src` of the
+# function holding it, else "file:line".
+[lines]
+0x08000190 = 7
+0x0800019e = 11
+0x080001a6 = 12
+0x080001ae = 13
+0x080001b8 = 14
+0x080001c2 = 15
+0x080001d0 = 16
+0x080001da = 17
+0x080001e2 = 18
+0x080001e4 = 17
+0x080001ec = 15
+0x080001f0 = 20
+0x080001f8 = 23
+0x08000200 = 24
+0x0800020c = 25
+0x0800021e = 26
+0x08000224 = 8
+0x08000228 = 9
+0x0800022a = 12
+0x08000236 = 13
+0x08000244 = 14
+0x08000246 = 15
+0x0800024c = 18
+0x08000250 = 19
+0x08000252 = 21
+0x0800025c = 22
+0x08000266 = 23
+0x08000268 = 24
+0x08000270 = 7
+0x08000272 = 8
+0x08000276 = 10
+0x0800027e = 9
+0x08000280 = 11
+0x08000284 = 15
+0x0800028c = 16
+0x08000290 = 20
+0x08000298 = 21
+0x0800029c = 17
+0x080002a2 = 21
+0x080002a6 = 22
+0x080002b8 = 23
+0x080002c0 = 24
+0x080002c8 = 27
+0x080002ca = 28
+0x080002d6 = 29
+0x080002e2 = 30
+0x080002e8 = 31
+0x080002ec = 32
+0x080002f2 = 33
+0x080002f6 = 34
+0x0800030c = 37
+0x08000310 = 40
+0x0800032a = 41
+0x08000332 = 42
+0x08000336 = 43
+0x08000346 = 44
+0x0800034a = 45
+0x08000352 = 46
+0x08000358 = 47
+0x08000372 = 48
+0x08000378 = 41
+0x08000394 = "c/borrow/main.c:50"
+
+# Structs, unions and enums by C name (a typedef's for an anonymous one):
+# fields with byte offset, size, type and bitfield bits [lowest, width].
+
+[types."struct Cells"]
+kind = "struct"
+size = 8
+fields = [
+  { name = "cell", off = 0, size = 8, type = "u8 [8]" },
+]
+
+[types."struct Mark"]
+kind = "struct"
+size = 4
+fields = [
+  { name = "pad", off = 0, size = 3, type = "u8 [3]" },
+  { name = "mark", off = 3, size = 1, type = "u8" },
+]
+
+# #define families of pret's include/constants/ that a field takes, by
+# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*),
+# and enums a field or global takes by its type (`GameMode`):
+# each value's one name, the fields, as `type.field`, the globals,
+# and the parameters pret's calls pass them to, as `function:index`.

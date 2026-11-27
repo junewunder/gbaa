@@ -5676,7 +5676,8 @@ impl FnPrinter<'_, '_> {
         let mut e = Entries::default();
         // Its borrowed parameters (native/lift-lent-print): `pN: Lent<'_>`,
         // and rN, where the body reads it as it came, the `Lent`'s guest
-        // address (with `--shadow-locals`; else 0): what it computes from
+        // address (with `--shadow-locals`; else `Lent::NOWHERE`, which a
+        // null check finds nonzero): what it computes from
         // that reaches only the `Lent`'s accesses and passes, which print
         // over it.
         let borrowed = self.lends.borrowed.get(&k).copied().unwrap_or(0);
@@ -8486,7 +8487,8 @@ impl FnPrinter<'_, '_> {
                         (_, Some((r, k, n))) => {
                             self.soft.lent_accesses += 1;
                             let x = format!(
-                                "p{r}.ld{}({}, {:#010x})",
+                                "{}.ld{}({}, {:#010x})",
+                                self.lent_base(r, i),
                                 n * 8,
                                 off_text(k),
                                 self.f.entry
@@ -8621,7 +8623,8 @@ impl FnPrinter<'_, '_> {
                         (_, Some((r, k, n))) => {
                             self.soft.lent_accesses += 1;
                             let w = format!(
-                                "p{r}.st{}({}, {val}, {:#010x});",
+                                "{}.st{}({}, {val}, {:#010x});",
+                                self.lent_base(r, i),
                                 n * 8,
                                 off_text(k),
                                 self.f.entry
@@ -9156,8 +9159,13 @@ impl FnPrinter<'_, '_> {
                 };
                 base.or(Some(addr)).into_iter().chain(v).collect()
             }
-            Op::Load { .. } if local || field || callers => Vec::new(),
-            Op::Store { value, .. } if local || field || callers => vec![value],
+            // A borrowed parameter's access at an index reads the index.
+            Op::Load { .. } if local || field || callers => {
+                self.lent_index(i).into_iter().collect()
+            }
+            Op::Store { value, .. } if local || field || callers => {
+                self.lent_index(i).into_iter().chain([value]).collect()
+            }
             // An element through a stepped pointer: named by the loop's
             // variable, not the pointer's read ([`FnPrinter::field_ptr`]).
             Op::Load { .. } if idx.is_some() && self.stepped_access(i) => Vec::new(),
@@ -9732,6 +9740,25 @@ impl FnPrinter<'_, '_> {
             .get(&self.f.entry)?
             .get(&(self.cur, i))
             .copied()
+    }
+
+    /// The index of the access at inst `i` of the current block through
+    /// a borrowed parameter, if it is at one ([`frame::lend::Lends::index`]).
+    fn lent_index(&self, i: usize) -> Option<ValueId> {
+        self.lends
+            .index
+            .get(&self.f.entry)?
+            .get(&(self.cur, i))
+            .map(|&x| ValueId(x))
+    }
+
+    /// `pN`, or where the access at inst `i` is at an index
+    /// ([`FnPrinter::lent_index`]), `pN.idx(i)`: the `Lent` checks it.
+    fn lent_base(&self, r: u8, i: usize) -> String {
+        match self.lent_index(i) {
+            Some(x) => format!("p{r}.idx({})", self.whole(x)),
+            None => format!("p{r}"),
+        }
     }
 
     /// Whether the access at inst `i` of the current block is a host
