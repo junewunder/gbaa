@@ -496,6 +496,12 @@ pub struct Holes {
     /// must print as `/` or `%` ([`FnPrinter::division`]),
     /// gives its value plus one; the native check must catch it.
     pub plant_div: Option<u32>,
+    /// The caller-alignment check's planted control (`gbaa-lift
+    /// --plant-aligned=KEY`, `native/lift-aligned-params`): the function
+    /// at KEY is taken to be passed r0-r3 word-aligned whatever its
+    /// callers pass, so a load through one drops its rotate; a guest-pc
+    /// build's `ld32`/`ld16` must stop the program where one isn't.
+    pub plant_aligned: Option<u32>,
     /// Shadow every stack local in the frame's bytes (`gbaa-lift
     /// --shadow-locals`): a local starts as its bytes, every store to it
     /// writes them too, and every load reads them and prints a line to
@@ -1557,6 +1563,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     };
     // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
     let jumps = longjmp::find(&codes, &unwinds);
+    // Each function's registers' known-zero bits at entry, from its
+    // callers (native/lift-aligned-params).
+    let align_in = aligned_entries(&codes, holes, &reach, &jumps);
     let shapes = shapes_of(&codes, &all, holes, &reach, &jumps);
     // The summaries' shapes alone, to score them against the prototypes
     // (native/lift-signature-holes; `--no-prototype-shapes` prints them).
@@ -1673,6 +1682,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
                     starts: narrow::Starts::new(),
+                    align_in: align_in.get(&f.entry).copied().unwrap_or(aligned::NONE),
+                    zstarts: BTreeMap::new(),
+                    aligned_loads: BTreeSet::new(),
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
                     live_in: BTreeMap::new(),
@@ -2401,6 +2413,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     writeln!(
         report,
+        "alignment from callers (native/lift-aligned-params): {} functions entered knowing low bits of a register 0; {} load rotates dropped by what a block starts knowing{}",
+        align_in.len(),
+        soft.rotates_by_flow.len(),
+        match holes.plant_aligned {
+            Some(k) => format!("; --plant-aligned: f_{k:08x} taken to be passed r0-r3 word-aligned"),
+            None => String::new(),
+        }
+    )
+    .unwrap();
+    writeln!(
+        report,
         "registers given back (native/lift-gives): {} functions give back one of r4-r11 they changed{}; {} direct calls take them",
         soft.givers.len(),
         soft.givers
@@ -2529,6 +2552,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             writeln!(report, "  {h}").unwrap();
             hard.push(h);
         }
+    }
+    if let Some(k) = holes.plant_aligned
+        && !all.contains(&k)
+    {
+        let h = Hole {
+            func: k,
+            at: k,
+            kind: HoleKind::HolesFile,
+            what: "--plant-aligned: no lifted function has that key".into(),
+        };
+        writeln!(report, "  {h}").unwrap();
+        hard.push(h);
     }
     if let Some(at) = holes.plant_div
         && !soft.planted_div
@@ -3560,6 +3595,7 @@ fn fn_check_texts(
             plant_slot: None,
             plant_lent: None,
             plant_div: None,
+            plant_aligned: None,
             ..holes.clone()
         }
     };
@@ -4708,6 +4744,9 @@ struct Soft {
     /// A load's rotate by its address's low bits still printed
     /// ([`aligned`]).
     rotates_left: BTreeSet<(u32, u32, usize)>,
+    /// Of the rotates dropped, those only the registers' facts at the
+    /// block's start prove (its callers', earlier blocks'; native/lift-aligned-params).
+    rotates_by_flow: BTreeSet<(u32, u32, usize)>,
     /// Flag writes printed, and of them those nothing reads
     /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
     flag_writes: u64,
@@ -4928,6 +4967,14 @@ struct FnPrinter<'a, 'b> {
     /// The registers each block starts with a known constant in
     /// ([`narrow::starts`]).
     starts: narrow::Starts,
+    /// Its registers' known-zero bits at entry, its callers'
+    /// ([`aligned_entries`]), and each block's ([`FnPrinter::zero_starts`]).
+    align_in: aligned::Regs,
+    zstarts: BTreeMap<u32, aligned::Regs>,
+    /// The loads whose rotate is dropped, their address proven aligned
+    /// ([`aligned`]), by block and inst: printed with no `& !3`, so a
+    /// guest-pc build's `ld32` checks it.
+    aligned_loads: BTreeSet<(u32, usize)>,
     /// Its entry lr is [`RET`] on every way in ([`lr_entries`]): a jump by
     /// value to the entry lr is a plain return.
     lr_ret: bool,
@@ -5114,33 +5161,47 @@ impl FnPrinter<'_, '_> {
     /// The registers each block starts with a constant in, over the
     /// edges between its blocks its exits print ([`FnPrinter::jumps`]).
     fn starts(&self) -> narrow::Starts {
-        use narrow::{After, Edge};
-        let mut edges = Vec::new();
-        for (&k, gb) in &self.f.blocks {
-            for x in exits(self.ctx, gb) {
-                let after = match x.plan {
-                    Plan::Static(_) | Plan::Rekey(_) | Plan::Dynamic { ret: None, .. } => {
-                        After::Jump
-                    }
-                    Plan::Call { .. }
-                    | Plan::CallVia { .. }
-                    | Plan::Dynamic { ret: Some(_), .. } => After::KeptCall,
-                    Plan::Swi { .. } | Plan::Undefined { .. } | Plan::Unwind => After::Unknown,
-                };
-                for to in self.jumps(&gb.block.insts[x.index].op, &x) {
-                    if self.f.blocks.contains_key(&to) {
-                        edges.push(Edge {
-                            from: k,
-                            exit: x.index,
-                            to,
-                            after,
-                        });
-                    }
-                }
-            }
-        }
+        let edges: Vec<narrow::Edge> = block_edges(self.ctx, self.holes, self.sums, self.f)
+            .into_iter()
+            .map(|e| narrow::Edge {
+                from: e.from,
+                exit: e.exit,
+                to: e.to,
+                after: if e.bios {
+                    narrow::After::Unknown
+                } else {
+                    e.after
+                },
+            })
+            .collect();
         let f = self.f;
         narrow::starts(f.entry, &edges, |k| &f.blocks[&k].block.insts)
+    }
+
+    /// The registers' known-zero bits each block starts with
+    /// ([`aligned::starts`]), from its entry's (its callers',
+    /// [`aligned_entries`]) over the edges [`FnPrinter::starts`] takes.
+    fn zero_starts(&self) -> BTreeMap<u32, aligned::Regs> {
+        let f = self.f;
+        let none = BTreeMap::new();
+        let known: BTreeMap<u32, Vec<Option<u32>>> = f
+            .blocks
+            .iter()
+            .map(|(&k, b)| {
+                (
+                    k,
+                    narrow::values(&b.block.insts, self.starts.get(&k).unwrap_or(&none)),
+                )
+            })
+            .collect();
+        let edges = block_edges(self.ctx, self.holes, self.sums, f);
+        aligned::starts(
+            f.entry,
+            self.align_in,
+            &edges,
+            &unwind_lands(self.jumps, f),
+            |k| (&f.blocks[&k].block.insts, &known[&k]),
+        )
     }
 
     fn hole(&mut self, at: u32, kind: HoleKind, what: impl Into<String>) {
@@ -5155,6 +5216,7 @@ impl FnPrinter<'_, '_> {
     fn print(&mut self, sum: Option<&Summary>) -> String {
         let f = self.f;
         self.starts = self.starts();
+        self.zstarts = self.zero_starts();
         self.frameless = self.is_frameless();
         let mut s = String::new();
         match sum {
@@ -7613,20 +7675,7 @@ impl FnPrinter<'_, '_> {
     /// The keys an exit's printed code may jump to ([`FnPrinter::exit`]):
     /// those in this function are its edges.
     fn jumps(&self, op: &Op, x: &ExitInfo) -> Vec<u32> {
-        match x.plan {
-            Plan::Static(k) | Plan::Rekey(k) => vec![k],
-            Plan::Call { ret, .. } | Plan::CallVia { ret, .. } => vec![ret],
-            Plan::Dynamic { ret: Some(r), .. } => vec![r],
-            Plan::Dynamic { ret: None, .. } if matches!(op, Op::Exit(Exit::ExceptionReturn(_))) => {
-                vec![]
-            }
-            Plan::Dynamic {
-                ret: None, target, ..
-            } => dyn_targets(self.ctx, self.holes, x.at, x.thumb, target)
-                .unwrap_or_else(|_| target.into_iter().collect()),
-            Plan::Swi { next } => vec![next],
-            Plan::Undefined { .. } | Plan::Unwind => vec![],
-        }
+        exit_targets(self.ctx, self.holes, op, x)
     }
 
     /// A sequence of nodes: falling off one but the last goes to the
@@ -8333,9 +8382,18 @@ impl FnPrinter<'_, '_> {
         let none = BTreeMap::new();
         let known = narrow::values(insts, self.starts.get(&self.cur).unwrap_or(&none));
         // A load's rotate by an amount proven 0 prints as the load
-        // ([`aligned`]): proven by the address's arithmetic, or by the
-        // prelude's check of a heap object's or a typed field's pointer.
-        let kz = aligned::zero_bits(insts, &known);
+        // ([`aligned`]): proven by the address's arithmetic, from the
+        // registers as the block starts (its callers' and earlier blocks'
+        // facts, [`FnPrinter::zero_starts`]), or by the prelude's check of
+        // a heap object's or a typed field's pointer.
+        let start = self
+            .zstarts
+            .get(&self.cur)
+            .copied()
+            .unwrap_or(aligned::NONE);
+        let kz = aligned::zero_bits(insts, &known, &start);
+        let kz_alone =
+            (start != aligned::NONE).then(|| aligned::zero_bits(insts, &known, &aligned::NONE));
         let checked: Vec<bool> = (0..insts.len())
             .map(|i| {
                 // A stack local's slot is at an offset its accesses'
@@ -8349,6 +8407,24 @@ impl FnPrinter<'_, '_> {
             })
             .collect();
         let zero = aligned::zero_shifts(insts, &kz, &checked);
+        // Those its address proves aligned print with no `& !3`: in a
+        // guest-pc build, `ld32` and `ld16` check it (native/lift-aligned-params).
+        for (i, inst) in insts.iter().enumerate() {
+            if let Op::Shift { v, amount, .. } = inst.op
+                && kz[amount.index()] | !0xff == u32::MAX
+                && let Some(l) = aligned::load_shift(insts, v, amount)
+            {
+                self.aligned_loads.insert((self.cur, l));
+                if kz_alone
+                    .as_ref()
+                    .is_some_and(|z| z[amount.index()] | !0xff != u32::MAX)
+                {
+                    self.soft
+                        .rotates_by_flow
+                        .insert((self.f.entry, self.cur, i));
+                }
+            }
+        }
         let forms: Vec<_> = (0..insts.len())
             .map(|i| match insts[i].op {
                 Op::Shift { v, .. } if zero[i] => Some((v, narrow::Form::Same)),
@@ -8626,6 +8702,9 @@ impl FnPrinter<'_, '_> {
                     let mut rom = false;
                     let (f, m) = match width {
                         Width::Byte => ("ld8", ""),
+                        _ if self.aligned_loads.contains(&(self.cur, i)) => {
+                            (if width == Width::Half { "ld16" } else { "ld32" }, "")
+                        }
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
@@ -11742,6 +11821,284 @@ fn hole_kind(h: &str) -> String {
         Some(i) => out[..i + 4].to_string(),
         None => out,
     }
+}
+
+/// Where the exit `x` of a block, its exit inst `op`, may go on
+/// ([`FnPrinter::jumps`]): a jump's targets, a call's return site.
+fn exit_targets(ctx: &Ctx, holes: &Holes, op: &Op, x: &ExitInfo) -> Vec<u32> {
+    match x.plan {
+        Plan::Static(k) | Plan::Rekey(k) => vec![k],
+        Plan::Call { ret, .. } | Plan::CallVia { ret, .. } => vec![ret],
+        Plan::Dynamic { ret: Some(r), .. } => vec![r],
+        Plan::Dynamic { ret: None, .. } if matches!(op, Op::Exit(Exit::ExceptionReturn(_))) => {
+            vec![]
+        }
+        Plan::Dynamic {
+            ret: None, target, ..
+        } => dyn_targets(ctx, holes, x.at, x.thumb, target)
+            .unwrap_or_else(|_| target.into_iter().collect()),
+        Plan::Swi { next } => vec![next],
+        Plan::Undefined { .. } | Plan::Unwind => vec![],
+    }
+}
+
+/// Every edge between `f`'s blocks its exits print ([`exit_targets`]), with
+/// how it leaves the registers ([`narrow::starts`], [`aligned::starts`]):
+/// after a direct call, less the r4-r11 its callee may give back changed
+/// (`sums`, `f`'s context's: all of them for a callee it has no summary of).
+fn block_edges(ctx: &Ctx, holes: &Holes, sums: &Summaries, f: &Func) -> Vec<aligned::Edge> {
+    use narrow::After;
+    let mut edges = Vec::new();
+    for (&k, gb) in &f.blocks {
+        for x in exits(ctx, gb) {
+            let after = match x.plan {
+                Plan::Static(_) | Plan::Rekey(_) | Plan::Dynamic { ret: None, .. } => After::Jump,
+                Plan::Call { .. } | Plan::CallVia { .. } | Plan::Dynamic { ret: Some(_), .. } => {
+                    After::KeptCall
+                }
+                // A BIOS call keeps r4-r11 and sp as a call does (for the
+                // constants' flow, nothing known after it).
+                Plan::Swi { .. } => After::KeptCall,
+                Plan::Undefined { .. } | Plan::Unwind => After::Unknown,
+            };
+            let clear = match x.plan {
+                Plan::Call { target, .. } if holes.standins.contains_key(&target) => 0,
+                Plan::Call { target, .. } => sums.get(target).map_or(0xff, |s| s.gives) as u16,
+                _ => 0,
+            } << 4;
+            for to in exit_targets(ctx, holes, &gb.block.insts[x.index].op, &x) {
+                if f.blocks.contains_key(&to) {
+                    edges.push(aligned::Edge {
+                        from: k,
+                        exit: x.index,
+                        to,
+                        after,
+                        clear,
+                        bios: matches!(x.plan, Plan::Swi { .. }),
+                    });
+                }
+            }
+        }
+    }
+    edges
+}
+
+/// The blocks of `f` an unwind lands in ([`longjmp`]): a save's return
+/// sites in its caller, a restore's targets. Registers no edge brings
+/// reach them, so they start with no alignment known.
+fn unwind_lands(jumps: &longjmp::Jumps, f: &Func) -> BTreeSet<u32> {
+    let mut out: BTreeSet<u32> = jumps.catches.get(&f.entry).cloned().unwrap_or_default();
+    out.extend(
+        jumps
+            .resumes
+            .values()
+            .flatten()
+            .filter(|k| f.blocks.contains_key(k)),
+    );
+    out
+}
+
+/// Each function's registers' known-zero bits at its entry, from its
+/// callers' (native/lift-aligned-params): where every way into it is a
+/// direct call in its own code context from a lifted function, what all
+/// those calls agree on, as each caller knows its registers there
+/// ([`aligned::starts`] from its own entry's). None for a function a
+/// pointer may reach (`reach`, `FNS`'s), one another function jumps,
+/// falls or returns into, one an unwind lands in, one a stand-in's text
+/// names or replaces, one a stand-in's or a mod's cut's guest code
+/// calls, or one another context calls. A fixed point from
+/// all bits known 0, as the facts only fall; `--plant-aligned=KEY`'s
+/// function is passed r0-r3 word-aligned whatever its callers pass.
+fn aligned_entries(
+    codes: &[Code],
+    holes: &Holes,
+    reach: &BTreeSet<u32>,
+    jumps: &longjmp::Jumps,
+) -> BTreeMap<u32, aligned::Regs> {
+    struct Fn_<'a> {
+        ctx: usize,
+        f: &'a Func,
+        edges: Vec<aligned::Edge>,
+        known: BTreeMap<u32, Vec<Option<u32>>>,
+        lands: BTreeSet<u32>,
+        /// Its direct calls: block, exit inst, callee.
+        calls: Vec<(u32, usize, u32)>,
+    }
+    let mut fns: Vec<Fn_> = Vec::new();
+    let mut ctx_of: BTreeMap<u32, usize> = BTreeMap::new();
+    // Entered other than by a direct call of its own context's.
+    let mut barred: BTreeSet<u32> = reach.clone();
+    for (code, _) in holes.standins.values() {
+        for c in codes {
+            for f in &c.funcs {
+                let k = f.entry;
+                if code.contains(&format!("{k:08x}")) {
+                    barred.insert(k);
+                }
+            }
+        }
+    }
+    for (ci, c) in codes.iter().enumerate() {
+        for f in &c.funcs {
+            ctx_of.insert(f.entry, ci);
+            // A stand-in's or a mod's cut's code isn't this guest code:
+            // what it passes its callees is unknown.
+            if holes.standins.contains_key(&f.entry) || holes.cuts.contains_key(&f.entry) {
+                barred.insert(f.entry);
+                for gb in f.blocks.values() {
+                    for x in exits(&c.ctx, gb) {
+                        if let Plan::Call { target, .. } = x.plan {
+                            barred.insert(target);
+                        }
+                    }
+                }
+                continue;
+            }
+            let edges = block_edges(&c.ctx, holes, &c.sums, f);
+            let nstarts = narrow::starts(
+                f.entry,
+                &edges
+                    .iter()
+                    .map(|e| narrow::Edge {
+                        from: e.from,
+                        exit: e.exit,
+                        to: e.to,
+                        after: if e.bios {
+                            narrow::After::Unknown
+                        } else {
+                            e.after
+                        },
+                    })
+                    .collect::<Vec<_>>(),
+                |k| &f.blocks[&k].block.insts,
+            );
+            let none = BTreeMap::new();
+            let known = f
+                .blocks
+                .iter()
+                .map(|(&k, b)| {
+                    (
+                        k,
+                        narrow::values(&b.block.insts, nstarts.get(&k).unwrap_or(&none)),
+                    )
+                })
+                .collect();
+            let mut calls = Vec::new();
+            for (&k, gb) in &f.blocks {
+                for x in exits(&c.ctx, gb) {
+                    if let Plan::Call { target, .. } = x.plan {
+                        calls.push((k, x.index, target));
+                    }
+                    for t in exit_targets(&c.ctx, holes, &gb.block.insts[x.index].op, &x) {
+                        if !f.blocks.contains_key(&t) {
+                            barred.insert(t);
+                        }
+                    }
+                }
+            }
+            let lands = unwind_lands(jumps, f);
+            fns.push(Fn_ {
+                ctx: ci,
+                f,
+                edges,
+                known,
+                lands,
+                calls,
+            });
+        }
+    }
+    for t in jumps
+        .resumes
+        .values()
+        .chain(jumps.catches.values())
+        .flatten()
+    {
+        barred.insert(*t);
+    }
+    // A callee another context calls.
+    for fun in &fns {
+        for &(_, _, t) in &fun.calls {
+            if ctx_of.get(&t) != Some(&fun.ctx) {
+                barred.insert(t);
+            }
+        }
+    }
+    let callees: BTreeSet<u32> = fns
+        .iter()
+        .flat_map(|f| f.calls.iter().map(|c| c.2))
+        .collect();
+    let mut top = [u32::MAX; 16];
+    top[14] = 0;
+    top[15] = 0;
+    let mut entry: BTreeMap<u32, aligned::Regs> = callees
+        .iter()
+        .filter(|&&t| !barred.contains(&t) && ctx_of.contains_key(&t))
+        .map(|&t| (t, top))
+        .collect();
+    let planted = |k: u32, r: aligned::Regs| match holes.plant_aligned {
+        Some(p) if p == k => {
+            let mut r = r;
+            for z in &mut r[..4] {
+                *z |= 3;
+            }
+            r
+        }
+        _ => r,
+    };
+    let index: BTreeMap<u32, usize> = fns
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.f.entry, i))
+        .collect();
+    // Each eligible callee's call sites' facts: caller, block, exit inst.
+    let mut sites: BTreeMap<u32, BTreeMap<(usize, u32, usize), aligned::Regs>> = BTreeMap::new();
+    let mut work: std::collections::VecDeque<usize> = (0..fns.len()).collect();
+    let mut queued = vec![true; fns.len()];
+    while let Some(i) = work.pop_front() {
+        queued[i] = false;
+        let fun = &fns[i];
+        let at = planted(
+            fun.f.entry,
+            entry.get(&fun.f.entry).copied().unwrap_or(aligned::NONE),
+        );
+        let block = |k: u32| (&fun.f.blocks[&k].block.insts[..], &fun.known[&k][..]);
+        let starts = aligned::starts(fun.f.entry, at, &fun.edges, &fun.lands, block);
+        let mut changed = BTreeSet::new();
+        for &(b, x, t) in &fun.calls {
+            if !entry.contains_key(&t) {
+                continue;
+            }
+            let (insts, known) = block(b);
+            let r = aligned::regs_at(insts, known, starts.get(&b).unwrap_or(&aligned::NONE), x);
+            let slot = sites.entry(t).or_default();
+            if slot.insert((i, b, x), r) != Some(r) {
+                changed.insert(t);
+            }
+        }
+        for t in changed {
+            let mut m = top;
+            for r in sites[&t].values() {
+                for (a, b) in m.iter_mut().zip(r) {
+                    *a &= b;
+                }
+            }
+            if entry.get(&t) != Some(&m) {
+                entry.insert(t, m);
+                if let Some(&j) = index.get(&t)
+                    && !queued[j]
+                {
+                    queued[j] = true;
+                    work.push_back(j);
+                }
+            }
+        }
+    }
+    if let Some(p) = holes.plant_aligned {
+        let r = planted(p, entry.get(&p).copied().unwrap_or(aligned::NONE));
+        entry.insert(p, r);
+    }
+    entry.retain(|_, r| *r != aligned::NONE);
+    entry
 }
 
 /// The summaries' shapes against the prototypes, where both speak: what
