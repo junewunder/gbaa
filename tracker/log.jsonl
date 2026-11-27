@@ -4493,3 +4493,4 @@
 {"at":"2026-11-27T11:39:17Z","actor":"loop","tag":"f30e1648","host":"quack","cmd":"done","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: done"}
 {"at":"2026-11-27T11:44:21Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: on main"}
 {"at":"2026-11-27T11:44:27Z","actor":"loop","tag":"b8f4fb73","host":"quack","cmd":"claim","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: claimed"}
+{"at":"2026-11-27T11:56:03Z","actor":"loop","tag":"d794da8a","host":"quack","cmd":"done","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: done"}
