@@ -5201,15 +5201,23 @@
       "uses": ["heavy"],
       "priority": 74,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "31b3c691",
-        "session": "31b3c691-891e-4851-9fe2-b360d9d11a4b",
-        "host": "quack",
-        "pid": 2118754,
-        "start": "121115208",
-        "at": "2026-11-27T14:09:31Z",
+        "checker": "verifier-3e9a71c4",
+        "at": "2026-11-27T14:41:32Z",
+        "evidence": "Review's fix: just lift-check run to completion on head 016bdd65 (holds latest origin/main, refetched): exit 0, 'lift-check: passed', ~28 min; just check passed. Verifier rebuilt on this head: c-fnptr-gcc fn_keys_left 0 (bar 0); c-list-agbcc/gcc 4 each, held by kActs read through gPool's one object cell, follow-up {unit:native/fnref-struct-fields}; Metroid fn_keys_left 331 -> 152 (125 words not proven: 64 arithmetic on pile reads, 33 never read, 13 used as an address by the IWRAM switch copy, 13 stored outside RAM, 2 called in part; 14 code constants; 13 proven words of functions with an unproven one), within mods bars; route-check --native --dense on units/metroid-native.toml: pass, 2700 frames, 0 differences, dense build's records the same but RAM. Raised lift-check bars all explained in the toml.",
         "branch": "unit/native/fnref-dense-keys-left",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T14:41:32Z",
+          "by": "31b3c691",
+          "host": "quack",
+          "pid": 2118754,
+          "start": "121115208",
+          "beats": true,
+          "session": "31b3c691-891e-4851-9fe2-b360d9d11a4b",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
