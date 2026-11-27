@@ -5528,6 +5528,17 @@
       "needs": ["native/lift-lent-print"],
       "uses": ["heavy"],
       "priority": 85,
+      "record": {
+        "state": "claimed",
+        "by": "e25023a3",
+        "session": "e25023a3-5c73-48a7-bae7-30110a892786",
+        "host": "quack",
+        "pid": 2117956,
+        "start": "121114680",
+        "at": "2026-11-27T05:10:59Z",
+        "branch": "unit/native/lift-lent-frameless",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-25T06:00:04Z",
