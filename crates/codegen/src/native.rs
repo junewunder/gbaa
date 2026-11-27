@@ -236,6 +236,7 @@ pub mod frame;
 pub mod globals;
 pub mod heap;
 pub mod indent;
+pub mod joins;
 pub mod lent_types;
 pub mod lift_check;
 pub mod live;
@@ -2830,6 +2831,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // whose code printed more than once (both barred).
     m.push("labelled_blocks", soft.labelled_blocks);
     m.push("blocks_printed_again", soft.blocks_printed_again);
+    // Arm values (native/lift-arm-values): labelled blocks printed as the
+    // return after them or as an `if`'s other arm (no bar: they should
+    // rise), and those left, by why (no bar: labelled_blocks is theirs).
+    m.push("joins_to_return", soft.joins_to_return);
+    m.push("joins_to_else", soft.joins_to_else);
+    for w in joins::Left::ALL {
+        m.push(w.metric(), soft.joins_left.get(&w).copied().unwrap_or(0));
+    }
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -4786,6 +4795,12 @@ struct Soft {
     /// (unit `native/lift-join-shape`).
     labelled_blocks: u64,
     blocks_printed_again: u64,
+    /// Labelled blocks printed without one: their breaks the return the
+    /// code after them is, or their code an `if`'s other arm; those left,
+    /// by why (native/lift-arm-values).
+    joins_to_return: u64,
+    joins_to_else: u64,
+    joins_left: BTreeMap<joins::Left, u64>,
 }
 
 /// The facts `rN == rM + k` of one function ([`field_base::facts`]), by
@@ -7642,12 +7657,14 @@ impl FnPrinter<'_, '_> {
             let last = i + 1 == seq.len();
             self.fall = if last { outer } else { None };
             self.direct = if last { direct } else { None };
-            let n = self.node(&seq[i]);
-            i += 1;
-            let plan::Node::Labeled { label, .. } = &seq[i - 1] else {
+            let plan::Node::Labeled { label, body } = &seq[i] else {
+                let n = self.node(&seq[i]);
+                i += 1;
                 s.push_str(&n);
                 continue;
             };
+            i += 1;
+            let (n, mut rest) = self.labeled(*label, body, &seq[i..], (outer, direct));
             let (mark, end) = (fall_mark(*label), arm_end(*label));
             if n.matches(&mark).count() == 1
                 && !n.contains(&format!("break 'b{label};"))
@@ -7655,7 +7672,10 @@ impl FnPrinter<'_, '_> {
             {
                 self.fall = outer;
                 self.direct = direct;
-                let rest = self.seq(&seq[i..]);
+                let rest = match rest.take() {
+                    Some(r) => r,
+                    None => self.seq(&seq[i..]),
+                };
                 let n = n.replacen(&mark, &format!("\n{rest}"), 1);
                 // Its `match` now ends the sequence: an arm's `break` to
                 // where falling off it goes is its end.
@@ -7685,9 +7705,73 @@ impl FnPrinter<'_, '_> {
                 break;
             }
             s.push_str(&n.replace(&mark, "").replace(&end, ""));
+            // The code after it, printed already to see if it only returns.
+            if let Some(r) = rest {
+                s.push_str(&r);
+                break;
+            }
         }
         (self.fall, self.direct) = (outer, direct);
         s
+    }
+
+    /// Labelled block `label`'s code (`body`), and the code after it
+    /// (`after`, if printed here). Its `break`s go where the code
+    /// after it only returns, or where each ends an `if`'s arm at the top
+    /// of what falls to its end ([`joins`], native/lift-arm-values); it is
+    /// printed bare when none is left. `outer` is the sequence's fall and
+    /// direct, which its last node takes.
+    fn labeled(
+        &mut self,
+        label: usize,
+        body: &[plan::Node],
+        after: &[plan::Node],
+        outer: (Option<usize>, Option<usize>),
+    ) -> (String, Option<String>) {
+        let last = after.is_empty();
+        self.fall = if last { outer.0 } else { None };
+        self.direct = if last { outer.1 } else { None };
+        let saved = (self.fall.replace(label), self.direct.replace(label));
+        let mut b = self.seq(body);
+        (self.fall, self.direct) = saved;
+        self.tail_for = false;
+        let brk = format!("break 'b{label};");
+        // `GBAA_JOINS=off` prints every one labelled, to measure against.
+        let off = std::env::var_os("GBAA_JOINS").is_some_and(|v| v == "off");
+        if !b.contains(&brk) || off {
+            if off && b.contains(&brk) {
+                self.soft.labelled_blocks += 1;
+                b = format!("    'b{label}: {{\n{b}    }}\n");
+            }
+            return (b, None);
+        }
+        let mut rest = None;
+        if !after.is_empty() {
+            (self.fall, self.direct) = outer;
+            let r = self.seq(after);
+            if let Some(ret) = joins::return_only(&r, &b) {
+                self.soft.joins_to_return += 1;
+                b = b.replace(&brk, &format!("\n{ret}\n"));
+            }
+            rest = Some(r);
+        }
+        // A `match` arm's marks for the code after it stay where they are.
+        if b.contains(&brk) && !b.contains(['\u{1}', '\u{2}']) {
+            match joins::else_join(&b, &brk) {
+                Ok(t) => {
+                    self.soft.joins_to_else += 1;
+                    b = t;
+                }
+                Err(why) => *self.soft.joins_left.entry(why).or_default() += 1,
+            }
+        } else if b.contains(&brk) {
+            *self.soft.joins_left.entry(joins::Left::Marked).or_default() += 1;
+        }
+        if b.contains(&brk) {
+            self.soft.labelled_blocks += 1;
+            b = format!("    'b{label}: {{\n{b}    }}\n");
+        }
+        (b, rest)
     }
 
     fn node(&mut self, n: &plan::Node) -> String {
@@ -7742,21 +7826,8 @@ impl FnPrinter<'_, '_> {
                 self.tail_for = is_for;
                 s
             }
-            // Printed bare where nothing breaks out of it: its body
-            // falls to the code after it at every way out (an `if`'s,
-            // a `match`'s arms').
-            plan::Node::Labeled { label, body } => {
-                let outer = (self.fall.replace(*label), self.direct.replace(*label));
-                let b = self.seq(body);
-                (self.fall, self.direct) = outer;
-                self.tail_for = false;
-                if b.contains(&format!("break 'b{label};")) {
-                    self.soft.labelled_blocks += 1;
-                    format!("    'b{label}: {{\n{b}    }}\n")
-                } else {
-                    b
-                }
-            }
+            // Printed bare where nothing breaks out of it ([`Self::labeled`]).
+            plan::Node::Labeled { .. } => unreachable!("FnPrinter::seq prints a labelled block"),
             // v1's `loop { match b }` over the region's blocks, entered at
             // the label the edge into it set; leaving it, `match b` picks
             // the edge on.
