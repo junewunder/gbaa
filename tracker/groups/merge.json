@@ -891,6 +891,17 @@
       "check": "recorded",
       "lane": "quack/3",
       "branch": "unit/native/lift-aligned-params",
+      "record": {
+        "state": "claimed",
+        "by": "2e273413",
+        "session": "2e273413-7d10-4144-a65c-9d090349e167",
+        "host": "quack",
+        "pid": 4000180,
+        "start": "125627797",
+        "at": "2026-11-27T20:30:21Z",
+        "branch": "unit/native/lift-aligned-params",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T20:30:16Z",

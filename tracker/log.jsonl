@@ -4558,3 +4558,4 @@
 {"at":"2026-11-27T20:30:01Z","actor":"loop","tag":"fbd19bea","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-27T20:30:14Z","actor":"session","tag":"manual","host":"quack","cmd":"edit","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: edited (detail, branch)"}
 {"at":"2026-11-27T20:30:16Z","actor":"session","tag":"manual","host":"quack","cmd":"reopen","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: back to ready: Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"}
+{"at":"2026-11-27T20:30:21Z","actor":"loop","tag":"2e273413","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-lift-aligned-params","text":"Merge main on quack lane 3: claimed"}
