@@ -30,4 +30,4 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
 
-- [Rogue's r11 takers: how the [[takes]] chain was traced](rogue-r11-takers.md) — naming the dispatchers makes every callback above them a taker, up to AgbMain; 29 + 89 + 13 so far, 14 left (2026-11-27)
+- [Rogue's r11 takers: how the [[takes]] chain was traced](rogue-r11-takers.md) — naming the dispatchers makes every callback above them a taker, up to AgbMain; 144 named, only AgbMain left (2026-11-27)

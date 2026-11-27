@@ -1,6 +1,6 @@
 ---
 title: Rogue's r11 takers: how the [[takes]] chain was traced
-hook: naming the dispatchers makes every callback above them a taker, up to AgbMain; 29 + 89 + 13 so far, 14 left (2026-11-27)
+hook: naming the dispatchers makes every callback above them a taker, up to AgbMain; 144 named, only AgbMain left (2026-11-27)
 open: true
 ---
 
@@ -15,7 +15,10 @@ What 2026-11-27 (quack lane 1) found:
   menu's field-move call through `bx r11`) makes the dispatchers take r11,
   so every main callback, task and script command that calls one directly
   takes it too: round two listed 114 more, up to AgbMain (crt0's
-  `bx r1`). Round three left 25, then 14 needing a hand read. r11 is
+  `bx r1`). Five rounds named 144 (each `just holes` run checks the
+  sites); only AgbMain is left, whose crt0 call is a constant call
+  through a register, which a `[[takes]]` can't name
+  (native/lift-const-call-takes). r11 is
   mostly the reset value passed down untouched; the field-move path sets
   r11 to the function pointer itself before calling it.
 - `gbaa-holes`' summary hole prints only the first function ("zeroed
