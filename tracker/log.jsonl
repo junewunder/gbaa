@@ -4518,3 +4518,4 @@
 {"at":"2026-11-27T14:27:18Z","actor":"loop","tag":"e3bfa97a","host":"quack","cmd":"note","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: note: just lift reads mods/<name>/bars.toml, but the games' private bars are mods/<name>/lift-bars.toml, so a plain just lift never bars a game; pass --bars mods/<name>/lift-bars.toml (the justfile, commands.md line ~1235)."}
 {"at":"2026-11-27T14:27:36Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: on main"}
 {"at":"2026-11-27T14:33:18Z","actor":"loop","tag":"6b36b822","host":"quack","cmd":"done","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: done"}
+{"at":"2026-11-27T14:39:24Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: on main"}
