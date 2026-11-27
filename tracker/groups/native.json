@@ -5650,6 +5650,17 @@
       "needs": ["native/lift-pointer-types", "native/lift-lent-print"],
       "uses": ["heavy"],
       "priority": 82,
+      "record": {
+        "state": "claimed",
+        "by": "f259740d",
+        "session": "f259740d-bff2-4149-87f7-5a8b9941702f",
+        "host": "quack",
+        "pid": 2117956,
+        "start": "121114680",
+        "at": "2026-11-27T07:38:40Z",
+        "branch": "unit/native/lift-pointer-signatures",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T07:38:34Z",
