@@ -268,7 +268,11 @@ Its rules:
   `__gnu_thumb1_case` helpers resolve, with no knowledge of them.
 - Values are widened after six visits, only at loop heads (targets of
   backward edges), so a value bounded by a check is never widened before
-  its use. Calls clobber r0–r3, r12 and lr, except those of r0–r3 and
+  its use. The visits are counted per backward edge, and only a set the
+  join grows is widened (since 2026-11-27, native/gcc-switch-recovery:
+  modern GCC's state-machine switches come back to the jump from a dozen
+  cases, each with a constant index, and a loop counter settles while
+  another register still grows). Calls clobber r0–r3, r12 and lr, except those of r0–r3 and
   r12 a short callee with no calls of its own never writes (read from its
   code, up to 64 instructions, following its branches; since 2026-11-06).
 - A jump to lr's entry value, unchanged, is a return wherever it is held:
@@ -276,9 +280,27 @@ Its rules:
   (native/recovery-saved-lr-return). With the two rules jt-score's
   unresolved jumps went 38 to 22 (pokeemerald) and 53 to 37 (modern), and
   nothing else it scores moved.
+- A value computed from another by a shift, a multiply or an extension
+  remembers it, plus a constant added after (`r9 = table + r7 * 4`, made
+  before the loop that bounds r7), and a join keeps that where both sides
+  are made the same way, from loads that differ or a constant (an `ldrsh`
+  index on each path, bounded through its zero-extended copy). A shift
+  right by less than a shift left before it is the narrower shift's
+  value scaled (`lsrs r3, r2, #24` bounded, `lsrs r3, r2, #22` the index).
+- A frame address escapes, so that a call or a store through an unknown
+  pointer may write the frame from it up, when it is stored, passed to a
+  call in r0-r3, joined with another value, or lost in arithmetic; a copy
+  in another register doesn't, and a frame address plus an index escapes
+  at the address plus the index's least value (GCC's `buf - 33` indexed
+  from 33). Since 2026-11-27: a table base spilled below such locals
+  survives the calls.
 - A jump resolves when its target value at the fixpoint is a finite set
   inside ROM. When a jump is reached from several function entries, it
-  counts as resolved only if every one of them resolves it.
+  counts as resolved only if every one of them resolves it; but an entry
+  some analysis takes a `bl` to as a far jump, and that the analysis of a
+  whole function runs through, is part of that function, and its own
+  result yields to the function's (a continuation entry or cold block
+  starts without the base the function spilled; since 2026-11-27).
 
 There is no compiler-specific code anywhere in V.
 
