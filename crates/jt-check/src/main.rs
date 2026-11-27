@@ -16,7 +16,10 @@
 //! function holding it, and the continuation entries inside that
 //! function), where frame addresses escape in them, the function's far
 //! jumps, and every root within 32 KiB that reaches the jump. `--back N`
-//! (hex, default 0x40) is how far before ADDR the states start.
+//! (hex, default 0x40) is how far before ADDR the states start. With
+//! `--engine`, also the registers' sets from an engine run over
+//! discovery's functions, with its own far-jump answers (discovery's own
+//! analyses aren't kept).
 //!
 //! It also scores the far-jump `bl` rule (decision 5a) on every Thumb `bl`
 //! in the code map, against [`FarTruth`]. With `--expect-far N`, exits 1
@@ -32,7 +35,7 @@ use jt_check::{FarTruth, Score, Truth, Verdict, elf};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-const USAGE: &str = "usage: jt-check ELF [--discover] [--expect N] [--max-subset N] [--expect-far N] [--show N] [--dump FILE] [--trace ADDR]\n       jt-check --rom ROM [--trace ADDR]... [--back N]";
+const USAGE: &str = "usage: jt-check ELF [--discover] [--expect N] [--max-subset N] [--expect-far N] [--show N] [--dump FILE] [--trace ADDR]\n       jt-check --rom ROM [--trace ADDR]... [--back N] [--engine]";
 
 fn read(path: &str) -> Result<Vec<u8>> {
     std::fs::read(path).map_err(|e| format!("{path}: {e}").into())
@@ -258,8 +261,13 @@ fn hex(s: &str) -> Result<u32> {
 /// `--rom ROM [--trace ADDR]... [--back N]` (see the module docs).
 fn rom_mode(rom_path: &str, rest: &[String]) -> Result<ExitCode> {
     let (mut trace, mut back) = (Vec::new(), 0x40);
+    let mut engine = false;
     let mut it = rest.iter();
     while let Some(flag) = it.next() {
+        if flag == "--engine" {
+            engine = true;
+            continue;
+        }
         let arg = it.next().ok_or(USAGE)?;
         match flag.as_str() {
             "--trace" => trace.push(hex(arg)?),
@@ -290,11 +298,38 @@ fn rom_mode(rom_path: &str, rest: &[String]) -> Result<ExitCode> {
     let mut prog = Program::new(rom, Vec::new(), funcs);
     prog.set_data(d.data.clone());
     for &a in &trace {
-        println!("0x{a:08x}: {:?}", d.rec.jumps.get(&a));
+        println!(
+            "0x{a:08x}: {:?}, in discovery's code: {}",
+            d.rec.jumps.get(&a),
+            d.code.contains_key(&a)
+        );
         let Some(f) = prog.func_at(a).copied() else {
             println!("  in no function");
             continue;
         };
+        // The same analyses over discovery's functions, with the
+        // engine's own far-jump answers.
+        if engine {
+            let (eng, _) = recover_with(&prog);
+            let k = (f.start, f.thumb);
+            let reached = eng
+                .results
+                .get(&k)
+                .map(|r| r.insns.iter().any(|&(x, _)| x == a));
+            println!("  engine over discovery's functions: reached {reached:?}");
+            let states = analysis::vsa::func::states(&prog, f.start, f.thumb, &mut |t, th| {
+                eng.known((t, th))
+            });
+            for (at, st) in states.range(a.saturating_sub(back)..=a + 4) {
+                let regs: Vec<String> = st
+                    .regs
+                    .iter()
+                    .enumerate()
+                    .map(|(r, v)| format!("r{r} {:?}", v.dom))
+                    .collect();
+                println!("  engine 0x{at:08x}: {}", regs.join(", "));
+            }
+        }
         let roots = std::iter::once(f.start).chain(
             d.entries
                 .keys()
@@ -405,7 +440,7 @@ fn print_states(
         let Some(i) = prog.decode(*at, thumb) else {
             continue;
         };
-        if let Some(_) = i.bl {
+        if i.bl.is_some() {
             if let Some(n) = states.get(&i.next())
                 && lower(n.escaped, st.escaped)
             {
