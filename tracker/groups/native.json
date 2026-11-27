@@ -6133,6 +6133,14 @@
       "check": "recorded",
       "needs": ["native/lift-signed-values"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-signed-registers",
+      "title": "Register locals compared signed declared i32",
+      "detail": "From {unit:native/lift-signed-values}: codegen::native::signed types only immutable lets. Register locals (the entries' tuple let, parameters, plain assignments; as {unit:native/lift-pointer-registers} bound Refs, keeping Entries' two copies) hold Mirror's 1,132 (rN as i32) and C loop counters (i, n): c-loops' compares are mostly these. Also 1,307 lets compared signed are copied into a register local (r0 = v;), each a cast more today. Same min cut over lets and locals. Done when: Mirror's as-i32 compares fall, lift-check passes, C programs and a game judged, Mirror's native route 0 differences.",
+      "check": "recorded",
+      "needs": ["native/lift-signed-values"],
+      "uses": ["heavy"]
     }
   ]
 }
