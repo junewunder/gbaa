@@ -6307,7 +6307,14 @@
     {
       "id": "native/llm-pilot-standins-stale",
       "title": "Mirror's pilot stand-ins call keys the lift no longer has",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-27T23:00:38Z",
+          "by": "96b9b809",
+          "text": "Seen 2026-11-27 on main: llm-pilot.toml stand-ins panic 'a call or jump to 0x08152e41, which is no function's entry' (TaskDestroy; TaskCreate 0x08152dd9; KirbyEnterStand 0x0805b8b9; MultiSioInit). Re-key or rewrite their call_fn calls; fn-check all 20."
+        }
+      ]
     }
   ]
 }
