@@ -132,7 +132,9 @@
 //! `native/lift-for-ram-bounds-games`). The report counts both
 //! (`loops_for`, `loops_not_for`). A measure by hand too. `GBAA_FOR_WHY=1`
 //! prints to stderr why each loop of several blocks stays a `loop`, and
-//! each one's range that doesn't.
+//! each one's range that doesn't, and (`for-why irq:`) what makes the IRQ
+//! handlers store anywhere: the functions they reach whose own blocks may,
+//! by block.
 //!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,

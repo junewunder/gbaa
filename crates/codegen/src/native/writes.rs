@@ -533,6 +533,10 @@ pub fn ram_writes<'a>(
             break;
         }
     }
+    let irq: Vec<u32> = irq.into_iter().collect();
+    if std::env::var_os("GBAA_FOR_WHY").is_some() {
+        irq_why(&irq, &own, &all, &by_block);
+    }
     let mut on_irq = Writes::default();
     for k in irq {
         match all.get(&k) {
@@ -544,6 +548,48 @@ pub fn ram_writes<'a>(
         by_fn: all,
         by_block,
         irq: on_irq,
+    }
+}
+
+/// Why the IRQ handlers may store anywhere (`GBAA_FOR_WHY`): each
+/// function they reach whose own blocks may (by block), or a callee no
+/// context has, to stderr.
+fn irq_why(
+    irq: &[u32],
+    own: &BTreeMap<u32, (Writes, Vec<u32>)>,
+    all: &BTreeMap<u32, Writes>,
+    by_block: &BTreeMap<(u32, u32), Writes>,
+) {
+    let mut seen: Vec<u32> = irq.to_vec();
+    let mut todo = seen.clone();
+    while let Some(k) = todo.pop() {
+        let Some((w, cs)) = own.get(&k) else {
+            eprintln!("for-why irq: {k:#010x} in no context: anywhere");
+            continue;
+        };
+        if w.any {
+            let blocks: Vec<String> = by_block
+                .range((k, 0)..=(k, u32::MAX))
+                .filter(|(_, b)| b.any)
+                .map(|((_, b), _)| format!("{b:#010x}"))
+                .collect();
+            eprintln!(
+                "for-why irq: {k:#010x} may store anywhere, at {}",
+                if blocks.is_empty() {
+                    "a stand-in".to_string()
+                } else {
+                    blocks.join(" ")
+                }
+            );
+        }
+        for c in cs {
+            if all.get(c).is_some_and(|w| w.any) && !seen.contains(c) {
+                seen.push(*c);
+                todo.push(*c);
+            } else if all.get(c).is_none() {
+                eprintln!("for-why irq: {k:#010x} calls {c:#010x}, in no context: anywhere");
+            }
+        }
     }
 }
 
