@@ -5847,6 +5847,11 @@
       "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', sections 3-4: [[form]] fn, proto, when = constant values of an argument (or sites); at those calls the lifter prints the narrower form, a wrapper passing 0 for the dropped argument; fn-check's new variants run each such call with it as passed and random, which must give the same ends. Check: a C program with a two-form function, a form planted where the argument is read caught; lift-check; just check.",
       "needs": ["native/lift-proto-overrides"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/minish-stop-eeprom-wait",
+      "title": "Minish Cap's lift: past its EEPROM ready wait (frame 4)",
+      "uses": ["heavy"]
     }
   ]
 }
