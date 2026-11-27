@@ -1641,6 +1641,15 @@
         "native/lift-helper-auto"
       ],
       "replaces": "d/helpers-shared-by-many-functions"
+    },
+    {
+      "id": "d/lent-frameless-lands-on-bank-sp-calls-escaping",
+      "title": "Lent-frameless lands on bank_sp_calls; escaping slots go on",
+      "why": "Under the lift-counts decision: c-chain-gcc's sp_accesses_escaping_slot (4) can't move without stack arguments passed as parameters (fill_rect's fifth argument stored at [sp] by frame_, move_body, draw_body). That target goes to {unit:native/lift-stack-args}, whose done-when names it. This unit lands on bank_sp_calls, lowered on every C row (c-chain-gcc 18 to 9), native check green; an independent checker called the swap fair.",
+      "by": "e25023a3",
+      "at": "2026-11-27T06:32:35Z",
+      "scope": ["native/lift-lent-frameless"],
+      "until": "2026-11-27T21:59:59Z"
     }
   ]
 }
