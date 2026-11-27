@@ -5213,6 +5213,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-27T13:22:31Z",
+          "by": "cc1f7d5d",
+          "text": "Found 2026-11-27: Dense::at swaps any inst's value for the ID, sums too, and Flow::consts keeps one key per site: a sum making key g in one context and other numbers in another prints as g's ID always. None seen on C/agb/Metroid (no site gets two keys); guard it first."
+        },
+        {
           "at": "2026-11-27T09:21:01Z",
           "by": "bec3cb4c",
           "text": "From {unit:native/lift-proto-r3-align}: main_cb_run's pushed r3 no longer reads a parameter; c-fnptr-gcc fn_keys_left 6->4, fn_ids_dense 7->9, call_fn_four_complete 2->0. Metroid's lift not rerun."
