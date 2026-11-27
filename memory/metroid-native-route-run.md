@@ -25,3 +25,10 @@ target/release/route-check --native target/recompiled/release/gbaa-native-metroi
   fault as `--planted BIN`. 2,700 frames.
 - Records the same byte for byte doesn't mean the variant didn't run: Metroid's dense build kept every
   RAM byte (no function pointer it stores in RAM is proven), while the C programs' differ.
+- The Amazing Mirror the same way (native/lift-libgcc-div, 2026-11-27): `gbaa-lift ROM OUT --name kirby-mirror
+  --holes mods/kirby-mirror/holes.toml` (without `--holes` its [[copy]] functions are missing and the native
+  build stops at frame 4, a call to 0x030017f0), `just build-recompiled OUT guest-pc`, the play build by
+  `just recompile ROM out/kirby-mirror-play --timing native --name kirby-mirror-play`, then route-check
+  --native … units/kirby-mirror-native.toml --name kirby-mirror: about 15 min under `--mem 12G`.
+- A lifted function giving wrong values in a C program: `just fn-check ROM --fn-check KEY … --interp-every 1
+  --frames 60` checks each against the interpreter and prints the first differing call's registers.
