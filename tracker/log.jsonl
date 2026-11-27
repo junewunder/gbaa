@@ -4462,3 +4462,4 @@
 {"at":"2026-11-27T07:45:11Z","actor":"loop","tag":"bec3cb4c","host":"quack","cmd":"claim","id":"native/lift-proto-r3-align","text":"GCC's push of r3 to align the stack reads no parameter: claimed"}
 {"at":"2026-11-27T07:58:43Z","actor":"loop","tag":"47986d06","host":"quack","cmd":"done","id":"native/lift-field-base","text":"A field address held in a register prints on its base: done"}
 {"at":"2026-11-27T08:04:54Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-field-base","text":"A field address held in a register prints on its base: on main"}
+{"at":"2026-11-27T08:05:00Z","actor":"loop","tag":"255e28cf","host":"quack","cmd":"claim","id":"native/lift-libgcc-div","text":"libgcc's division calls print as / and %: claimed"}
