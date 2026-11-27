@@ -2278,6 +2278,47 @@ fn a_caller_stopped_at_a_hole_may_read_past_it_only_what_it_still_holds() {
     assert_eq!((f.read_after, f.hidden_after), (0, 0b10));
 }
 
+/// GCC's `push {r3, lr}`, which only keeps sp 8-byte aligned, reads no
+/// parameter: `f: push {r3, lr}; movs r0, #1; pop {r3, pc}` takes nothing
+/// and gives r3 back as it came. `g: push {r3, lr}; ldr r0, [sp]; pop
+/// {r3, pc}` reads the saved word, so r3; `h: push {r3, lr}; adds r3,
+/// #1; pop {r3, pc}` reads the register itself before the pop.
+#[test]
+fn summaries_take_a_pushed_r3_its_pop_restores_as_no_read() {
+    let h = [
+        0xB508, 0x2001, 0xBD08, 0x46C0, // f
+        0xB508, 0x9800, 0xBD08, 0x46C0, // g, 0x08
+        0xB508, 0x3301, 0xBD08, 0x46C0, // h, 0x10
+    ];
+    let sizes = [2; 12];
+    let (rom, d) = thumb_program(&h, &sizes, &[0x0800_0001, 0x0800_0009, 0x0800_0011]);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let s = |k: u32| &sums.by_entry[&k];
+    assert_eq!(s(0x0800_0001).params, 0, "{:?}", s(0x0800_0001).causes);
+    assert!(s(0x0800_0001).exit[3].entry);
+    assert_eq!(s(0x0800_0009).params, 0b1000);
+    assert_eq!(s(0x0800_0011).params, 0b1000);
+}
+
+/// A saved r0 whose stack word a callee is lent is read: `f: push {lr};
+/// sub sp, #4; str r0, [sp]; mov r0, sp; bl g; ldr r0, [sp]; add sp, #4;
+/// pop {pc}` with `g: movs r1, #0; str r1, [r0]; bx lr` (Rust's `let mut
+/// x = a; bump(&mut x); x`) returns what g left, not r0 as it came.
+#[test]
+fn summaries_read_a_saved_r0_whose_word_a_callee_is_lent() {
+    let h = [
+        0xB500, 0xB081, 0x9000, 0x4668, 0xF000, 0xF804, 0x9800, 0xB001, 0xBD00, 0x46C0, // f
+        0x2100, 0x6001, 0x4770, // g, 0x14
+    ];
+    let sizes = [2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2];
+    let (rom, d) = thumb_program(&h, &sizes, &[0x0800_0001, 0x0800_0015]);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let f = &sums.by_entry[&0x0800_0001];
+    assert_eq!(f.params & 1, 1, "{:?}", f.causes);
+}
+
 /// `c: push {lr}; movs r1, #5; bl f; adds r2, r0, #0; pop {r0}; bx r0`,
 /// `f: adds r0, r1, #0; bx lr` and `g: push {lr}; bl f; pop {r0}; bx r0`,
 /// in Thumb.
