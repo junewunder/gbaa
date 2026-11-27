@@ -1284,7 +1284,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
   `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names), `agb/native-ram-jump` (a function that jumps into code in IWRAM reading r8 and r9 as its caller set them), `agb/native-copy-takes` (code in IWRAM that a ROM function calls, calling a ROM function through a pointer that reads r8 and r9 as the ROM caller set them: `[[takes]]` sites across code contexts), `agb/native-gives` (two functions that leave r9 changed for their caller, one through its jump into the other), `agb/native-entry-jump` (a `b` into another function's entry, and a call whose return site is one), `agb/native-ime-i-set` (`IME` set again while I is set, then an `msr` clears I)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program, native/lift-takes-across-copies, native/lift-gives, native/entry-jump-test-program, native/ime-i-set-test-program), and the C programs `c-fnptr`, `c-switch`, `c-chain`, `c-heap`, `c-bits`, `c-loops`, `c-list`, `c-jump` and `c-resume`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: eighteen ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites, native/lift-bitfields, native/lift-for-bounds, native/c-list-test-program, native/lift-longjmp, native/lift-restore-saved-block; each with a `planted_store`) on
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program, native/lift-takes-across-copies, native/lift-gives, native/entry-jump-test-program, native/ime-i-set-test-program), and the C programs `c-fnptr`, `c-switch`, `c-chain`, `c-heap`, `c-bits`, `c-loops`, `c-list`, `c-jump`, `c-resume` and `c-lent`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: twenty ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites, native/lift-bitfields, native/lift-for-bounds, native/c-list-test-program, native/lift-longjmp, native/lift-restore-saved-block; each with a `planted_store`) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's, native-ime-i-set's and
   native-bios-region's `-601`). First every program is lifted with `--bars`
@@ -1317,7 +1317,14 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
-  `lift-check: passed`. Logs in `out/lift-*.txt`. About 30 minutes on
+  `lift-check: passed`. A failing program doesn't stop the rest: each prints
+  `lift-check: NAME: failed: …` (route-check's own output, in
+  `out/lift-NAME.route.txt`, is printed as it ends), and the last lines group the
+  failures by cause, the step and the first difference with each program's
+  name, frames, addresses, values and counts taken out (`3 (affine, native-spike,
+  c-list-agbcc): the native check failed: native differs from play: frame N:
+  IWRAM byte 0x…: …`; a build's first `error` line, an I/O register's name kept),
+  so one lifter bug in many programs reads as one line. Logs in `out/lift-*.txt`. About 30 minutes on
   quack. Heavy: builds about eighty generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of

@@ -1,0 +1,17 @@
+# WarioWare, Inc.: Mega Microgame$! (USA): reset and 600 frames with no presses, the boot through the
+# first screens. From frame 39 the game calls its resumable DMA3 run-length copier in IWRAM
+# (0x030003a8; the holes file's stand-in, native/warioware-stop-30003a8). The lift (`just lift ROM
+# out/lift-warioware --name warioware`, holes file mods/warioware/holes.toml) against the play build
+# at --timing native (`just recompile ROM out/warioware-play --timing native --name warioware-play`,
+# then `just build-recompiled out/warioware-play`), by route-check --native
+# target/recompiled/release/gbaa-native-warioware target/recompiled/release/gbaa-warioware-play
+# units/warioware-native.toml --name warioware. Headless, no save. The lift stops at frame 130 today (a
+# call to 0x080f0669 in the sound driver, which discovery didn't find); frames 1-129 match the play
+# build with 0 differences, audio too (2026-11-25).
+rom = "$HOME/ROMs/gba/WarioWare, Inc. - Mega Microgame$!.gba"
+
+# The play build's picture at --timing native, not yet checked against mGBA or by eye.
+[[checkpoint]]
+name = "boot-600"
+frame = 600
+hash = "2627cd69290646e0"
