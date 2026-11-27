@@ -5292,32 +5292,30 @@
       "detail": "docs/research/llm-pilot.md, round two. Clearing flags bit by bit compiles to one and each; the lift prints ((((x & 0xfffffffd) & 0xffffef8f) & 0xf3ffffff) & 0xf7fff0ff), the pilot rewrite x & !0x0c001f72 (KirbyEnterStand; 3 of the 20). Fold and/or chains of constants, printing a mask with more set bits than clear as !CLEARED. Bar on 4ff1b2c1: 386 '& 0x…u32) & 0x' in Mirror's src/m_*.rs. Done when: the count falls near 0, lift-check passes, the C programs and a game judged (decision). Sprint 2026-11-24: only chains whose intermediates have one use; or-chains fold, and-then-or doesn't; bitfield_* bars don't rise. New metric mask_chains, Mirror at most 20, each one left explained. No C program has such a chain: c/bits gains one agbcc emits, or codegen unit tests cover each fold. Mirror's native route 0 differences; grep src/*.rs, not src/m_*.rs. Not beside {unit:native/lift-task-struct}.",
       "uses": ["heavy"],
       "priority": 72,
-      "record": {
-        "state": "done",
-        "by": "0a34a83d",
-        "at": "2026-11-27T19:50:24Z",
-        "evidence": "On 9ff2d647 (main merged, up to date): Mirror's '& 0x…u32) & 0x' in src/*.rs 386 to 1 (a byte store of x & !0x40, which doesn't fit its width); masks_folded 1178, new barred mask_chains 0 on Mirror and every lift-check row (177 links used again, stored then masked on, stay lets by the card's one-use rule). Mirror native route (units/kirby-mirror-native.toml) on c9a6df3c: 3000 frames, 0 differences, audio the same. just check passed on 9ff2d647. Codegen unit test mask_chains_print_as_one_mask covers and-, or-chains, and-then-or not folding, a used-again link, a fold past a register write; no C program has a chain. lift-metrics: bitfield_* unchanged, all bars hold. just lift-check stopped at the 2 h mark after 43 of 46 programs passed, none failed: the rest is {unit:native/lift-mask-fold-lift-check}. Loop's diff review pending.",
-        "branch": "unit/native/lift-mask-fold",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-27T19:50:24Z",
-          "by": "0a34a83d",
-          "host": "quack",
-          "pid": 3999615,
-          "start": "125627294",
-          "beats": true,
-          "session": "0a34a83d-ec97-47a3-be7f-c00d23601733",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-27T19:57:16Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Card's Done when says 'lift-check passes', but the Evidence says `just lift-check` stopped at the 2 h mark after 43 of 46 programs passed. The last 3 programs never ran, and that check was split off into a new…"
+        },
         {
           "at": "2026-11-27T19:50:30Z",
           "by": "0a34a83d",
           "text": "Fold is FnPrinter::mask_link (native.rs): links per block in self.links, folded only over an inlined (one-use) link. GBAA_MASK_WHY=1 prints chains left. Global part stores skip their width mask for a fitting & link (globals::store_fitting). Mirror lift ~80 s, route ~15 min."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-27T19:57:16Z",
+        "findings": "- Card's Done when says 'lift-check passes', but the Evidence says `just lift-check` stopped at the 2 h mark after 43 of 46 programs passed. The last 3 programs never ran, and that check was split off into a new unit, 'Lift-check passes with the mask fold on main' ({unit:native/lift-mask-fold-lift-check}), which the card didn't ask for. The new barred metric mask_chains = 0 is also recorded in crates/codegen/lift-check.toml for all rows, so the rows for those 3 programs were never confirmed. What to do: run `just lift-check` to completion on this branch, or run just the 3 programs it didn't reach, if the recipe can take a subset. Record that all 46 pass, with mask_chains at 0 on each, in this unit's evidence. Then drop or close the split-off unit. Don't land with that check still open.",
+        "sent": {
+          "evidence": "On 9ff2d647 (main merged, up to date): Mirror's '& 0x…u32) & 0x' in src/*.rs 386 to 1 (a byte store of x & !0x40, which doesn't fit its width); masks_folded 1178, new barred mask_chains 0 on Mirror and every lift-check row (177 links used again, stored then masked on, stay lets by the card's one-use rule). Mirror native route (units/kirby-mirror-native.toml) on c9a6df3c: 3000 frames, 0 differences, audio the same. just check passed on 9ff2d647. Codegen unit test mask_chains_print_as_one_mask covers and-, or-chains, and-then-or not folding, a used-again link, a fold past a register write; no C program has a chain. lift-metrics: bitfield_* unchanged, all bars hold. just lift-check stopped at the 2 h mark after 43 of 46 programs passed, none failed: the rest is {unit:native/lift-mask-fold-lift-check}. Loop's diff review pending.",
+          "by": "0a34a83d",
+          "host": "quack",
+          "branch": "unit/native/lift-mask-fold",
+          "change": "47ebc3c6e538a6c7847c44b284964a8c4f031d28"
+        }
+      },
       "round": "2026-11-27T17:43:04Z"
     },
     {
