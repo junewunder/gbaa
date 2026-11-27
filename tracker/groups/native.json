@@ -5992,6 +5992,13 @@
       "detail": "Found by {unit:native/lift-libgcc-div}. Modern GCC's __aeabi_idivmod (ARM) does cmp r1,#0, then bl .divsi3_skip_div0_test, whose first rsbmi r1,r1,#0 reads that N flag. The lift's call goes through f_08000558, which enters x_ by Regs::call with every flag false, so a negative divisor isn't negated: c-div-gcc's smod gave -923 for -923 % -2 (fn-check --interp-every 1: 72 of 472 runs differ). Silent: no hole names it. Fix: a direct call of a function whose extended entry reads a flag as it came passes the caller's flags (or is a hole). Check: c/div's smod given its divisor that may be -1 back (m1 * ((f >> 3 & 7) + 2), see its comment), c-div-gcc passes lift-check, fn-check of smod agrees with the interpreter.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-lend-null-index",
+      "title": "Borrowed pointers kept on a null check or an index",
+      "detail": "Split from {unit:native/lift-lend-wider}, which made a struct return's unread pointer borrowed but found no C row whose lent pointer meets a null check or an index (GBAA_LEND_DEBUG lists frame addresses passed: only c-chain's ctx and rect_union's buffer, and c-jump's setjmp buffer). Grow c/lent with both (if (p) p->n++; a stack array walked by a checked index), then widen frame::lend: a compare of a borrowed pointer with 0 prints as its known outcome (never null; the lift's pN.addr() is 0 natively, so the printer must fold it), an index bounded by the Lent's length. Check: c-lent rows gain borrowers, sp_accesses_escaping_slot bars lowered with each row's 'lent slots' line before and after; just lift-check 0 differences, every planted fault caught; just check.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }

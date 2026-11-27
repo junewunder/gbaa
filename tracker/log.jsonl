@@ -4480,3 +4480,4 @@
 {"at":"2026-11-27T10:10:08Z","actor":"loop","tag":"255e28cf","host":"quack","cmd":"done","id":"native/lift-libgcc-div","text":"libgcc's division calls print as / and %: done"}
 {"at":"2026-11-27T10:15:41Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-libgcc-div","text":"libgcc's division calls print as / and %: on main"}
 {"at":"2026-11-27T10:15:47Z","actor":"loop","tag":"f30e1648","host":"quack","cmd":"claim","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: claimed"}
+{"at":"2026-11-27T10:17:52Z","actor":"loop","tag":"099043e1","host":"quack","cmd":"add-unit","id":"native/lift-lend-null-index","text":"new unit: Borrowed pointers kept on a null check or an index"}
