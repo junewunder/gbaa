@@ -2077,8 +2077,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     writeln!(
         report,
-        "bank_sp calls printed: {} ({} stores' left out, the bank already holding their sp)",
-        soft.bank_sp_calls, soft.banks_left_out
+        "bank_sp calls printed: {} ({} stores' left out, the bank already holding their sp; {} left out of frameless functions)",
+        soft.bank_sp_calls, soft.banks_left_out, soft.banks_frameless
     )
     .unwrap();
     writeln!(
@@ -4558,9 +4558,11 @@ struct Soft {
     compare_trees_left: usize,
     /// `bank_sp` calls printed (before a store, a wait, a halt), and the
     /// stores' left out as the bank already held sp
-    /// ([`FnPrinter::redundant_banks`]).
+    /// ([`FnPrinter::redundant_banks`]), and those left out of frameless
+    /// functions ([`FnPrinter::needs_bank`]).
     bank_sp_calls: u64,
     banks_left_out: u64,
+    banks_frameless: u64,
     /// I/O registers the printed accesses name (`native/lift-io-names`),
     /// declared in `main.rs`; constant-address I/O accesses printed by a
     /// register's name, and those no register holds (left as numbers).
@@ -5145,6 +5147,16 @@ impl FnPrinter<'_, '_> {
         self.name_values(&mut s, head);
         self.bind_refs(&mut s, head);
         s
+    }
+
+    /// Whether a store that may reach I/O, a wait or a halt banks sp first
+    /// (`bank_sp`): not in a frameless function (native/lift-lent-frameless).
+    /// It keeps nothing in memory for a handler to overwrite, and no IRQ
+    /// handler that runs there reads the bank: one that does (an IRQ
+    /// wrapper's switch to system mode) would make each function where it
+    /// may run need sp exactly ([`exact_sp`]), which a frameless one doesn't.
+    fn needs_bank(&self) -> bool {
+        !self.frameless
     }
 
     /// Whether nothing of the function's frame is in memory
@@ -6031,7 +6043,8 @@ impl FnPrinter<'_, '_> {
     /// Which stores of a block print a `bank_sp` before them (`cur` the
     /// block; `typed`, `objs` and `refs` from [`FnPrinter::accesses`]):
     /// those that may reach I/O ([`store_may_reach_io`]), as
-    /// [`FnPrinter::block`] prints them, but a stack local's.
+    /// [`FnPrinter::block`] prints them, but a stack local's; none in a
+    /// frameless function ([`FnPrinter::needs_bank`]).
     fn store_banks(
         &self,
         insts: &[Inst],
@@ -6051,11 +6064,12 @@ impl FnPrinter<'_, '_> {
                     return false;
                 };
                 let local = self.in_local(i);
-                !local
+                let io = !local
                     && typed[i].is_none()
                     && objs[i].is_none()
                     && refs[i].is_none_or(|r| r.named)
-                    && store_may_reach_io(self.vsa_where(insts, addr, pc))
+                    && store_may_reach_io(self.vsa_where(insts, addr, pc));
+                io && self.needs_bank()
             })
             .collect()
     }
@@ -8338,14 +8352,16 @@ impl FnPrinter<'_, '_> {
                             );
                             self.soft.named_unknown +=
                                 u64::from(w == Where::Unknown && refs[i].is_some_and(|r| r.named));
+                            let io = typed[i].is_none()
+                                && objs[i].is_none()
+                                && refs[i].is_none_or(|r| r.named)
+                                && store_may_reach_io(w);
                             assert_eq!(
                                 banks[i],
-                                typed[i].is_none()
-                                    && objs[i].is_none()
-                                    && refs[i].is_none_or(|r| r.named)
-                                    && store_may_reach_io(w),
+                                io && self.needs_bank(),
                                 "{at:#010x}: the bank plan's store isn't the printed one"
                             );
+                            self.soft.banks_frameless += u64::from(io && !self.needs_bank());
                             if banks[i] && !banked[i] {
                                 // sp goes to the current mode's bank: the
                                 // reset, an IRQ wrapper or what they call
@@ -10061,7 +10077,13 @@ impl FnPrinter<'_, '_> {
             Idle::Exit => "bank_sp(g, r13); hw::idle_exit(g)?; ",
             _ => "",
         };
-        self.soft.bank_sp_calls += u64::from(!wait.is_empty());
+        let wait = if wait.is_empty() || self.needs_bank() {
+            self.soft.bank_sp_calls += u64::from(!wait.is_empty());
+            wait
+        } else {
+            self.soft.banks_frameless += 1;
+            wait.strip_prefix("bank_sp(g, r13); ").unwrap_or(wait)
+        };
         match x.plan {
             Plan::Static(k) | Plan::Rekey(k) => {
                 let j = self.goto(k, at);
@@ -10279,8 +10301,13 @@ impl FnPrinter<'_, '_> {
                     0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
                     0x02 | 0x03 => {
-                        self.soft.bank_sp_calls += 1;
-                        "bank_sp(g, r13); hw::halt(g)?;".to_string()
+                        if self.needs_bank() {
+                            self.soft.bank_sp_calls += 1;
+                            "bank_sp(g, r13); hw::halt(g)?;".to_string()
+                        } else {
+                            self.soft.banks_frameless += 1;
+                            "hw::halt(g)?;".to_string()
+                        }
                     }
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
