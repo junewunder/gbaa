@@ -345,7 +345,7 @@ fn walk<'a>(
     while let Some(k) = w.work.pop_first() {
         steps += 1;
         if steps > 64 * w.blocks.len() + 64 {
-            w.stop("didn't settle".into())?;
+            w.stop("didn't settle".into(), None)?;
             break;
         }
         w.block(k)?;
@@ -389,10 +389,13 @@ impl Walk<'_> {
 
     /// [`Walk::fail`] where the path's run ends: what runs after it (a
     /// jump into code the run doesn't follow) is unseen, so the summary
-    /// may miss reads there ([`Summary::stopped`]).
-    fn stop(&mut self, why: String) -> Result<(), String> {
-        if let Some(s) = &mut self.sum {
-            s.stopped = true;
+    /// may miss reads there ([`Summary::stopped`]). `s` is the path's
+    /// state there: the calls' results it still holds in r0-r3 are what
+    /// the unseen code may read of them ([`Summary::hidden_after`]);
+    /// `None` (a run cut short, its work left undone) may read them all.
+    fn stop(&mut self, why: String, s: Option<&State>) -> Result<(), String> {
+        if let Some(sum) = &mut self.sum {
+            sum.stop(s);
         }
         self.fail(why)
     }
@@ -409,7 +412,10 @@ impl Walk<'_> {
     fn flow(&mut self, at: u32, to: u32, s: &State) -> Result<(), String> {
         if !self.blocks.contains_key(&to) {
             if self.inner(to) {
-                return self.stop(format!("0x{to:08x}: jumps into a library routine's code"));
+                return self.stop(
+                    format!("0x{to:08x}: jumps into a library routine's code"),
+                    Some(s),
+                );
             }
             // A tail call: the callee returns to our caller.
             let func = self.ctx.disc.funcs.contains_key(&to) && self.ctx.entries.contains(&to)
@@ -455,7 +461,10 @@ impl Walk<'_> {
                         *sum.lr_into.entry(to).or_insert(true) &= s.regs[14] == V::Entry(14);
                         sum.jump_out(s, at, to);
                     }
-                    return self.stop(format!("jumps to 0x{to:08x}, which has no code here"));
+                    return self.stop(
+                        format!("jumps to 0x{to:08x}, which has no code here"),
+                        Some(s),
+                    );
                 }
             }
         }
@@ -695,9 +704,10 @@ impl Walk<'_> {
             Plan::Static(k) => self.flow(at, k, s),
             Plan::Call { target, ret } => {
                 if self.inner(target) {
-                    return self.stop(format!(
-                        "0x{at:08x}: calls into a library routine's code, 0x{target:08x}"
-                    ));
+                    return self.stop(
+                        format!("0x{at:08x}: calls into a library routine's code, 0x{target:08x}"),
+                        Some(s),
+                    );
                 }
                 // The callee's own proof is checked in `prove`.
                 self.callees.insert(target);
@@ -751,7 +761,7 @@ impl Walk<'_> {
                     if let Some(sum) = &mut self.sum {
                         sum.not_rets.insert(at);
                     }
-                    return self.stop(format!("0x{at:08x}: a jump to an unknown place"));
+                    return self.stop(format!("0x{at:08x}: a jump to an unknown place"), Some(s));
                 }
                 if let Some(sum) = &mut self.sum {
                     sum.rets.insert(at);
@@ -793,7 +803,7 @@ impl Walk<'_> {
                 }
                 Ok(())
             }
-            Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode")),
+            Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode"), Some(s)),
             // A compiler's trap: it put one where the program can't go on
             // (a null dereference, `unreachable`), so the path never
             // returns.

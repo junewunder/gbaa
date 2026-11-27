@@ -21,10 +21,14 @@
 //!   callee to define r0 and leave r1-r3 undefined), and a call through
 //!   `call_fn` gets it back from the function's adapter. One no pointer
 //!   reaches gives back only what its callers read (a C `void` nothing);
-//! - all of r0-r3 where a caller's reads aren't known: a direct caller
-//!   whose run stopped at a hole (what it reads past the hole is unseen),
-//!   one in another code context (the ROM and an IWRAM copy are
-//!   summarised apart), or one with no summary;
+//! - what a direct caller whose run stopped at a hole may read past it:
+//!   the callee's results its paths still hold in r0-r3 there
+//!   (`hidden_after`; native/lift-returns-past-holes), as a path that
+//!   wrote over one first can't read it and a read before the hole is
+//!   seen;
+//! - all of r0-r3 where a caller's reads aren't known: one whose run was
+//!   cut short ([`Summary::blind`]), one in another code context (the ROM
+//!   and an IWRAM copy are summarised apart), or one with no summary;
 //! - what may be read after a function that returns its value unread
 //!   (`return f(x);`, the summary's `forwards`), wherever that is;
 //! - all four after a call by value whose target the lifter knows (the
@@ -36,6 +40,13 @@
 //!   value (a tail call through `call_fn`) where it may go: any function
 //!   a pointer reaches (a jump after a context restore, `longjmp`'s, goes
 //!   back into its save's caller by unwinding, no function's return).
+//!   What reaches a function only by a jump whose jumper's run went on
+//!   through its code and proved that jump a return (m4a's mixer: a
+//!   Thumb half pushing lr, jumping into its ARM half, which pops it) is
+//!   no tail call's (native/lift-returns-past-holes); nor is anything a
+//!   stand-in that only forwards to a lifted function reads, a jump into
+//!   that function ([`forwarded_to`]: Metroid's IWRAM copy whose switch
+//!   goes back into the ROM function's cases).
 //!
 //! A result it may leave as it came on some paths (its entry value) is a
 //! parameter too, so that path returns what the caller passed. A register
@@ -151,6 +162,27 @@ pub fn edges(
     e
 }
 
+/// The function a stand-in only forwards to, if its code is that and no
+/// more: a body `a_<key>(g, sp, a)` or `f_<key>(g, sp, a)` (Metroid's
+/// IWRAM copy of a ROM function, whose switch jumps back into the ROM
+/// one's cases). Its edges are a jump into that function, which returns
+/// to the stand-in's caller: what is read after the stand-in is read
+/// after it, and the copy's own jumps (an unknown one, as a tail call by
+/// value) never run.
+pub fn forwarded_to(code: &str) -> Option<u32> {
+    let body = code.get(code.find('{')? + 1..code.rfind('}')?)?.trim();
+    let body = body.strip_suffix(';').unwrap_or(body).trim();
+    let rest = body
+        .strip_prefix("a_")
+        .or_else(|| body.strip_prefix("f_"))?;
+    let (key, args) = rest.split_at_checked(8)?;
+    let args: String = args.chars().filter(|c| !c.is_whitespace()).collect();
+    if args != "(g,sp,a)" || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(key, 16).ok()
+}
+
 /// One function, as the shapes see it.
 pub struct Node<'a> {
     /// Its code context (the ROM, or an IWRAM copy), by index.
@@ -230,7 +262,7 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         .map(|(&k, n)| {
             let d = match n.sum {
                 Some(s) => {
-                    (s.read_after | s.passed_after | s.forwarded_after) as u8 & 0xf
+                    (s.read_after | s.passed_after | s.forwarded_after | s.hidden_after) as u8 & 0xf
                         | u8::from(n.addressed)
                 }
                 None => 0xf,
@@ -239,7 +271,10 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         })
         .collect();
     for n in nodes.values() {
-        let blind = stopped(n) || n.standin;
+        // A caller whose run stopped at a hole reads past it what its
+        // paths still held of the callee's results there (the callee's
+        // `hidden_after`); one cut short, or with no summary, any.
+        let blind = n.sum.is_none_or(|s| s.blind) || n.standin;
         for c in &n.edges.calls {
             if let Some(m) = nodes.get(c)
                 && (blind || m.ctx != n.ctx || n.edges.calls_by_value.contains(c))
@@ -248,6 +283,12 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
             }
         }
     }
+    // What may be read after each returns on the paths where its jumps
+    // by value are its own: not those of a function jumping into it whose
+    // run went on through its code and proved them (a Thumb half pushing
+    // lr and jumping into its ARM half, which pops it: m4a's mixer), as
+    // there they return to that one's caller.
+    let mut tail = demand.clone();
     let mut by_value = 0u8;
     loop {
         let mut grew = false;
@@ -255,15 +296,18 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
             let d = demand[&k];
             // A jump the run proved a return (to the entry lr) isn't a
             // tail call.
-            let unknown = |at: &u32| {
-                n.sum.is_none_or(|s| {
+            let unknown = |s: Option<&Summary>, at: &u32| {
+                s.is_none_or(|s| {
                     s.holes
                         .contains(&format!("0x{at:08x}: a jump to an unknown place"))
                 })
             };
-            if n.edges.by_value.iter().any(unknown) && by_value | d != by_value {
-                by_value |= d;
-                grew = true;
+            if n.edges.by_value.iter().any(|at| unknown(n.sum, at)) {
+                let t = tail[&k];
+                if by_value | t != by_value {
+                    by_value |= t;
+                    grew = true;
+                }
             }
             // A value it returns from a callee unread (`return f(x);`)
             // is read where its own is.
@@ -273,11 +317,13 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
                     continue;
                 }
                 for c in cs {
-                    if let Some(t) = demand.get_mut(c)
-                        && *t & 1 << r == 0
-                    {
-                        *t |= 1 << r;
-                        grew = true;
+                    for m in [&mut demand, &mut tail] {
+                        if let Some(t) = m.get_mut(c)
+                            && *t & 1 << r == 0
+                        {
+                            *t |= 1 << r;
+                            grew = true;
+                        }
                     }
                 }
             }
@@ -288,13 +334,36 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
                     *t |= d;
                     grew = true;
                 }
+                // Its run went on through j's code (j is no callee of its
+                // summary), unstopped, and proved j's jumps by value.
+                let through = n.sum.is_some_and(|s| {
+                    !s.stopped
+                        && !s.blind
+                        && !s.callees.contains(j)
+                        && nodes.get(j).is_some_and(|m| {
+                            m.ctx == n.ctx
+                                && !m.edges.by_value.iter().any(|at| unknown(Some(s), at))
+                        })
+                });
+                if !through
+                    && let Some(t) = tail.get_mut(j)
+                    && *t | d != *t
+                {
+                    *t |= d;
+                    grew = true;
+                }
             }
         }
         // A tail call by value goes only where a pointer can.
-        for (k, t) in demand.iter_mut() {
-            if nodes[k].addressed && *t | by_value != *t {
-                *t |= by_value;
-                grew = true;
+        for (k, n) in nodes {
+            if n.addressed {
+                for m in [&mut demand, &mut tail] {
+                    let t = m.get_mut(k).expect("every node has a demand");
+                    if *t | by_value != *t {
+                        *t |= by_value;
+                        grew = true;
+                    }
+                }
             }
         }
         if !grew {
@@ -657,16 +726,37 @@ mod tests {
     }
 
     #[test]
-    fn a_caller_whose_run_stopped_reads_everything_it_changes() {
+    fn a_caller_whose_run_was_cut_short_reads_everything_it_changes() {
         let f = sum(0b0001, 0b0001, [DEF, DEF, KEEP, DEF]);
+        let mut a = sum(0, 0, [DEF; 4]);
+        a.callees.insert(1);
+        a.holes.insert("didn't settle".into());
+        a.stopped = true;
+        a.blind = true;
+        let nodes = BTreeMap::from([(1, node(&f, &[], &[])), (2, node(&a, &[1], &[]))]);
+        let s = shapes(&nodes);
+        assert_eq!(s.shaped[&1].results, 0b1011);
+        assert!(!s.shaped.contains_key(&2), "a holey function keeps four");
+    }
+
+    #[test]
+    fn a_caller_whose_run_stopped_reads_what_it_held_at_the_hole() {
+        // a calls f, reads r1, writes r0 and r3, and jumps to code it has
+        // none of with f's r2 still in r2: f gives back r1 and r2 (r0 is
+        // its pointer reach's, not a's).
+        let mut f = sum(0b0001, 0b0010, [DEF, DEF, DEF, DEF]);
+        f.read_after = 0b0010;
+        f.hidden_after = 0b0100;
         let mut a = sum(0, 0, [DEF; 4]);
         a.callees.insert(1);
         a.holes
             .insert("jumps to 0x08000100, which has no code here".into());
         a.stopped = true;
-        let nodes = BTreeMap::from([(1, node(&f, &[], &[])), (2, node(&a, &[1], &[]))]);
+        let mut fnode = node(&f, &[], &[]);
+        fnode.addressed = false;
+        let nodes = BTreeMap::from([(1, fnode), (2, node(&a, &[1], &[]))]);
         let s = shapes(&nodes);
-        assert_eq!(s.shaped[&1].results, 0b1011);
+        assert_eq!(s.shaped[&1].results, 0b0110);
         assert!(!s.shaped.contains_key(&2), "a holey function keeps four");
     }
 
@@ -726,13 +816,14 @@ mod tests {
 
     #[test]
     fn a_value_returned_unread_is_read_where_its_returner_is() {
-        // c: `bl x; pop {pc}`, returning x's r1; c's caller stopped, so
-        // c's demand is all four, and x's must take r1 from it.
+        // c: `bl x; pop {pc}`, returning x's r1; c's caller stopped with
+        // c's r1 in r1, so x's demand must take r1 from it.
         let mut x = sum(0, 0, [DEF, DEF, KEEP, KEEP]);
         x.read_after = 0;
         let mut c = sum(0, 0, [DEF, DEF, KEEP, KEEP]);
         c.callees.insert(1);
         c.forwards.insert(1, BTreeSet::from([1]));
+        c.hidden_after = 0b0010;
         let mut b = sum(0, 0, [DEF; 4]);
         b.callees.insert(2);
         b.holes
@@ -865,6 +956,71 @@ mod tests {
         assert_eq!(s.shaped[&1].results, 0b0010);
         // g's address is taken: what the tail call's caller reads.
         assert_eq!(s.shaped[&4].results, 0b0111);
+    }
+
+    #[test]
+    fn a_jump_by_value_the_jumpers_run_proved_is_no_tail_call() {
+        // p (Thumb half: push lr, jump into j) has callers reading r0-r3;
+        // j (ARM half: pop lr, jump by value) can't prove its jump alone,
+        // but p's run went on through j's code and proved it a return.
+        // Only j's own entries (a pointer's: r0) reach the tail call's
+        // demand; g, addressed, gives back r0 only.
+        let mut j = sum(0b0001, 0, [DEF; 4]);
+        j.holes
+            .insert("0x08000300: a jump to an unknown place".into());
+        let mut p = sum(0b0001, 0, [DEF; 4]);
+        p.read_after = 0xf;
+        let mut jn = node(&j, &[], &[]);
+        jn.edges.by_value.insert(0x0800_0300);
+        let g = sum(0b0001, 0, [DEF, DEF, DEF, KEEP]);
+        fn mk(p: &Summary) -> Node<'_> {
+            let mut pn = node(p, &[], &[1]);
+            pn.edges.by_value.insert(0x0800_0200);
+            pn
+        }
+        let nodes = BTreeMap::from([(1, jn), (2, mk(&p)), (4, node(&g, &[], &[]))]);
+        let s = shapes(&nodes);
+        assert_eq!(s.by_value, 0b0001);
+        assert_eq!(s.shaped[&4].results, 0b0001);
+        // A jumper whose run didn't go through (j among its callees) or
+        // didn't prove the jump leaves it a tail call of p's callers'.
+        let mut q = p.clone();
+        q.callees.insert(1);
+        let mut r = p.clone();
+        r.holes
+            .insert("0x08000300: a jump to an unknown place".into());
+        for x in [&q, &r] {
+            let mut jn = node(&j, &[], &[]);
+            jn.edges.by_value.insert(0x0800_0300);
+            let nodes = BTreeMap::from([(1, jn), (2, mk(x)), (4, node(&g, &[], &[]))]);
+            assert_eq!(shapes(&nodes).by_value, 0xf);
+        }
+    }
+
+    #[test]
+    fn a_stand_in_forwarding_to_a_function_is_a_jump_into_it() {
+        let code = "pub fn f_030016c5(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {\n    a_08057f7d(g, sp, a)\n}\n";
+        assert_eq!(forwarded_to(code), Some(0x0805_7f7d));
+        let more = "pub fn f_1(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> { st8(g, 0, 0); a_08057f7d(g, sp, a) }";
+        assert_eq!(forwarded_to(more), None);
+        let other = "pub fn f_1(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> { a_08057f7d(g, sp, [0, a[1], a[2], a[3]]) }";
+        assert_eq!(forwarded_to(other), None);
+        // The stand-in (3), copied code with an unknown jump, its caller
+        // reading r0-r3: as a jump into f (1), the demand is f's, and no
+        // tail call by value's (g, 4, addressed, gives back only r0).
+        let f = sum(0b0001, 0b0001, [DEF, DEF, DEF, DEF]);
+        let mut t = sum(0, 0, [DEF; 4]);
+        t.read_after = 0b0110;
+        t.holes
+            .insert("0x08000300: a jump to an unknown place".into());
+        let mut tn = node(&t, &[], &[1]);
+        tn.standin = true;
+        let g = sum(0b0001, 0, [DEF, DEF, DEF, KEEP]);
+        let nodes = BTreeMap::from([(1, node(&f, &[], &[])), (3, tn), (4, node(&g, &[], &[]))]);
+        let s = shapes(&nodes);
+        assert_eq!(s.by_value, 0);
+        assert_eq!(s.shaped[&1].results, 0b0111);
+        assert_eq!(s.shaped[&4].results, 0b0001);
     }
 
     #[test]

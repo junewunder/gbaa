@@ -204,6 +204,16 @@ pub struct Summary {
     /// didn't settle): reads past it are unseen, so its parameters, and
     /// what it reads after its calls, may be incomplete.
     pub stopped: bool,
+    /// Its run stopped where what its calls left isn't known (a run that
+    /// didn't settle, its work left undone): a caller of each callee that
+    /// may read all of r0-r3 after it.
+    pub blind: bool,
+    /// The registers of r0-r3 (bit `n` for rN) a caller whose run stopped
+    /// at a hole may read after a direct call to it (or an indirect call
+    /// whose complete callee set has it) past the hole: those its result
+    /// is still in where the path stops (native/lift-returns-past-holes).
+    /// What the caller reads before the hole is `read_after`.
+    pub hidden_after: u16,
     /// The functions whose summaries its run used: its direct calls'
     /// callees, and the functions it tail-calls (a jump into another's
     /// entry the run doesn't go on through).
@@ -418,6 +428,12 @@ pub(super) struct Sum<'a> {
     pub(super) holes: BTreeSet<String>,
     /// A path's run ended at a hole ([`Summary::stopped`]).
     pub(super) stopped: bool,
+    /// (callee, register): a result of a direct call (or one of a
+    /// complete callee set) still in r0-r3 where a path's run ended at a
+    /// hole ([`Summary::hidden_after`]).
+    hidden: BTreeSet<(u32, u8)>,
+    /// [`Summary::blind`].
+    blind: bool,
     /// Each call site's callee, `None` for an indirect one.
     sites: BTreeMap<u32, Option<u32>>,
     /// The functions it falls or jumps into and goes on through, with
@@ -549,6 +565,8 @@ impl<'a> Sum<'a> {
             undefined: BTreeMap::new(),
             holes: BTreeSet::new(),
             stopped: false,
+            hidden: BTreeSet::new(),
+            blind: false,
             sites: BTreeMap::new(),
             falls: BTreeSet::new(),
             foreign: BTreeMap::new(),
@@ -655,6 +673,25 @@ impl<'a> Sum<'a> {
     /// No return found, and a hole that may be why.
     fn lost(s: &Summary) -> bool {
         !s.returns && !s.holes.is_empty()
+    }
+
+    /// A path's run ends at a hole in state `s` (`None`: not known, a run
+    /// cut short): what follows is unseen, and may read any result of a
+    /// call the path's r0-r3 still hold there. One a path wrote over
+    /// before the hole is none of those, and a read before it is seen.
+    pub(super) fn stop(&mut self, s: Option<&State>) {
+        self.stopped = true;
+        let Some(s) = s else {
+            self.blind = true;
+            return;
+        };
+        for r in 0..4u8 {
+            for site in &s.org[r as usize].sites {
+                for c in self.targets(*site, self.sites[site]) {
+                    self.hidden.insert((c, r));
+                }
+            }
+        }
     }
 
     /// Register `r` read in state `s`, for `cause`.
@@ -1301,6 +1338,7 @@ pub fn summarize_passing(
         sums.insert(k, library_summary(k));
     }
     let mut used: BTreeMap<u32, BTreeMap<(u32, u8), Cause>> = BTreeMap::new();
+    let mut hidden: BTreeMap<u32, BTreeSet<(u32, u8)>> = BTreeMap::new();
     // Each function's `bl` callees (a tail call's site is its callee).
     let mut bl: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
     // Each function's tail callees and the functions it falls into: they
@@ -1329,6 +1367,7 @@ pub fn summarize_passing(
                 if let Some(s) = sums.get_mut(&k) {
                     s.holes.insert("summaries didn't settle".into());
                     s.stopped = true;
+                    s.blind = true;
                     s.lr_returns.clear();
                     s.lr_into.clear();
                 }
@@ -1419,6 +1458,8 @@ pub fn summarize_passing(
             passes: sum.passes.clone(),
             holes: sum.holes.clone(),
             stopped: sum.stopped,
+            blind: sum.blind,
+            hidden_after: 0,
             callees: sum.refs.clone(),
             indirect_sites: sum
                 .sites
@@ -1463,6 +1504,7 @@ pub fn summarize_passing(
                 .collect(),
         );
         used.insert(k, sum.used);
+        hidden.insert(k, std::mem::take(&mut sum.hidden));
         let given = std::mem::take(&mut sum.given);
         for &j in &jumps[&k] {
             jumpers.entry(j).or_default().insert(k);
@@ -1515,6 +1557,11 @@ pub fn summarize_passing(
                     work.push_back(c);
                 }
             }
+        }
+    }
+    for (c, r) in hidden.into_values().flatten() {
+        if let Some(s) = sums.get_mut(&c) {
+            s.hidden_after |= 1 << r;
         }
     }
     for (caller, u) in used {
