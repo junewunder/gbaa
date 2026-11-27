@@ -6059,6 +6059,14 @@
       "detail": "From {unit:native/lift-stack-typed-locals}: a lent local is typed only where the names file gives its variable a slot. Modern GCC gives c-chain-gcc frame()'s struct Ctx ctx only as a location list of DW_OP_piece entries (piece 12, fbreg -32, piece 2, ...), so pret-names writes no slot and ctx stays [u8; N] (lent_locals_untyped 1). Wanted: pret-names takes a variable's slot from a piece at fbreg plus its piece offset where the pieces agree, names/c-*-gcc.toml made again; c-chain-gcc's ctx then a Local<t::Ctx, N>, its bar lowered. Check: just lift-check 0 differences, every planted fault caught (c-chain-gcc's --plant-lent then through a typed Lent); just check.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-struct-fields",
+      "title": "Function flow: an array of structs keeps its fields apart",
+      "detail": "Split from {unit:native/fnref-dense-keys-left} (2026-11-27). c-list-agbcc and c-list-gcc leave 4 ROM keys each in a --fn-ids dense build (fn_keys_left, crates/codegen/lift-check.toml): kActs' four words. spawn stores n->act = kActs[kind] through a node pointer, which the flow (fnref.rs) has as Tok::Ram(gPool): somewhere in the object, one cell (obj_cell) for every field. pool_get's n->next is read from that cell too, so every node pointer carries act's tokens, and n + 8 (strh r1, [r3, #8] at 0x0800041e) is arithmetic on a function: a hole. GBAA_FNREF_WATCH=0x08000658 shows the road. Fix: a pointer into an object of records keeps its offset modulo the record (the step ram_objects finds, or the names file's type size), and an object's cell is per field offset; a pointer whose offset isn't known stays whole-object. Done when: fn_keys_left 0 on c-list-agbcc and c-list-gcc (bars lowered); no other lift-check program's fn_keys_left or fn_words_not_proven rises; Metroid's lift (mods/metroid/lift-bars.toml) no higher; just lift-check and just check pass; Metroid's dense build passes route-check --native --dense on units/metroid-native.toml.",
+      "check": "independent",
+      "needs": ["native/fnref-dense-keys-left"],
+      "uses": ["heavy"]
     }
   ]
 }

@@ -4504,3 +4504,4 @@
 {"at":"2026-11-27T13:04:19Z","actor":"loop","tag":"0ae44a23","host":"quack","cmd":"done","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: done"}
 {"at":"2026-11-27T13:11:20Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: on main"}
 {"at":"2026-11-27T13:11:26Z","actor":"loop","tag":"e3bfa97a","host":"quack","cmd":"claim","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: claimed"}
+{"at":"2026-11-27T13:22:05Z","actor":"loop","tag":"cc1f7d5d","host":"quack","cmd":"add-unit","id":"native/fnref-struct-fields","text":"new unit: Function flow: an array of structs keeps its fields apart"}
