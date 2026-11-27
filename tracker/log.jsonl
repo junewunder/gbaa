@@ -4491,3 +4491,4 @@
 {"at":"2026-11-27T11:16:40Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-27T11:16:46Z","actor":"loop","tag":"13a2365d","host":"quack","cmd":"claim","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: claimed"}
 {"at":"2026-11-27T11:39:17Z","actor":"loop","tag":"f30e1648","host":"quack","cmd":"done","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: done"}
+{"at":"2026-11-27T11:44:21Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: on main"}

@@ -5750,21 +5750,9 @@
         "by": "f30e1648",
         "at": "2026-11-27T11:39:17Z",
         "evidence": "e57cf10a: codegen::native::proven_types scores each prototype struct/union pointer parameter by its proven accesses (no names-file types; same numbers with --no-field-types). just pret-score row 'proven ptr types: agree/not/none': Emerald 3948, 175, 511 (85.2%); Metroid 428, 7, 26 (92.8%). just lift-check: passed (44 programs, 0 differences, every planted fault caught). just check: passed (exit 0). Definition in decision d/a-proven-pointer-type-agrees-with-whole-fields.",
-        "branch": "unit/native/lift-proven-pointer-types",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T11:39:17Z",
-          "by": "f30e1648",
-          "host": "quack",
-          "pid": 2117526,
-          "start": "121114149",
-          "beats": true,
-          "session": "f30e1648-cc0c-4278-89ae-1552e410c3fd",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-27T10:15:47Z"
+        "landed": "2026-11-27T11:44:21Z"
+      }
     },
     {
       "id": "native/lift-returns-past-holes",
