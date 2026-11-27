@@ -5274,19 +5274,8 @@
         "by": "396b3820",
         "at": "2026-11-27T19:45:52Z",
         "evidence": "Labelled blocks: C rows 86 to 59 (19 blocks' breaks became the return after them, 8 blocks' rest an if's other arm; left: 34 a break deeper in an if arm, 22 in another labelled block, 3 in a match arm), Metroid 3306 to 2274 (224 to returns, 808 to if arms; left 857 in if, 1032 in labelled, 371 in match, 13 beside a match's mark, 1 other), Amazing Mirror 7195 to 5433 (34, 1728). Bars lowered: lift-check.toml labelled_blocks and lines on 38 rows, mods/metroid/lift-bars.toml 2274 (mods 01f08bc). just lift-check passed (every program 0 differences, every planted fault caught); Metroid's native route 2700 frames 0 differences; lift-metrics 0 over. Metroid's pointer_unexplained 708 and bitfield_arith 565 are over their private bars identically with GBAA_JOINS=off (not this unit). just check: fmt, clippy and tests ran; it failed only on the docs line budget, fixed after (leak-check tests pass), and the full rerun was queued behind other lanes' memory and stopped at the 2-hour cut, so its last run isn't complete: the loop's merge check runs it. Self-review only; no subagent review.",
-        "branch": "unit/native/lift-arm-values",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T19:45:52Z",
-          "by": "396b3820",
-          "host": "quack",
-          "pid": 3998997,
-          "start": "125626757",
-          "beats": true,
-          "session": "396b3820-879b-4007-b700-bf2e139a41f8",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-27T20:03:55Z"
       },
       "notes": [
         {
@@ -5294,8 +5283,7 @@
           "by": "396b3820",
           "text": "Text pass in native/joins.rs on each labelled block's body (FnPrinter::labeled); GBAA_JOINS=off prints the old shape to measure against. Metroid's private bars pointer_unexplained, bitfield_arith, lines were over before it. Follow-up: {unit:native/lift-arm-let-values}."
         }
-      ],
-      "round": "2026-11-27T17:42:58Z"
+      ]
     },
     {
       "id": "native/lift-mask-fold",
