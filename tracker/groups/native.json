@@ -6279,6 +6279,12 @@
       "check": "recorded",
       "needs": ["native/lift-for-ram-bounds-games"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-const-call-takes",
+      "title": "A constant call through a register passes what it takes",
+      "detail": "Rogue's crt0 calls AgbMain with ldr r1, =AgbMain; mov lr, pc; bx r1 (ARM, 0x08000244). Once AgbMain takes r11 (it hands it to CallCallbacks' named sites, on GenerateFloorLayout's chain, {unit:native/rogue-build}), the lift reports 'a call through a register to 0x080003b9, which takes r4-r11 from its callers: not passed (the holes file's takes can name the call)', yet a [[takes]] site there 'matches no indirect call (printed through call_fn)': the call isn't call_fn. Done when: such a constant call passes r4-r11 as a bl does (or a takes site names it), shown on a C or agb program, lift-check passes, and Rogue's holes run with AgbMain's takes has no hole at 0x08000244.",
+      "uses": ["heavy"]
     }
   ]
 }
