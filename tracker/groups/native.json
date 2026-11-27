@@ -5549,6 +5549,17 @@
       "needs": ["native/lift-lent-print", "native/lift-returns-read"],
       "uses": ["heavy"],
       "priority": 78,
+      "record": {
+        "state": "claimed",
+        "by": "d794da8a",
+        "session": "d794da8a-bb5f-499b-9b85-efe00f7d84d4",
+        "host": "quack",
+        "pid": 2118754,
+        "start": "121115208",
+        "at": "2026-11-27T10:53:14Z",
+        "branch": "unit/native/lift-lend-wider",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T10:53:08Z",

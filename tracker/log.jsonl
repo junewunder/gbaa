@@ -4485,3 +4485,4 @@
 {"at":"2026-11-27T10:37:13Z","actor":"loop","tag":"dad7fa92","host":"quack","cmd":"add-unit","id":"native/names-stack-pieces","text":"new unit: A stack struct in DWARF pieces gets its names-file slot"}
 {"at":"2026-11-27T10:44:47Z","actor":"loop","tag":"099043e1","host":"quack","cmd":"done","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: done"}
 {"at":"2026-11-27T10:53:08Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-27T10:53:14Z","actor":"loop","tag":"d794da8a","host":"quack","cmd":"claim","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: claimed"}
