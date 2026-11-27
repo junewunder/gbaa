@@ -2278,6 +2278,29 @@ fn a_caller_stopped_at_a_hole_may_read_past_it_only_what_it_still_holds() {
     assert_eq!((f.read_after, f.hidden_after), (0, 0b10));
 }
 
+/// GCC's `push {r3, lr}`, which only keeps sp 8-byte aligned, reads no
+/// parameter: `f: push {r3, lr}; movs r0, #1; pop {r3, pc}` takes nothing
+/// and gives r3 back as it came. `g: push {r3, lr}; ldr r0, [sp]; pop
+/// {r3, pc}` reads the saved word, so r3; `h: push {r3, lr}; adds r3,
+/// #1; pop {r3, pc}` reads the register itself before the pop.
+#[test]
+fn summaries_take_a_pushed_r3_its_pop_restores_as_no_read() {
+    let h = [
+        0xB508, 0x2001, 0xBD08, 0x46C0, // f
+        0xB508, 0x9800, 0xBD08, 0x46C0, // g, 0x08
+        0xB508, 0x3301, 0xBD08, 0x46C0, // h, 0x10
+    ];
+    let sizes = [2; 12];
+    let (rom, d) = thumb_program(&h, &sizes, &[0x0800_0001, 0x0800_0009, 0x0800_0011]);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let s = |k: u32| &sums.by_entry[&k];
+    assert_eq!(s(0x0800_0001).params, 0, "{:?}", s(0x0800_0001).causes);
+    assert!(s(0x0800_0001).exit[3].entry);
+    assert_eq!(s(0x0800_0009).params, 0b1000);
+    assert_eq!(s(0x0800_0011).params, 0b1000);
+}
+
 /// `c: push {lr}; movs r1, #5; bl f; adds r2, r0, #0; pop {r0}; bx r0`,
 /// `f: adds r0, r1, #0; bx lr` and `g: push {lr}; bl f; pop {r0}; bx r0`,
 /// in Thumb.

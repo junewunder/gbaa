@@ -1322,7 +1322,11 @@ them.
 
 **Signatures.** Callers print from the callee's shape, and since
 `native/lift-signature-holes` a names-file prototype sets that shape,
-refused only on a proven read. A changed signature is a prototype in
+refused only on a proven read. Saving one of r0-r3 to a stack word is
+no read: GCC's `push {r3, lr}`, there only to keep sp 8-byte aligned, and
+the pop that puts r3 back (`native/lift-proto-r3-align`). Only a use of the
+saved value is a read, whether it is still in the register, in the stack
+word, or loaded back from it. A changed signature is a prototype in
 `mods/<game>/protos.toml` (`[[proto]] fn, proto, why`), written by the LLM
 and winning over the names files (`native/lift-proto-overrides`). The next
 lift prints every direct caller in the new shape, and pointer calls keep

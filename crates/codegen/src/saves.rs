@@ -523,6 +523,31 @@ impl Walk<'_> {
             {
                 cond.push((g, s.clone(), s.clone()));
             }
+            // A use of one of r0–r3 as it came ([`V::Entry`]) is a read
+            // of it, but its save to a stack word and its return to its
+            // own register, which go on holding it ([`Sum::park`]).
+            if let Some(sum) = &mut self.sum
+                && (inst.op.is_root() || used.contains(&ValueId(i as u32)))
+            {
+                for v in inst.op.operands() {
+                    let V::Entry(q @ 0..=3) = val(v) else {
+                        continue;
+                    };
+                    match inst.op {
+                        Op::SetReg(r, x) if x == v && r.index() == q as usize => {}
+                        Op::Store {
+                            width: Width::Word,
+                            addr,
+                            value,
+                        } if value == v && addr != v && matches!(val(addr), V::Sp(_)) => {
+                            if let V::Sp(o) = val(addr) {
+                                sum.park(o, q);
+                            }
+                        }
+                        _ => sum.read_entry(q, at),
+                    }
+                }
+            }
             let held = match inst.op {
                 Op::GetReg(r) => s.sure >> r.index() & 1 != 0,
                 Op::GetFlag(f) => s.sure >> (16 + f as usize) & 1 != 0,
@@ -535,6 +560,16 @@ impl Walk<'_> {
                 }
                 op if pure(insts, op, &vals, &falses).is_some() => {
                     pure(insts, op, &vals, &falses).expect("a pure value")
+                }
+                // One of r0–r3 as it came: its uses read it (above).
+                Op::GetReg(r)
+                    if r.index() < 4
+                        && self
+                            .sum
+                            .as_ref()
+                            .is_some_and(|_| s.org.get(r.index()) == Some(&Org::entry())) =>
+                {
+                    V::Entry(r.index() as u8)
                 }
                 Op::GetReg(r) => {
                     if let Some(sum) = &mut self.sum
@@ -551,16 +586,31 @@ impl Walk<'_> {
                     width: Width::Word,
                     addr,
                 } => match val(addr) {
-                    V::Sp(o) => s.slots.get(&o).copied().unwrap_or(V::Other),
+                    V::Sp(o) => {
+                        let got = s.slots.get(&o).copied().unwrap_or(V::Other);
+                        if let Some(sum) = &mut self.sum
+                            && used.contains(&ValueId(i as u32))
+                        {
+                            sum.parked(o, Width::Word, got, at);
+                        }
+                        got
+                    }
                     _ => V::Other,
                 },
                 // A byte or halfword of a stack word holding bits of
                 // r4-r11's entry values may hold them too.
                 Op::Load { width, addr } => match val(addr) {
-                    V::Sp(o) => match s.slots.get(&(o & !3)).and_then(|v| v.taint()) {
-                        Some((regs, _)) => V::part(regs, width_mask(width)),
-                        None => V::Other,
-                    },
+                    V::Sp(o) => {
+                        if let Some(sum) = &mut self.sum
+                            && used.contains(&ValueId(i as u32))
+                        {
+                            sum.parked(o, width, V::Other, at);
+                        }
+                        match s.slots.get(&(o & !3)).and_then(|v| v.taint()) {
+                            Some((regs, _)) => V::part(regs, width_mask(width)),
+                            None => V::Other,
+                        }
+                    }
                     _ => V::Other,
                 },
                 Op::Store { width, addr, value } => {
@@ -582,7 +632,7 @@ impl Walk<'_> {
                     let guarded = guard.is_some();
                     if let Some(sum) = &mut self.sum {
                         sum.frame_record(&s, r, x);
-                        sum.set(&mut s, r, guarded);
+                        sum.set(&mut s, r, x, guarded);
                     }
                     set(&mut s, r, x, guarded, certain);
                     for (c, yes, no) in &mut cond {
@@ -591,7 +641,7 @@ impl Walk<'_> {
                         let states = if this { vec![yes] } else { vec![yes, no] };
                         for st in states {
                             if let Some(sum) = &self.sum {
-                                sum.set(st, r, maybe);
+                                sum.set(st, r, x, maybe);
                             }
                             set(st, r, x, maybe, certain);
                         }
