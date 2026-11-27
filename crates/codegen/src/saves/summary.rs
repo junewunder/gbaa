@@ -487,6 +487,10 @@ pub(super) struct Sum<'a> {
     /// stack word it saved them in: a frame record, whose entry value is
     /// the caller's frame pointer ([`Sum::frame_record`]).
     frames: u16,
+    /// The stack words (by offset from the entry sp) it saved one of
+    /// r0–r3 in as it came, and which: GCC's `push {r3, lr}`, which
+    /// keeps sp 8-byte aligned ([`Sum::parked`]).
+    parked: BTreeSet<(i32, u8)>,
 }
 
 /// What a function returns in one of r0–r3, over its returns, as to
@@ -585,6 +589,7 @@ impl<'a> Sum<'a> {
             echo_at: BTreeMap::new(),
             masked: BTreeSet::new(),
             frames: 0,
+            parked: BTreeSet::new(),
         }
     }
 
@@ -766,9 +771,61 @@ impl<'a> Sum<'a> {
         }
     }
 
-    /// Register `r` written, in every case or (`guarded`) maybe.
-    pub(super) fn set(&self, s: &mut State, r: usize, guarded: bool) {
+    /// One of r0–r3 as it came (`r`), read at `at`: a use of the value
+    /// held as [`V::Entry`], in a register or a stack word
+    /// ([`super::Walk::block`]).
+    pub(super) fn read_entry(&mut self, r: u8, at: u32) {
+        self.params.entry(r).or_insert(Cause::Reads(at));
+    }
+
+    /// One of r0–r3 as it came (`r`) stored in the stack word at entry
+    /// sp + `o`. Saving it is no read: a load of the word that gives it
+    /// back whole goes on holding it, and only a use of that is a read;
+    /// any other load of the word (a part of it, or where paths joined
+    /// it with another value) is a read of `r` there.
+    pub(super) fn park(&mut self, o: i32, r: u8) {
+        self.parked.insert((o, r));
+    }
+
+    /// A load at `at` of `width` bytes at entry sp + `o`, which gives
+    /// `got`: the registers parked in a word it covers are read, but
+    /// where it gives one back whole.
+    pub(super) fn parked(&mut self, o: i32, width: Width, got: V, at: u32) {
+        if self.parked.is_empty() {
+            return;
+        }
+        let n = match width {
+            Width::Byte => 1,
+            Width::Half => 2,
+            Width::Word => 4,
+        };
+        let words = [o & !3, (o + n - 1) & !3];
+        let hits: Vec<u8> = self
+            .parked
+            .iter()
+            .filter(|(w, _)| words.contains(w))
+            .map(|&(_, r)| r)
+            .collect();
+        for r in hits {
+            if !(width == Width::Word && o & 3 == 0 && got == V::Entry(r)) {
+                self.read_entry(r, at);
+            }
+        }
+    }
+
+    /// Register `r` written with `x`, in every case or (`guarded`) maybe.
+    /// One of r0–r3 given back its entry value (`pop {r3}` after `push
+    /// {r3}`) holds it again.
+    pub(super) fn set(&self, s: &mut State, r: usize, x: V, guarded: bool) {
         let Some(i) = slot(r) else { return };
+        if r < 4 && x == V::Entry(r as u8) {
+            s.org[i] = if guarded {
+                s.org[i].join(&Org::entry())
+            } else {
+                Org::entry()
+            };
+            return;
+        }
         if guarded {
             s.org[i].own = true;
             s.org[i].ra = false;

@@ -143,6 +143,11 @@ struct State {
     /// to keep r4–r11). A summary's run takes an exit under a guard made
     /// of such constants always or never ([`Walk::block`]).
     sure: u32,
+    /// The stack's address may be held where the run can't follow it (a
+    /// callee was given one, or it was stored or computed past what
+    /// [`V::Sp`] tracks): a call, a BIOS call or a store to an unknown
+    /// address may change any stack word ([`State::lend`]).
+    lent: bool,
 }
 
 impl State {
@@ -161,6 +166,7 @@ impl State {
             chg: [0; 8],
             flags: [V::Other; 4],
             sure: 0,
+            lent: false,
         }
     }
 
@@ -194,6 +200,7 @@ impl State {
             }),
             flags: std::array::from_fn(|i| self.flags[i].join(o.flags[i])),
             sure: self.sure & o.sure,
+            lent: self.lent || o.lent,
         }
     }
 
@@ -235,6 +242,7 @@ impl State {
     /// was. `kept`: the callee is proven to keep them, so a certain
     /// constant in one stays certain ([`State::sure`]).
     fn called(&mut self, kept: bool) {
+        self.lend();
         for i in [0, 1, 2, 3, 12, 14] {
             self.regs[i] = V::Other;
         }
@@ -244,6 +252,29 @@ impl State {
             V::Sp(sp) => self.slots.retain(|&k, _| k >= sp),
             _ => self.slots.clear(),
         }
+    }
+
+    /// Before a call into code that may write the stack through a pointer
+    /// to it: if a register or a stack word holds one, it may keep it
+    /// ([`State::lent`]), and then the stack words holding one of r0–r3 as
+    /// it came ([`V::Entry`]) may hold anything after it. A word holding
+    /// bits of r4–r11 stays: the proof of a callee-saved register's save
+    /// takes the callee to keep its caller's frame.
+    fn lend(&mut self) {
+        let sp = |v: &V| matches!(v, V::Sp(_));
+        if self.regs.iter().enumerate().any(|(i, v)| i != 13 && sp(v))
+            || self.slots.values().any(sp)
+        {
+            self.lent = true;
+        }
+        if self.lent {
+            self.forget();
+        }
+    }
+
+    /// The stack words holding one of r0–r3 as it came, dropped: unknown.
+    fn forget(&mut self) {
+        self.slots.retain(|_, v| !matches!(v, V::Entry(0..=3)));
     }
 
     /// After a call: the registers of r0-r3 in `kept` (bit `n` for rN)
@@ -523,6 +554,31 @@ impl Walk<'_> {
             {
                 cond.push((g, s.clone(), s.clone()));
             }
+            // A use of one of r0–r3 as it came ([`V::Entry`]) is a read
+            // of it, but its save to a stack word and its return to its
+            // own register, which go on holding it ([`Sum::park`]).
+            if let Some(sum) = &mut self.sum
+                && (inst.op.is_root() || used.contains(&ValueId(i as u32)))
+            {
+                for v in inst.op.operands() {
+                    let V::Entry(q @ 0..=3) = val(v) else {
+                        continue;
+                    };
+                    match inst.op {
+                        Op::SetReg(r, x) if x == v && r.index() == q as usize => {}
+                        Op::Store {
+                            width: Width::Word,
+                            addr,
+                            value,
+                        } if value == v && addr != v && matches!(val(addr), V::Sp(_)) => {
+                            if let V::Sp(o) = val(addr) {
+                                sum.park(o, q);
+                            }
+                        }
+                        _ => sum.read_entry(q, at),
+                    }
+                }
+            }
             let held = match inst.op {
                 Op::GetReg(r) => s.sure >> r.index() & 1 != 0,
                 Op::GetFlag(f) => s.sure >> (16 + f as usize) & 1 != 0,
@@ -535,6 +591,16 @@ impl Walk<'_> {
                 }
                 op if pure(insts, op, &vals, &falses).is_some() => {
                     pure(insts, op, &vals, &falses).expect("a pure value")
+                }
+                // One of r0–r3 as it came: its uses read it (above).
+                Op::GetReg(r)
+                    if r.index() < 4
+                        && self
+                            .sum
+                            .as_ref()
+                            .is_some_and(|_| s.org.get(r.index()) == Some(&Org::entry())) =>
+                {
+                    V::Entry(r.index() as u8)
                 }
                 Op::GetReg(r) => {
                     if let Some(sum) = &mut self.sum
@@ -551,16 +617,31 @@ impl Walk<'_> {
                     width: Width::Word,
                     addr,
                 } => match val(addr) {
-                    V::Sp(o) => s.slots.get(&o).copied().unwrap_or(V::Other),
+                    V::Sp(o) => {
+                        let got = s.slots.get(&o).copied().unwrap_or(V::Other);
+                        if let Some(sum) = &mut self.sum
+                            && used.contains(&ValueId(i as u32))
+                        {
+                            sum.parked(o, Width::Word, got, at);
+                        }
+                        got
+                    }
                     _ => V::Other,
                 },
                 // A byte or halfword of a stack word holding bits of
                 // r4-r11's entry values may hold them too.
                 Op::Load { width, addr } => match val(addr) {
-                    V::Sp(o) => match s.slots.get(&(o & !3)).and_then(|v| v.taint()) {
-                        Some((regs, _)) => V::part(regs, width_mask(width)),
-                        None => V::Other,
-                    },
+                    V::Sp(o) => {
+                        if let Some(sum) = &mut self.sum
+                            && used.contains(&ValueId(i as u32))
+                        {
+                            sum.parked(o, width, V::Other, at);
+                        }
+                        match s.slots.get(&(o & !3)).and_then(|v| v.taint()) {
+                            Some((regs, _)) => V::part(regs, width_mask(width)),
+                            None => V::Other,
+                        }
+                    }
                     _ => V::Other,
                 },
                 Op::Store { width, addr, value } => {
@@ -582,7 +663,7 @@ impl Walk<'_> {
                     let guarded = guard.is_some();
                     if let Some(sum) = &mut self.sum {
                         sum.frame_record(&s, r, x);
-                        sum.set(&mut s, r, guarded);
+                        sum.set(&mut s, r, x, guarded);
                     }
                     set(&mut s, r, x, guarded, certain);
                     for (c, yes, no) in &mut cond {
@@ -591,7 +672,7 @@ impl Walk<'_> {
                         let states = if this { vec![yes] } else { vec![yes, no] };
                         for st in states {
                             if let Some(sum) = &self.sum {
-                                sum.set(st, r, maybe);
+                                sum.set(st, r, x, maybe);
                             }
                             set(st, r, x, maybe, certain);
                         }
@@ -678,6 +759,26 @@ impl Walk<'_> {
                 _ => V::Other,
             };
             vals[i] = v;
+            // A value made from a stack address that isn't one the run
+            // follows (`add r0, sp, r1`, an index into a local array):
+            // the stack's address is held where the run can't see it.
+            // A register set to one keeps it in sight ([`State::lend`]).
+            if !matches!(v, V::Sp(_) | V::Const(_))
+                && !matches!(inst.op, Op::SetReg(..))
+                && inst.op.operands().iter().any(|&o| {
+                    matches!(vals[o.index()], V::Sp(_))
+                        && !matches!(inst.op,
+                            Op::Load { addr, .. } if addr == o)
+                        && !matches!(inst.op,
+                            Op::Store { addr, value, .. } if addr == o && value != o)
+                })
+            {
+                s.lent = true;
+                for (_, yes, no) in &mut cond {
+                    yes.lent = true;
+                    no.lent = true;
+                }
+            }
             sure[i] = matches!(v, V::Const(_))
                 && match inst.op {
                     Op::GetReg(_) | Op::GetFlag(_) => held,
@@ -742,6 +843,7 @@ impl Walk<'_> {
                     return self.fail(format!("0x{at:08x}: a reset"));
                 }
                 let mut after = s.clone();
+                after.lend();
                 if let Some(sum) = &mut self.sum {
                     sum.swi(&mut after, n, at);
                 }
@@ -962,7 +1064,16 @@ fn same(insts: &[Inst], a: ValueId, b: ValueId) -> bool {
 
 /// A store of `value` at `addr`, in every case or (`maybe`) only maybe.
 fn store(s: &mut State, width: Width, addr: V, value: V, maybe: bool) {
-    let V::Sp(o) = addr else { return };
+    if matches!(value, V::Sp(_)) {
+        s.lent = true;
+    }
+    let V::Sp(o) = addr else {
+        // It may be a stack word, through a pointer the run lost.
+        if s.lent {
+            s.forget();
+        }
+        return;
+    };
     let n = match width {
         Width::Byte => 1,
         Width::Half => 2,
