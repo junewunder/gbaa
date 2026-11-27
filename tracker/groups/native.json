@@ -5558,19 +5558,8 @@
         "by": "13a2365d",
         "at": "2026-11-27T12:19:43Z",
         "evidence": "Review fixes made: sp_offsets' doc moved back above it (22865881). At the merge 767e4381 (latest main, a metrics.rs doc conflict kept both sides), just lift-check ran in full: passed, 44 programs pass at 0 differences, 83 planted controls caught, including c-lent-gcc --plant-slot=0x0800028e (frame 2, IWRAM 0x03000014). The same full pass was at 22865881 before this merge. just check exit 0 at both. At 22865881: Emerald just lift 600 of 600 frames, no stop, lent_locals_typed 112 and untyped 13. Metroid's native route: 2700 frames, 0 differences.",
-        "branch": "unit/native/lift-stack-typed-locals",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-27T12:19:43Z",
-          "by": "13a2365d",
-          "host": "quack",
-          "pid": 2117956,
-          "start": "121114680",
-          "beats": true,
-          "session": "13a2365d-adcd-4f57-91d7-b4be064f34c9",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-27T12:24:18Z"
       },
       "notes": [
         {
@@ -5578,20 +5567,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/dwarf.rs:447-453: the new `prologue_sp` was inserted between `sp_offsets`' doc comment and `sp_offsets`. The old lines \"Each value's offset from `sp` at the block's start, where it is one: `…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-27T11:16:40Z",
-        "findings": "- crates/codegen/src/dwarf.rs:447-453: the new `prologue_sp` was inserted between `sp_offsets`' doc comment and `sp_offsets`. The old lines \"Each value's offset from `sp` at the block's start, where it is one: `sp` read, plus or minus constants.\" now sit at the top of `prologue_sp`'s doc, which then describes it wrongly, and `sp_offsets` (line 467) has lost its doc. Fix: move those two lines back to just above `fn sp_offsets`, so `prologue_sp`'s doc starts at \"Where a function's `[locals]` stack slots count from\".\n- The card's check, `just lift-check` with 0 differences and every planted fault caught, has only been run in full at 2a781daa, before main was merged in. Main brought libgcc-div, which also changes `crates/codegen/lift-check.toml`'s bars and planted flags. The rerun at the merge commit 89b93577 was stopped at the 2-hour mark with 27 programs passed, so the merged tree has not been shown to pass the whole check. Fix: rerun `just lift-check` to completion on the merged branch, raising the time cap or running it as a long job. Record the full result in the evidence, including the new c-lent-gcc `--plant-slot=0x0800028e` control being caught.",
-        "sent": {
-          "evidence": "Lift-check at 2a781daa (before the merge): passed, every metric within its bar, every planted fault caught, c-lent-gcc's new --plant-slot=0x0800028e on its typed Local too (frame 2 IWRAM 0x03000014); c-lent both builds typed, c-lent-gcc --shadow-locals 601 frames with no mismatch. Emerald: 112 of 125 lent locals typed, 600 of 600 frames, no stop. Metroid lends none; native route 2700 frames, 0 differences. After merging main (89b93577): just check passed, lift-metrics has nothing over a bar; the lift-check rerun was stopped at the 2-hour mark with 27 programs passed and none failed. Games' unread_lets (Emerald 45, Metroid 28) are over their bars at base bbe93fed too (both lifted there).",
-          "by": "dad7fa92",
-          "host": "quack",
-          "branch": "unit/native/lift-stack-typed-locals",
-          "change": "6691f1b24e828bfec8b0ba2ee91e7cd9e2e318e2"
-        }
-      },
-      "round": "2026-11-27T09:02:34Z"
+      ]
     },
     {
       "id": "native/lift-lend-wider",
