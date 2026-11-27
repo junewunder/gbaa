@@ -883,14 +883,13 @@
         "branch": "unit/native/fnref-dense-keys-left",
         "host": "quack",
         "landing": {
-          "at": "2026-11-27T17:55:18Z",
-          "by": "e716ec2e",
+          "at": "2026-11-27T17:55:26Z",
+          "by": "manual",
           "host": "quack",
           "pid": 4000180,
           "start": "125627797",
-          "beats": true,
-          "session": "e716ec2e-4971-4984-9e56-e1aa09a4986b",
-          "lane": "quack/3"
+          "lane": "quack/3",
+          "beats": true
         }
       },
       "round": "2026-11-27T17:43:08Z"
