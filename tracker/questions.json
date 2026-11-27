@@ -2245,7 +2245,13 @@
         "by": "1c8e564b",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "1c8e564b",
+        "at": "2026-11-27T05:47:47Z",
+        "decision": "d/helpers-shared-by-many-functions"
+      }
     },
     {
       "id": "q/getmondata-narrow-calls",

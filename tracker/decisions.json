@@ -1608,6 +1608,15 @@
       "by": "2b1424bb",
       "at": "2026-11-25T04:53:59Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/helpers-shared-by-many-functions",
+      "title": "Repeated inlined code: who names the shared helper: An LLM names each helper, the lifter applies it",
+      "why": "the LLM picks from the clone list and writes one private entry per helper (name, one example site, inputs, outputs); the lifter prints it at every match; Mirror's lookup becomes the first; a helper body written by the LLM gets its own test",
+      "by": "owner",
+      "at": "2026-11-27T05:47:47Z",
+      "question": "q/helpers-shared-by-many-functions",
+      "via": "1c8e564b"
     }
   ]
 }
