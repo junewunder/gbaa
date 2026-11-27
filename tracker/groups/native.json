@@ -6295,7 +6295,14 @@
     {
       "id": "native/fn-check-hole-demand",
       "title": "fn-check compares a hole function's r0-r3 callers read",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-27T23:00:36Z",
+          "by": "96b9b809",
+          "text": "From {unit:native/fn-check-interp-pop-r0}: Mirror, 193 four-register fns, --runs 1: 27 differ from the interpreter on r1/r2, a scratch reg a shaped callee clobbered (FnPrinter::clobbers) no caller reads. Fix: Spec.results under a hole = shape.rs demand & !lr_left; digests may move."
+        }
+      ]
     },
     {
       "id": "native/llm-pilot-standins-stale",
