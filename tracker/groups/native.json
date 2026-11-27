@@ -5721,15 +5721,22 @@
       "uses": ["heavy"],
       "priority": 81,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "bec3cb4c",
-        "session": "bec3cb4c-6cb6-4fe8-9825-96f4c2d0acc7",
-        "host": "quack",
-        "pid": 2118754,
-        "start": "121115208",
-        "at": "2026-11-27T07:45:11Z",
+        "at": "2026-11-27T09:20:59Z",
+        "evidence": "Summaries: a save of r0-r3 as it came to an unlent stack word, and the pop putting it back, is no read (saves.rs Sum::park/parked; a lent stack forgets them). proto_shapes_refused: c-fnptr-gcc 2->0, c-loops-gcc 4->0 (the two newer: heal_rows' own push {r3}, and fill_rect's r3 result reaching it). Bars lowered (131), raised: c-fnptr-gcc entries_beyond_one 28->30 (adapters of the 2 newly shaped fns), native-bios-affine fn_words_not_proven 56->57, fn_keys_left 60->61 (r3 kept across calls lets the flow follow 2 more fn words). First lift-check caught native-frame-locals (a lent slot), fixed. After merging main 47ad536a: lift-metrics 0 over/0 under, just lift-check passed (42 programs), just check passed. Tests: summaries_take_a_pushed_r3_*, summaries_read_a_saved_r0_*.",
         "branch": "unit/native/lift-proto-r3-align",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T09:20:59Z",
+          "by": "bec3cb4c",
+          "host": "quack",
+          "pid": 2118754,
+          "start": "121115208",
+          "beats": true,
+          "session": "bec3cb4c-6cb6-4fe8-9825-96f4c2d0acc7",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-27T07:45:11Z"
     },
