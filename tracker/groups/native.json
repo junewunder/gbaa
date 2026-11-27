@@ -5292,6 +5292,13 @@
         "branch": "unit/native/lift-libgcc-div",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-27T10:10:05Z",
+          "by": "255e28cf",
+          "text": "Final re-runs on 995633c9 (main merged twice) were stopped at the session's 2 h mark: just check passed on 748dd85b, lift-check 44/44 on aa2d38fe, Mirror route 0 diffs on 7735df65. The loop's just check covers the head; GCC's 3 left calls wait on {unit:native/summary-paired-guards}."
+        }
+      ],
       "round": "2026-11-27T08:05:00Z"
     },
     {
