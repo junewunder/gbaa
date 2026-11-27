@@ -73,6 +73,13 @@
 //! in, a shift by a register): barred. The rest print as comparisons and
 //! bit tests over the operands.
 //!
+//! Mask chains (`native/lift-mask-fold`): a chain of `&` with constants
+//! (or of `|`) whose links are each used once prints as one mask;
+//! `masks_folded` (no bar) counts the links folded away, and
+//! `mask_chains` (barred) the chains left, a link used once that still
+//! printed as a `let` (the report lists them by address). A link used
+//! again is a value of its own, not a chain.
+//!
 //! Joins (`native/lift-join-shape`): `labelled_blocks` counts the
 //! labelled blocks printed (a `break` leaves each: a join that isn't an
 //! `if`, a `match` or a loop's), and `blocks_printed_again` the times a
@@ -411,6 +418,7 @@ pub const UNBARRED: &[&str] = &[
     "loops_for",
     "for_stepped_elements",
     "narrowing_casts",
+    "masks_folded",
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",

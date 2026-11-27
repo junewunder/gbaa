@@ -498,7 +498,11 @@ the value, or the label's tail is the epilogue.
 
 **Mask chains.** Clearing flags bit by bit compiles to one `and` each, and
 the lift folds none: KirbyEnterStand's four masks are one,
-`!0x0c001f72`. Constant folding.
+`!0x0c001f72`. Constant folding. Done by `native/lift-mask-fold`: a chain
+whose links are each used once prints as one mask, an `&` mask with more
+bits set than clear as `!` its clear bits; an `&` then an `|` doesn't fold,
+and a link used again (stored, then masked on) stays a `let`. Mirror's
+`& 0x…u32) & 0x` 386 to 1, 1,178 links folded, 0 chains left.
 
 **The task struct lookup.** Every task function starts with the same two
 arms (katam's `TaskGetStructPtr`): 1,070 times in the lift. Recognising the
