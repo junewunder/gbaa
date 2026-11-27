@@ -5276,6 +5276,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-27T19:45:59Z",
+          "by": "396b3820",
+          "text": "Text pass in native/joins.rs on each labelled block's body (FnPrinter::labeled); GBAA_JOINS=off prints the old shape to measure against. Metroid's private bars pointer_unexplained, bitfield_arith, lines were over before it. Follow-up: {unit:native/lift-arm-let-values}."
+        }
+      ],
       "round": "2026-11-27T17:42:58Z"
     },
     {
