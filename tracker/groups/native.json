@@ -5395,18 +5395,22 @@
       "uses": ["heavy"],
       "priority": 75,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "6b36b822",
-        "session": "6b36b822-c156-474e-9d49-ae006e3ac667",
-        "host": "quack",
-        "pid": 2117526,
-        "start": "121114149",
-        "at": "2026-11-27T13:51:03Z",
+        "at": "2026-11-27T14:33:18Z",
+        "evidence": "All 13 Rogue/Imperium switches resolve, each a hand-assembled test in jumptable/tests.rs; recovered tables equal their [[jump]] lists, dropped from both mods holes files (mods 4540f68); holes-all --against main shows no game's hard holes up (Imperium 0, Rogue 1 as before); just jt-score passes. At 31b453ec (origin/main c35506d4 merged): just check exit 0, just lift-check passed (all programs, planted controls caught).",
         "branch": "unit/native/gcc-switch-recovery",
-        "resumed": "b8f4fb73",
-        "prevSession": "b8f4fb73-99d6-4484-bd81-775b5de4bd4e",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T14:33:18Z",
+          "by": "6b36b822",
+          "host": "quack",
+          "pid": 2117526,
+          "start": "121114149",
+          "beats": true,
+          "session": "6b36b822-c156-474e-9d49-ae006e3ac667",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
