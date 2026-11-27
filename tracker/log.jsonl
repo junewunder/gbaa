@@ -4535,3 +4535,4 @@
 {"at":"2026-11-27T18:31:47Z","actor":"loop","tag":"6f3bca57","host":"quack","cmd":"add-unit","id":"native/lift-signed-loads","text":"new unit: Loads of signed C fields print as i32"}
 {"at":"2026-11-27T18:31:49Z","actor":"loop","tag":"6f3bca57","host":"quack","cmd":"add-unit","id":"native/lift-signed-registers","text":"new unit: Register locals compared signed declared i32"}
 {"at":"2026-11-27T18:57:35Z","actor":"loop","tag":"396b3820","host":"quack","cmd":"add-unit","id":"native/lift-arm-let-values","text":"new unit: A register set in each if arm prints as the if's value"}
+{"at":"2026-11-27T19:45:52Z","actor":"loop","tag":"396b3820","host":"quack","cmd":"done","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: done"}
