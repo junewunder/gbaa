@@ -6234,7 +6234,13 @@
       "check": "recorded",
       "needs": ["native/lift-mask-fold"],
       "uses": ["heavy"],
-      "minMinutes": 60
+      "minMinutes": 60,
+      "record": {
+        "state": "dropped",
+        "why": "Not needed: its check ran on the fold's branch before landing. The 4 programs left unrun passed via just lift-check --only, so all 46 pass; mask_chains is 0 on each (recorded in {unit:native/lift-mask-fold}'s evidence).",
+        "by": "357babd6",
+        "at": "2026-11-27T20:10:48Z"
+      }
     }
   ]
 }
