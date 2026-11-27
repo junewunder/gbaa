@@ -6172,6 +6172,15 @@
       "check": "recorded",
       "needs": ["native/lift-arm-values"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-mask-fold-lift-check",
+      "title": "Lift-check passes with the mask fold on main",
+      "detail": "{unit:native/lift-mask-fold} landed with just check and Mirror's native route passing, but its just lift-check run was stopped at the session's 2 h mark after 43 of 46 programs passed (no failure; native-serial was running, native-spike, native-takes, native-tasks left). Run just lift-check (about 26-45 min under contention) on main with the fold and record it; a failure is the fold's to fix (crates/codegen/src/native.rs FnPrinter::mask_link).",
+      "check": "recorded",
+      "needs": ["native/lift-mask-fold"],
+      "uses": ["heavy"],
+      "minMinutes": 60
     }
   ]
 }
