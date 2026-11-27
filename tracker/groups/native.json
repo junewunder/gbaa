@@ -5216,15 +5216,22 @@
       "uses": ["heavy"],
       "priority": 83,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "47986d06",
-        "session": "47986d06-3eaf-42c1-a80e-16b71eae7718",
-        "host": "quack",
-        "pid": 2117526,
-        "start": "121114149",
-        "at": "2026-11-27T07:36:48Z",
+        "at": "2026-11-27T07:58:43Z",
+        "evidence": "Review fix made: llm-pilot.md's table row now says 14,153 to 2,157 at 341e0997 (field_bases 11,996), re-measured with a fresh Mirror lift on HEAD, and lists what is left per the note. Mirror native route on that lift (guest layout) vs --timing native play build: route-check --native units/kirby-mirror-native.toml pass, 3000 frames, 0 differences, audio the same. just check passed after merging origin/main (already up to date). lift-check passed earlier on e52acdcf (C programs ref_to_at_use 0).",
         "branch": "unit/native/lift-field-base",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T07:58:43Z",
+          "by": "47986d06",
+          "host": "quack",
+          "pid": 2117526,
+          "start": "121114149",
+          "beats": true,
+          "session": "47986d06-3eaf-42c1-a80e-16b71eae7718",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
