@@ -6234,6 +6234,14 @@
       "check": "recorded",
       "uses": ["heavy"],
       "tags": ["slow-check"]
+    },
+    {
+      "id": "native/lift-frame-exact-dma-channel",
+      "title": "Exact sp: a DMA store by channel index stays in DMA",
+      "detail": "Metroid's IRQ rule holder 0x080032b5 (BitFill: report line 'IRQ rule of exact sp'): it stores its frame's address (a fill word on the stack, DMA's source) to DMA0SAD + 12*ch, ch a u8 parameter, in a loop where Recovery's access at 0x08003310 is top, so exact_sp's DMA-register test (ios in native::exact_sp: a constant or Recovery's hull) fails and the frame escapes. Place the address as DMA base plus a channel index (C's object rule, like the decision that a sum with a non-RAM constant stays out of RAM), from the IR across blocks or frame::stores. Check: just lift-check; Metroid's sp_irq_holders down by 1, native route 0 differences; just check. The IRQ rule goes off only when every holder is fixed ({unit:native/lift-frame-exact-irq-reach}).",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "tags": ["slow-check"]
     }
   ]
 }

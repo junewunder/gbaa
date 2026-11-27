@@ -4571,3 +4571,4 @@
 {"at":"2026-11-27T21:21:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: on main"}
 {"at":"2026-11-27T21:21:07Z","actor":"loop","tag":"13420935","host":"quack","cmd":"claim","id":"native/rogue-build","text":"Rogue's lift builds: GenerateFloorLayout's r11 passed: claimed"}
 {"at":"2026-11-27T21:45:01Z","actor":"loop","tag":"76d60dff","host":"quack","cmd":"add-unit","id":"native/lift-frame-exact-jumper-lr","text":"new unit: Exact sp: a return through a jumper's pushed lr is proven"}
+{"at":"2026-11-27T21:45:13Z","actor":"loop","tag":"76d60dff","host":"quack","cmd":"add-unit","id":"native/lift-frame-exact-dma-channel","text":"new unit: Exact sp: a DMA store by channel index stays in DMA"}
