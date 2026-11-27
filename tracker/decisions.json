@@ -1658,6 +1658,15 @@
       "by": "f30e1648",
       "at": "2026-11-27T11:09:41Z",
       "scope": ["native/lift-proven-pointer-types"]
+    },
+    {
+      "id": "d/native-entry-jump-casts-bar-323-to-324-at-a",
+      "title": "native-entry-jump casts bar 323 to 324 at a main merge",
+      "why": "Merging main's signed-values lifter change into the dense-keys branch measured casts 324 on native-entry-jump: 306 on the branch alone, 323 on main alone, so one more cast where the two meet. Native check unaffected by casts; lift-metrics 0 over after.",
+      "by": "691120b3",
+      "at": "2026-11-27T22:03:28Z",
+      "scope": ["native/fnref-dense-keys-left"],
+      "until": "2026-11-27T23:59:59Z"
     }
   ]
 }
