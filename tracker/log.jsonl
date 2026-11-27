@@ -4600,3 +4600,4 @@
 {"at":"2026-11-27T23:31:40Z","actor":"loop","tag":"96b9b809","host":"quack","cmd":"edit","id":"native/fn-check-interp-pop-r0","text":"fn-check: lift and interpreter part on a popped lr in r0: edited (tags)"}
 {"at":"2026-11-27T23:31:42Z","actor":"loop","tag":"96b9b809","host":"quack","cmd":"done","id":"native/fn-check-interp-pop-r0","text":"fn-check: lift and interpreter part on a popped lr in r0: done"}
 {"at":"2026-11-27T23:37:25Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fn-check-interp-pop-r0","text":"fn-check: lift and interpreter part on a popped lr in r0: on main"}
+{"at":"2026-11-27T23:40:45Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
