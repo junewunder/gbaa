@@ -5592,15 +5592,22 @@
       "uses": ["heavy"],
       "priority": 71,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "584e83c0",
-        "session": "584e83c0-cae6-4782-bb2e-cbce06967d55",
-        "host": "quack",
-        "pid": 3998997,
-        "start": "125626757",
-        "at": "2026-11-27T20:04:01Z",
+        "at": "2026-11-27T20:48:23Z",
+        "evidence": "Review fix made: a let shifted right or compared unsigned (<,>,<=,>= without its as i32) stays u32; test unsigned_uses_stay_u32. lift-check passed (pre-merge; no bar moved), just check passed after merging main (lift-metrics 0 over bars). Amazing Mirror (holes applied): casts 41,564 with prim::sext counted -> 40,190, lets_signed 657, name-as-i32 casts 7,998 -> 6,784 (vN 2,257 in compares' text grep, rN 1,132); none of the 657 used unsigned, so the fix moved nothing there. Mirror native route units/kirby-mirror-native.toml: 3,000 frames, 0 differences, audio same. Halving not reached: what holds the rest (5,192 lets with a plain u32 right side, register locals) is in docs/research/mirror-machine-count.md row 8, handed to {unit:native/lift-signed-loads} and {unit:native/lift-signed-registers}.",
         "branch": "unit/native/lift-signed-values",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T20:48:23Z",
+          "by": "584e83c0",
+          "host": "quack",
+          "pid": 3998997,
+          "start": "125626757",
+          "beats": true,
+          "session": "584e83c0-cae6-4782-bb2e-cbce06967d55",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
