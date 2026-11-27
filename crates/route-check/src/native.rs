@@ -347,8 +347,22 @@ pub fn run(
             0 => "planted".to_string(),
             _ => format!("planted-{}", i + 1),
         };
-        runner(&out, &run, p, &r, &[], true)?;
         let bin = p.split_whitespace().next().unwrap_or_default();
+        // A planted fault the build stops on (its own `native-stop:`, a
+        // check of the prelude's: a guest-pc build's misaligned load,
+        // native/lift-aligned-params) is caught, as a route would fail on it.
+        if let Err(e) = runner(&out, &run, p, &r, &[], true) {
+            let log = std::fs::read_to_string(out.join(format!("{run}.log"))).unwrap_or_default();
+            match (e, log.lines().find(|l| l.starts_with("native-stop:"))) {
+                (Fail(_), Some(stop)) => {
+                    let f = format!("it stopped: {}", stop.trim());
+                    println!("native {name}: planted fault caught ({bin}): {f}");
+                    parts.push(format!("planted fault caught ({bin}: {f})"));
+                    continue;
+                }
+                (e, _) => return Err(e),
+            }
+        }
         match compare(
             &out.join("play.rec"),
             &out.join(format!("{run}.rec")),

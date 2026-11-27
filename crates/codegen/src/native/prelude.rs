@@ -102,7 +102,7 @@ impl Native for Game {
     }
     /// DMA set up by its registers moves through the program's memory.
     fn dma_load(&mut self, a: u32, word: bool) -> u32 {
-        if word { ld32(self, a) } else { ld16(self, a) }
+        if word { ld32(self, a & !3) } else { ld16(self, a & !1) }
     }
     fn dma_store(&mut self, a: u32, v: u32, word: bool) {
         if word { st32(self, a, v) } else { st16(self, a, v) }
@@ -600,7 +600,20 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
     }
 }
 
+/// A load at an address its width doesn't divide, which only a lift's load
+/// proven aligned passes, its rotate dropped (native/lift-aligned-params):
+/// a guest-pc build's `ld16` and `ld32` stop on one.
+#[cold]
+#[track_caller]
+#[allow(dead_code)]
+fn misaligned_load(a: u32, n: u32) -> ! {
+    panic!("load of {n} bytes at {a:#010x}, which the lift proved aligned and dropped its rotate")
+}
+
+#[track_caller]
 pub fn ld16(g: &mut Game, a: u32) -> u32 {
+    #[cfg(feature = "guest-pc")]
+    if a & 1 != 0 { misaligned_load(a, 2) }
     if let Some(o) = ram_at(a) {
         note(o, 2, false);
         return g.ram[o] as u32 | (g.ram[o + 1] as u32) << 8;
@@ -620,7 +633,10 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
     }
 }
 
+#[track_caller]
 pub fn ld32(g: &mut Game, a: u32) -> u32 {
+    #[cfg(feature = "guest-pc")]
+    if a & 3 != 0 { misaligned_load(a, 4) }
     if let Some(o) = ram_at(a) {
         note(o, 4, false);
         return (0..4).fold(0, |v, i| v | (g.ram[o + i] as u32) << (8 * i));
@@ -1105,7 +1121,7 @@ pub fn huff(g: &mut Game, r: &mut [u32; 4]) {
     let (mut at, mut node) = (root, ld8(g, root));
     let (mut word, mut filled) = (0u32, 0);
     while remaining > 0 {
-        let bits = ld32(g, src);
+        let bits = ld32(g, src & !3);
         src = src.wrapping_add(4);
         for i in 0..32 {
             if remaining <= 0 {
