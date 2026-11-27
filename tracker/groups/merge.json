@@ -851,6 +851,14 @@
         "host": "quack",
         "landed": "2026-11-25T04:52:18Z"
       }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-proto-r3-align",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-proto-r3-align` holds {unit:native/lift-proto-r3-align}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-proto-r3-align"
     }
   ]
 }
