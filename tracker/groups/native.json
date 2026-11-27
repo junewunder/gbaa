@@ -5548,15 +5548,22 @@
       "uses": ["heavy"],
       "priority": 70,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "2500f465",
-        "session": "2500f465-3fb8-406c-8db8-b6f6eabd468a",
-        "host": "quack",
-        "pid": 4000180,
-        "start": "125627797",
-        "at": "2026-11-27T18:02:24Z",
+        "at": "2026-11-27T19:52:23Z",
+        "evidence": "Head 4de08813 (main fd0c09f6 merged, unchanged). load_rotates_left: Amazing Mirror 11,291 on main -> 10,814 (Ror 10,482 -> 10,077; 1,341 functions take caller facts), its native route units/kirby-mirror-native.toml 3,000 frames 0 differences on a guest-pc build; C rows c-loops-gcc 8->0, c-heap-gcc 18->15, c-switch-agbcc 3->0, c-borrow/c-div/c-lent/c-fnptr/c-chain-gcc to 0, agb rows ~-20 each. Soundness: no facts for functions a pointer (FNS), stand-in/cut, jump/fall/return, unwind or other context may enter; guest-pc ld32/ld16 stop on a misaligned address; new c/align (agbcc+GCC, mGBA-matched frame 600) with planted_flags --plant-aligned=0x08000191 (rd32, passed odd pointers): caught, stops at frame 2 on 0x03000009. just check passed; full just lift-check passed. lines_prelude bar 1506->1522.",
         "branch": "unit/native/lift-aligned-params",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-27T19:52:23Z",
+          "by": "2500f465",
+          "host": "quack",
+          "pid": 4000180,
+          "start": "125627797",
+          "beats": true,
+          "session": "2500f465-3fb8-406c-8db8-b6f6eabd468a",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-27T18:02:24Z"
     },
