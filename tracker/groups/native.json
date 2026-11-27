@@ -5247,6 +5247,12 @@
       "title": "Mirror's task struct lookups print as one helper",
       "detail": "docs/research/llm-pilot.md, round two. Every Mirror task function starts with katam's TaskGetStructPtr: the current task's structOffset as IWRAM bytes (off + 0x03000000) or, with flags & 0x10, EWRAM words ((off << 2) + 0x02000000). The lift prints the two arms each time: 1,070 '<< 2).wrapping_add(0x2000000)' in Mirror's src/m_*.rs on 4ff1b2c1; in 4 of the 20 pilot rewrites. Recognising the expression is exact; its name has to come from the names files (a macro has no symbol), so the shape is likely a names-file declaration of an inlined helper the lift matches (Nightmare's engine may share it). Done when: the count falls, lift-check passes, the C programs and a game judged (decision).",
       "uses": ["heavy"],
+      "record": {
+        "state": "blocked",
+        "why": "Its question is being re-asked, folded into the shared-helpers one",
+        "by": "1c8e564b",
+        "at": "2026-11-27T05:43:45Z"
+      },
       "notes": [
         {
           "at": "2026-11-25T06:21:43Z",
