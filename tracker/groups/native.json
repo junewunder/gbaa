@@ -5668,6 +5668,17 @@
       "needs": ["native/lift-lent-frameless", "native/lift-lend-wider", "native/emerald-lent-local-stop"],
       "uses": ["heavy"],
       "priority": 77,
+      "record": {
+        "state": "claimed",
+        "by": "e3bfa97a",
+        "session": "e3bfa97a-c93a-4136-8645-541880052589",
+        "host": "quack",
+        "pid": 2117956,
+        "start": "121114680",
+        "at": "2026-11-27T13:11:26Z",
+        "branch": "unit/native/lift-lent-games",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T10:17:59Z",
@@ -5684,7 +5695,8 @@
           "by": "e30a7b20",
           "text": "Metroid prints no Lent yet: borrowers 0x0805baad, 0x080584d9, 0x0806ef2d give r4-r11 back as they came (echoes), so their calls go by x_ and Regs, and code_lends skips them; the 9 others borrow only for them. GBAA_LEND_DEBUG=1 lists each skip and why."
         }
-      ]
+      ],
+      "round": "2026-11-27T13:11:26Z"
     },
     {
       "id": "native/lift-pointer-registers",
