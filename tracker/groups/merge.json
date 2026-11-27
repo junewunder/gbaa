@@ -874,7 +874,19 @@
       "detail": "Branch `unit/native/fnref-dense-keys-left` holds {unit:native/fnref-dense-keys-left}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/3",
-      "branch": "unit/native/fnref-dense-keys-left"
+      "branch": "unit/native/fnref-dense-keys-left",
+      "record": {
+        "state": "claimed",
+        "by": "e716ec2e",
+        "session": "e716ec2e-4971-4984-9e56-e1aa09a4986b",
+        "host": "quack",
+        "pid": 4000180,
+        "start": "125627797",
+        "at": "2026-11-27T17:43:08Z",
+        "branch": "unit/native/fnref-dense-keys-left",
+        "beats": true
+      },
+      "round": "2026-11-27T17:43:08Z"
     }
   ]
 }
