@@ -6315,6 +6315,12 @@
           "text": "Seen 2026-11-27 on main: llm-pilot.toml stand-ins panic 'a call or jump to 0x08152e41, which is no function's entry' (TaskDestroy; TaskCreate 0x08152dd9; KirbyEnterStand 0x0805b8b9; MultiSioInit). Re-key or rewrite their call_fn calls; fn-check all 20."
         }
       ]
+    },
+    {
+      "id": "native/rogue-adventure-route",
+      "title": "Rogue's new-game route goes on to an adventure start",
+      "detail": "units/rogue-newgame.toml ends at the first overworld frame in the Pokémon Hub (frame 6000). {unit:native/rogue-build} needs a route that reaches an adventure start, so GenerateFloorLayout (0x081b42e1) runs: extend the route (presses, interpreter at --timing exact) from the hub into an adventure, with a checkpoint whose hash mGBA agrees on (or a known mismatch). Done when: the route's new checkpoints pass in the interpreter, and a trace or breakpoint shows GenerateFloorLayout ran by its last checkpoint.",
+      "uses": ["heavy"]
     }
   ]
 }
