@@ -6082,6 +6082,11 @@
       "check": "independent",
       "needs": ["native/fnref-dense-keys-left"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-unread-addr-sums",
+      "title": "Typed pointers' addr() sums nothing reads leave the lift",
+      "uses": ["heavy"]
     }
   ]
 }
