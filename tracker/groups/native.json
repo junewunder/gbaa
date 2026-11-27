@@ -6125,6 +6125,14 @@
           "text": "Metroid's lift at main c35506d4: unread_lets 28 (bar was 0): let vN = p.addr().wrapping_add(k) nothing reads, in SramRead_FromEwram, SramLoad_DemoRamValues, MellowInit, others; typed accesses took their reads. Raised to 28 in Metroid's bars by {unit:native/lift-lent-games}."
         }
       ]
+    },
+    {
+      "id": "native/lift-signed-loads",
+      "title": "Loads of signed C fields print as i32",
+      "detail": "From {unit:native/lift-signed-values} (docs/research/mirror-machine-count.md row 8): Mirror has 5,513 lets compared signed left u32; 5,192 have a u32 right side (mostly g.get of a 32-bit field, a u32 global field), and 3,371 have no other use, so moving the cast to the load is a tie for codegen::native::signed. A typed get/field of an s32, s16 or s8 C field that gives i32 (the prelude's Word for the signed types, from DWARF) makes them free. Done when: Mirror's (name as i32) compares fall, lift-check passes, C programs and a game judged, Mirror's native route 0 differences.",
+      "check": "recorded",
+      "needs": ["native/lift-signed-values"],
+      "uses": ["heavy"]
     }
   ]
 }
