@@ -70,6 +70,12 @@ pub struct Spec {
     pub params: u8,
     /// r0-r3 compared after it: its results and what callers read.
     pub results: u8,
+    /// Of those, the ones holding only its entry lr on every return in
+    /// the ROM's code (`Summary::lr_left`: `pop {r0}; bx r0`), which the
+    /// lift gives back as passed (unit native/lift-frame-gone): the
+    /// interpreter's end holds [`SENTINEL`] there (unit
+    /// native/fn-check-interp-pop-r0).
+    pub lr_left: u8,
     /// Where those came from, for the report.
     pub sig: &'static str,
     /// Where the replacement came from.
@@ -560,14 +566,17 @@ fn interp_run(m: &mut M) -> Result<u32, String> {
 /// offsets `skip`. An I/O register is compared where either side changed
 /// it (`DISPSTAT`'s and `VCOUNT`'s beam bits aside); a register the lift
 /// returns its `lr` in holds [`SENTINEL`] in the interpreter, `RET` in
-/// the lift.
+/// the lift; one of `lr_left` ([`Spec::lr_left`], among the `results`
+/// compared: the ROM's code leaves its return address there, the lift
+/// the caller's value) must hold [`SENTINEL`] in the interpreter,
+/// whatever the lift's.
 fn compare_interp(
     m: &M,
     input: &Snap,
     r: &Snap,
     out: [u32; 4],
     sp: u32,
-    results: u8,
+    (results, lr_left): (u8, u8),
     skip: (usize, usize),
 ) -> Option<String> {
     let byte = |o: usize| {
@@ -625,6 +634,15 @@ fn compare_interp(
         ));
     }
     for n in (0..4).filter(|n| results & 1 << n != 0) {
+        if lr_left & 1 << n != 0 {
+            if m.cpu.r[n] != SENTINEL {
+                return Some(format!(
+                    "r{n} on return: {:#010x} interpreter, not the return address the lift gives back as passed",
+                    m.cpu.r[n]
+                ));
+            }
+            continue;
+        }
         let iv = match m.cpu.r[n] {
             SENTINEL => RET,
             v => v,
@@ -753,7 +771,8 @@ pub fn call(
                         sp_off
                     };
                     let skip = (low.min(acc.lowest_store as usize), sp_off);
-                    if let Some(w) = compare_interp(m, &input, &after, out, sp, s.results, skip) {
+                    let regs = (s.results, s.lr_left);
+                    if let Some(w) = compare_interp(m, &input, &after, out, sp, regs, skip) {
                         local.interp_differ += 1;
                         if local.interp_shown.len() < 3 {
                             let args: Vec<String> = (0..4)

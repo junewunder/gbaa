@@ -143,7 +143,11 @@
 //! 0: a frame nothing of which is in memory prints none,
 //! [`super::frame::Frame::in_locals`]), and `lr_returned`, the
 //! functions returning a register that holds only their entry lr (barred,
-//! at 0: [`crate::saves::Summary::lr_left`]).
+//! at 0: [`crate::saves::Summary::lr_left`]). `sp_irq_holders`
+//! (`native/lift-frame-exact-irq-reach`): the functions the IRQ wrappers
+//! reach, passing sp on, that need sp exactly themselves, each of which
+//! turns `exact_sp`'s IRQ rule on (barred; at 0 the rule is off). The
+//! report names each, why, and the way from a wrapper.
 //!
 //! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
 //! giving the text a constant points at, where the names files have a text
