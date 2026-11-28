@@ -1417,7 +1417,11 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   lift too, which only it catches; a register of r0-r3 the ROM's code leaves only its return address in, `pop {r0}; bx r0`, which the lift
   gives back as passed, is the return address in the interpreter: native/fn-check-interp-pop-r0). Fails on a difference, or a budget unspent when the program stops (its own line, with the panic) or `--frames` (18000) runs out.
   A mod's cut is the edit (native/lift-mod-run-edit-report): sides `lift` and `cut`, `differs from its lift (the edit)`, called under budget `the same as its lift`, neither a failure; with only cuts the last line is `N of M cuts differ from their lifts (the edit)` (a stop still exits 1). Stand-ins:
-  `holes/fn-check/` (agb), `mods/<game>/fn-check.toml`. ARM returns
+  `holes/fn-check/` (agb, and c-chain-agbcc's `frame` written with the lift's names), `mods/<game>/fn-check.toml`. A stand-in
+  may use the names the lift prints for its functions and data (native/standin-lift-names, `codegen::native::named::resolve`):
+  `Name(` calls the function's entry (written as the lift's call is before its later passes: `fill_rect(g, sp, x, y, w, h)?`,
+  plain `u32`s, `?`; they adapt it to the callee's signature as at any call), `Name` alone is its key (`call_fn(g, Name, …)`),
+  a datum's name its address (`ld32(g, gNumTasks)`); a name the prelude has (`Game`) stays the prelude's. ARM returns
   without `bx`: `agb/native-arm-return`. Heavy: builds a generated crate.
 - `just first-frame ROM [FRAMES] [TIMING]` (#32, milestone 2's check):
   `recompile-check` (at TIMING, exact by default; `native` for the

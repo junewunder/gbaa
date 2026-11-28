@@ -349,7 +349,8 @@ use analysis::holes::NATIVE_BIOS as BIOS;
 #[derive(Clone, Debug, Default)]
 pub struct Holes {
     /// By function key: the Rust that replaces it (a `pub fn f_<key>` of
-    /// the lifted signature), and why.
+    /// the lifted signature), and why. The lift reads it with the names
+    /// files' names it uses as keys and addresses ([`named::resolve`]).
     pub standins: BTreeMap<u32, (String, String)>,
     /// The stand-ins that read their caller's return address (`lr =
     /// true`): each call sets `Game::lr` to it (the `bl`'s `r14`) first,
@@ -1268,6 +1269,20 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         for &k in &synthetic {
             h.standins
                 .insert(k, (String::new(), "the lift itself (--fn-check)".into()));
+        }
+        h
+    };
+    // A stand-in's names for the lift's functions and data, as the lift's
+    // keys and addresses (native/standin-lift-names): so the reach, the
+    // r4-r11 takers' check and the names pass see them as they see a
+    // stand-in written by key.
+    let holes = &{
+        let mut h = holes.clone();
+        if !(h.fn_names.is_empty() && h.names.is_empty()) {
+            let own = named::code_word_set(&prelude(holes.layout));
+            for (code, _) in h.standins.values_mut() {
+                *code = named::resolve(code, &holes.fn_names, &holes.names, &own);
+            }
         }
         h
     };

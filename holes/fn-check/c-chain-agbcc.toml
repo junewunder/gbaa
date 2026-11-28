@@ -1,0 +1,39 @@
+# Replacements for the per-function check (`just fn-check`, native/fn-check-any)
+# on c-chain-agbcc (c/chain): hand-written Rust for a function, checked against
+# its lift. Not stand-ins of the program's lift.
+#
+#   just fn-check $GBAA_DATA/c/c-chain-agbcc.gba --name c-chain-agbcc \
+#     --replace holes/fn-check/c-chain-agbcc.toml --fn-check 0x08000559
+
+[[standin]]
+entry = 0x08000559
+why = "frame(count) as the lift prints it, by the names the lift gives its globals and calls (gBodies, gTotalHits, step_world, fill_rect: native/standin-lift-names), in the check's shape"
+check = { seed = 1, runs = 2000, digest = "d2890f041e1dbcdc" }
+code = '''
+pub fn frame(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    let r13 = sp.wrapping_sub(0x20);
+    let ctx: Local<t::Ctx, 20> = Local::new();
+    ctx.set(|s| s.bounds().x(), 8);
+    ctx.set(|s| s.bounds().y(), 8);
+    ctx.set(|s| s.bounds().w(), 240 - 16);
+    ctx.set(|s| s.bounds().h(), 136);
+    ctx.set(|s| s.frame(), a[0]);
+    ctx.set(|s| s.hits(), 0);
+    ctx.set(|s| s.drawn(), 0);
+    ctx.set(|s| s.last_hit(), 0);
+    step_world(g, r13, ctx.lend(0), gBodies, 4)?;
+    let total = ld32(g, gTotalHits).wrapping_add(ctx.get(|s| s.hits()));
+    st32(g, gTotalHits, total);
+    let last = ctx.get(|s| s.last_hit());
+    if last != 0 {
+        st16(g, gLastHitIndex, ((last.wrapping_sub(gBodies) as i32) >> 4) as u32);
+    }
+    // fill_rect's fifth argument, the colour, on the stack.
+    st32(g, r13, 0x3ff);
+    fill_rect(g, r13, 4, 150, (total & 63) << 1, 4)?;
+    let x = (ld16(g, gLastHitIndex) << 3).wrapping_add(4);
+    st32(g, r13, if ctx.get(|s| s.drawn()) == 4 { 0x3e0 } else { 0x1f });
+    fill_rect(g, r13, x, 156, 6, 3)?;
+    Ok(a)
+}
+'''

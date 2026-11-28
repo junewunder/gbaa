@@ -358,7 +358,8 @@ narrowing casts, plain returns). The rewrites are in the private
   so the rewrites are typed where the lift is. Globals and calls are still
   by address and key (`call_fn`): a lift name in a stand-in's text, even
   in its `why`, makes the name picker rename the lift's (the report says
-  `TaskGetNextSlot_`). A pointer read from RAM may be odd in the check's
+  `TaskGetNextSlot_`). Since `native/standin-lift-names` a stand-in's names
+  are the lift's (TaskGetNextSlot, TaskCreate and TasksExec now use them). A pointer read from RAM may be odd in the check's
   variants, so loads through one rotate as the ARM's (a nested `rd`
   helper); a pointer parameter is moved only by multiples of 4, so loads
   through it are plain.

@@ -21,8 +21,10 @@
 //!
 //! The map's identifiers ([`crate::names::SourceMap`]) are already valid
 //! and unique among the map's names; a name that meets one of the crate's
-//! own (the prelude's items, a local, a type: any word the crate has but a
-//! field or method after a `.`) gets a `_` until it doesn't.
+//! own (the prelude's items, a local, a type: any word the crate's code has
+//! but a field or method after a `.`, or one in a comment or string) gets a
+//! `_` until it doesn't. A stand-in's own uses of the names are the lift's
+//! ([`resolve`], before the lift reads the stand-ins), so they take none.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -53,25 +55,116 @@ impl Named {
     }
 }
 
-/// The words of `text` that may name a value or item: identifiers not
-/// after a `.` (a field or method) and not starting with a digit.
+/// The words of `text` that may name a value or item: identifiers in its
+/// code (not in a comment or string literal, whose words meet no name:
+/// a stand-in's `why` is printed as a comment), not after a `.` (a field
+/// or method) and not starting with a digit.
 fn words(text: &str, out: &mut BTreeSet<String>) {
+    for (s, e) in code_words(text) {
+        out.insert(text[s..e].to_string());
+    }
+}
+
+/// The words of `text`'s code ([`words`]).
+pub fn code_word_set(text: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    words(text, &mut out);
+    out
+}
+
+/// The spans of [`words`]: identifiers outside comments, string and char
+/// literals, not after a `.` and not starting with a digit.
+fn code_words(text: &str) -> Vec<(usize, usize)> {
     let b = text.as_bytes();
     let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
-        if !word(b[i]) {
-            i += 1;
-            continue;
-        }
-        let s = i;
-        while i < b.len() && word(b[i]) {
-            i += 1;
-        }
-        if !b[s].is_ascii_digit() && !super::after_dot(b, s) {
-            out.insert(text[s..i].to_string());
+        match b[i] {
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'\'' if b.get(i + 2) == Some(&b'\'') || b.get(i + 1) == Some(&b'\\') => {
+                i += 1;
+                while i < b.len() && b[i] != b'\'' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                i = text[i + 2..].find("*/").map_or(b.len(), |e| i + 2 + e + 2);
+            }
+            c if word(c) => {
+                let s = i;
+                while i < b.len() && word(b[i]) {
+                    i += 1;
+                }
+                if !b[s].is_ascii_digit() && !super::after_dot(b, s) {
+                    out.push((s, i));
+                }
+            }
+            _ => i += 1,
         }
     }
+    out
+}
+
+/// A stand-in's code (`[[standin]] code`) with the names files' names it
+/// uses for the lift's functions and data as the lift prints them before
+/// the names pass (unit `native/standin-lift-names`): a function's name
+/// called (`Name(`) as its entry `f_<key>`, else as its key (`call_fn(g,
+/// m4aSoundMain, …)`: `0x08150111u32`, the reach's and `call_fn`'s), and a
+/// datum's as its address (`0x03001234u32`), which [`apply`] then prints
+/// as the name again. A call by name is written as the lift's own is
+/// before its later passes (`fill_rect(g, sp, x, y, w, h)?`: plain `u32`s,
+/// `?`), which adapt it to the callee's signature as they do every call.
+/// So a stand-in calls
+/// `TaskGetNextSlot(g, sp)?` and reads `gCurTask`, and its words don't
+/// take the names from the lift (which would print `TaskGetNextSlot_`).
+/// A word after `.` (a field: `g.ram.gCurTask`) or `::` (a path) is left,
+/// as are comments, strings and the words of `own` (the prelude's: a
+/// stand-in's `Game` is the prelude's type, not a function named so).
+pub fn resolve(
+    code: &str,
+    fn_names: &BTreeMap<u32, String>,
+    data: &BTreeMap<u32, (String, u32)>,
+    own: &BTreeSet<String>,
+) -> String {
+    let fns: BTreeMap<&str, u32> = fn_names.iter().map(|(&k, n)| (n.as_str(), k)).collect();
+    let data: BTreeMap<&str, u32> = data.iter().map(|(&k, (n, _))| (n.as_str(), k)).collect();
+    let b = code.as_bytes();
+    let mut out = String::with_capacity(code.len());
+    let mut last = 0;
+    for (s, e) in code_words(code) {
+        if s >= 2 && &b[s - 2..s] == b"::" {
+            continue;
+        }
+        let w = &code[s..e];
+        if own.contains(w) {
+            continue;
+        }
+        let called = code[e..].trim_start().starts_with('(');
+        let to = match (fns.get(w), data.get(w)) {
+            (Some(k), _) if called => format!("f_{k:08x}"),
+            (Some(k), _) => format!("{k:#010x}u32"),
+            (None, Some(x)) => format!("{x:#010x}u32"),
+            (None, None) => continue,
+        };
+        out.push_str(&code[last..s]);
+        out.push_str(&to);
+        last = e;
+    }
+    out.push_str(&code[last..]);
+    out
 }
 
 /// `f_`, `x_` or `a_` and eight hex digits, the lifter's numbered names.

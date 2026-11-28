@@ -213,3 +213,76 @@ fn an_inlined_constant_prints_as_its_name() {
     assert!(head.contains(&format!("pub const {frames}: u32 = 0x020000c0;")));
     assert_eq!((n.data, n.constants, n.unnamed), (2, 5, 1));
 }
+
+/// A stand-in that names the lift's function and global (unit
+/// native/standin-lift-names): its names are the lift's, and its `why`,
+/// a comment, takes none.
+#[test]
+fn a_stand_ins_names_are_the_lifts() {
+    let (fns, data) = names();
+    let frames = "_RNvCsgHtZ1jaOG4l_12native_spike6FRAMES";
+    let print = fns[&0x0800_1df9].clone();
+    let code = format!(
+        "pub fn f_08002201(g: &mut Game, sp: u32) -> Result<(), Exit> {{\n\
+         \x20   // {print} and {frames}, by name\n\
+         \x20   {print}(g, sp)?;\n\
+         \x20   let x = g.ram.{frames}.wrapping_add({frames});\n\
+         \x20   let k = call_fn(g, {print}, sp, [0; 4]);\n\
+         \x20   let p = t::S; let s = \"{print}\";\n\
+         \x20   Ok(())\n}}\n"
+    );
+    // `Game`, a function's name too, is the prelude's type.
+    let own: BTreeSet<String> = ["Game".to_string()].into();
+    let resolved = resolve(&code, &fns, &data, &own);
+    assert!(resolved.contains("    f_08001df9(g, sp)?;"), "{resolved}");
+    assert!(resolved.contains("(g: &mut Game, sp"), "{resolved}");
+    // Not called: its key, as `call_fn` takes it.
+    assert!(
+        resolved.contains("call_fn(g, 0x08001df9u32, sp"),
+        "{resolved}"
+    );
+    assert!(
+        resolved.contains(&format!("g.ram.{frames}.wrapping_add(0x020000c0u32)")),
+        "{resolved}"
+    );
+    assert!(resolved.contains(&format!("// {print} and {frames}, by name")));
+    assert!(
+        resolved.contains(&format!("t::S; let s = \"{print}\";")),
+        "{resolved}"
+    );
+    // The lift: the stand-in as printed, its `why` naming the function in
+    // the comment above.
+    let mut head = MAIN.to_string();
+    let mut table = String::new();
+    let mut funcs = vec![
+        (
+            0x0800_2201,
+            format!("// f_08002201: a stand-in: calls {print}\n{resolved}"),
+        ),
+        (
+            0x0800_1df9,
+            "pub fn f_08001df9(g: &mut Game, sp: u32) -> Result<(), Exit> { x_08001df9(g, Regs::call(sp, [0; 4])) }\n".to_string(),
+        ),
+    ];
+    apply(
+        &mut head,
+        RAM,
+        &mut table,
+        &mut funcs,
+        &[0x0800_2201, 0x0800_1df9],
+        &fns,
+        &data,
+    );
+    let f = &funcs[0].1;
+    assert!(f.contains(&format!("    {print}(g, sp)?;")), "{f}");
+    assert!(
+        f.contains(&format!("wrapping_add({frames} /* 0x020000c0 */)")),
+        "{f}"
+    );
+    assert!(
+        funcs[1].1.starts_with(&format!("pub fn {print}(g")),
+        "{}",
+        funcs[1].1
+    );
+    assert!(head.contains(&format!("pub const {frames}: u32 = 0x020000c0;")));
+}
