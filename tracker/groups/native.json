@@ -5973,6 +5973,17 @@
       "needs": ["native/lift-for-ram-bounds", "native/lift-for-top-tested"],
       "uses": ["heavy"],
       "priority": 69,
+      "record": {
+        "state": "claimed",
+        "by": "721da0aa",
+        "session": "721da0aa-bdd0-4ca2-9e84-fd3410cea632",
+        "host": "quack",
+        "pid": 1073567,
+        "start": "1755112",
+        "at": "2026-11-28T04:43:46Z",
+        "branch": "unit/native/lift-for-ram-bounds-games",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-27T22:42:14Z",
