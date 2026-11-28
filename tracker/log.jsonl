@@ -4604,3 +4604,4 @@
 {"at":"2026-11-28T04:43:00Z","actor":"session","tag":"6f5b1408","host":"quack","cmd":"overseer","text":"overseer 1aef5e on quack attached, replacing d3f284 on quack"}
 {"at":"2026-11-28T04:43:40Z","actor":"loop","tag":"ea16393b","host":"quack","cmd":"claim","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: claimed"}
 {"at":"2026-11-28T04:43:46Z","actor":"loop","tag":"721da0aa","host":"quack","cmd":"claim","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: claimed"}
+{"at":"2026-11-28T04:43:50Z","actor":"loop","tag":"15209f84","host":"quack","cmd":"claim","id":"native/standin-lift-names","text":"Stand-ins may name the lift's globals and functions: claimed"}

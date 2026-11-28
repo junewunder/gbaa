@@ -5380,7 +5380,19 @@
       "id": "native/standin-lift-names",
       "title": "Stand-ins may name the lift's globals and functions",
       "detail": "docs/research/llm-pilot.md (both rounds). A word in a stand-in's text, its why included (printed as a comment), is taken by the name picker (codegen::native::named::apply), so a stand-in that says TaskGetNextSlot or gCurTask renames the lift's own to TaskGetNextSlot_ and can't use the name; LLM-written stand-ins use addresses and call_fn by key instead (17 constants in Mirror's pilot). Let a stand-in's words that are the names files' names refer to the lift's (and keep why out of the scan). Done when: a stand-in using a global and a function by name builds and passes fn-check, lift-check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "15209f84",
+        "session": "15209f84-962e-40b2-a53e-583c020396b9",
+        "host": "quack",
+        "pid": 1074158,
+        "start": "1755616",
+        "at": "2026-11-28T04:43:50Z",
+        "branch": "unit/native/standin-lift-names",
+        "beats": true
+      },
+      "round": "2026-11-28T04:43:50Z"
     },
     {
       "id": "native/cut-callee-shapes",
