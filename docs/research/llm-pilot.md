@@ -367,7 +367,10 @@ narrowing casts, plain returns). The rewrites are in the private
   functions, every time on r0 after a `pop {r0}; bx r0` return in a
   function whose summary has a hole (lift: r0 as it came; interpreter: the
   return address). That is the check's or the lift's, not a rewrite's:
-  filed as `native/fn-check-interp-pop-r0`.
+  filed as `native/fn-check-interp-pop-r0`, since fixed in the check
+  (the lift gives that register back as passed by design; the
+  interpreter compare now expects the return address there). Its rest,
+  r1-r3 scratch no caller reads, is `native/fn-check-hole-demand`.
 
 ### Results
 
