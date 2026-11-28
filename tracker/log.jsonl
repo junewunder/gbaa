@@ -4602,3 +4602,4 @@
 {"at":"2026-11-27T23:37:25Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fn-check-interp-pop-r0","text":"fn-check: lift and interpreter part on a popped lr in r0: on main"}
 {"at":"2026-11-27T23:40:45Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
 {"at":"2026-11-28T04:43:00Z","actor":"session","tag":"6f5b1408","host":"quack","cmd":"overseer","text":"overseer 1aef5e on quack attached, replacing d3f284 on quack"}
+{"at":"2026-11-28T04:43:40Z","actor":"loop","tag":"ea16393b","host":"quack","cmd":"claim","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: claimed"}
