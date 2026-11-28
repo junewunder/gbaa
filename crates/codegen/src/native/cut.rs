@@ -191,7 +191,8 @@ pub fn name_of(text: &str, key: u32) -> String {
 /// DIR/replace.toml --fn-check KEY`, unit `native/lift-mod-run`): the cut's
 /// own function (the `pub fn` [`name_of`] names, to its closing `}`; its
 /// `x_`/`a_` entries left out, the reference has its own) renamed
-/// `cut_<name>`, with what its signature says: that name, how many
+/// `cut_<name>`, followed by the file's other items (a `const`, a helper
+/// `fn`: native/cut-callee-shapes), with what its signature says: that name, how many
 /// parameters it takes after `g` (`sp`, then the shape's registers), and
 /// whether it returns a `Result`.
 #[derive(Debug, PartialEq)]
@@ -206,21 +207,36 @@ impl Replacement {
     pub fn of(text: &str, key: u32) -> Result<Replacement, String> {
         let name = name_of(text, key);
         let head = format!("pub fn {name}(");
-        let mut lines = text.lines().skip_while(|l| !l.starts_with(&head));
-        let sig = lines
-            .next()
+        let all: Vec<&str> = text.lines().collect();
+        let start = all
+            .iter()
+            .position(|l| l.starts_with(&head))
             .ok_or_else(|| format!("the cut of {name} has no `{head}` line"))?;
+        let sig = all[start];
+        let end = start
+            + 1
+            + all[start + 1..]
+                .iter()
+                .position(|&l| l == "}")
+                .ok_or_else(|| format!("the cut of {name}: no `}}` line ends {head}…"))?;
         let mut body = vec![sig.replacen(&head, &format!("pub fn cut_{name}("), 1)];
-        let mut closed = false;
-        for l in lines {
-            body.push(l.to_string());
-            if l == "}" {
-                closed = true;
-                break;
+        body.extend(all[start + 1..=end].iter().map(|l| l.to_string()));
+        // The file's other items (a `const` at its top, a helper `fn`), as
+        // the mod's own build has them; not the `x_`/`a_` entries.
+        let rest: Vec<&str> = all[..start]
+            .iter()
+            .chain(&all[end + 1..])
+            .copied()
+            .collect();
+        for item in items(&rest) {
+            let entry = |n: String| {
+                item.iter().any(|l| {
+                    l.starts_with(&format!("pub fn {n}(")) || l.starts_with(&format!("fn {n}("))
+                })
+            };
+            if !entry(format!("x_{key:08x}")) && !entry(format!("a_{key:08x}")) {
+                body.extend(item.iter().map(|l| l.to_string()));
             }
-        }
-        if !closed {
-            return Err(format!("the cut of {name}: no `}}` line ends {head}…"));
         }
         // The parameter list, to its matching `)`.
         let open = head.len();
@@ -263,6 +279,48 @@ impl Replacement {
             result,
         })
     }
+}
+
+/// `lines`' top-level items, each with the doc comments and attributes
+/// above it: a line at depth 0 that isn't a comment starts one, which runs
+/// until its brackets close on a line ending `;` or `}`. Comments apart
+/// from an item are left out.
+fn items<'a>(lines: &[&'a str]) -> Vec<Vec<&'a str>> {
+    let mut out = Vec::new();
+    let mut lead: Vec<&str> = Vec::new();
+    let mut cur: Vec<&str> = Vec::new();
+    let mut depth = 0i32;
+    for &l in lines {
+        let t = l.trim();
+        if cur.is_empty() {
+            if t.is_empty() {
+                lead.clear();
+                continue;
+            }
+            if t.starts_with("//") || t.starts_with("#[") {
+                lead.push(l);
+                continue;
+            }
+            cur.append(&mut lead);
+        }
+        cur.push(l);
+        let code = t.split("//").next().unwrap_or("").trim_end();
+        for c in code.chars() {
+            depth += match c {
+                '(' | '[' | '{' => 1,
+                ')' | ']' | '}' => -1,
+                _ => 0,
+            };
+        }
+        if depth <= 0 && (code.ends_with(';') || code.ends_with('}')) {
+            depth = 0;
+            out.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
 }
 
 /// What a cut did.
@@ -448,6 +506,26 @@ mod tests {
             ("cut_f_08000100", 2, true)
         );
         assert!(super::Replacement::of("pub fn tally(g: &mut Game) -> () {\n", 1).is_err());
+    }
+
+    /// A `const` at the file's top, a helper after the function, each with
+    /// its doc line, come along; the entries and the header comment don't.
+    #[test]
+    fn a_cut_as_a_replacement_carries_the_files_other_items() {
+        let text = "// Cut by gbaa-lift: edit freely {\n\n\
+                    /// Reads {r0}; returns {}.\n\
+                    pub fn x_080004fd(g: &mut Game, s: Regs) -> () { tally(g, s.r[13], s.r[0]) }\n\
+                    /// The new step.\nconst STEP: u32 = 2;\n\
+                    pub fn tally(g: &mut Game, _: u32, mut n: u32) -> () {\n    n += twice(STEP);\n}\n\
+                    #[inline]\nfn twice(x: u32) -> u32 {\n    x * 2\n}\n\
+                    pub fn a_080004fd(g: &mut Game) {\n}\n";
+        let r = super::Replacement::of(text, 0x0800_04fd).unwrap();
+        assert_eq!(
+            r.text,
+            "pub fn cut_tally(g: &mut Game, _: u32, mut n: u32) -> () {\n    n += twice(STEP);\n}\n\
+             /// The new step.\nconst STEP: u32 = 2;\n\
+             #[inline]\nfn twice(x: u32) -> u32 {\n    x * 2\n}\n"
+        );
     }
 
     #[test]

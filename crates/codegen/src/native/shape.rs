@@ -192,6 +192,12 @@ pub struct Node<'a> {
     /// A stand-in from the holes file replaces it: it keeps the
     /// four-register form.
     pub standin: bool,
+    /// The stand-in is the lift's own code: the per-function check's
+    /// replacement of a function by its lift or a mod's cut of it
+    /// (native/cut-callee-shapes). It reads its callees' results as the
+    /// lift does, so they keep the lift's shapes, which a cut was printed
+    /// against.
+    pub lifted: bool,
     /// Its address may be taken (`FNS`'s: a pointer can reach it), so
     /// an indirect call whose callee set is incomplete, or a tail call
     /// by value, may reach it.
@@ -274,7 +280,7 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         // A caller whose run stopped at a hole reads past it what its
         // paths still held of the callee's results there (the callee's
         // `hidden_after`); one cut short, or with no summary, any.
-        let blind = n.sum.is_none_or(|s| s.blind) || n.standin;
+        let blind = n.sum.is_none_or(|s| s.blind) || n.standin && !n.lifted;
         for c in &n.edges.calls {
             if let Some(m) = nodes.get(c)
                 && (blind || m.ctx != n.ctx || n.edges.calls_by_value.contains(c))
@@ -616,6 +622,7 @@ pub fn nodes_of<'a>(
     sums: &'a Summaries,
     edges: impl Fn(&Func) -> Edges,
     standin: impl Fn(u32) -> bool,
+    lifted: impl Fn(u32) -> bool,
     addressed: impl Fn(u32) -> bool,
     proto: impl Fn(u32) -> Option<(Shape, bool)>,
 ) -> Vec<(u32, Node<'a>)> {
@@ -629,6 +636,7 @@ pub fn nodes_of<'a>(
                     sum: sums.get(f.entry),
                     edges: edges(f),
                     standin: standin(f.entry),
+                    lifted: lifted(f.entry),
                     addressed: addressed(f.entry),
                     proto: proto(f.entry).map(|(p, _)| p),
                     forced: proto(f.entry).is_some_and(|(_, f)| f),
@@ -680,6 +688,7 @@ mod tests {
                 calls_by_value: BTreeSet::new(),
             },
             standin: false,
+            lifted: false,
             addressed: true,
             proto: None,
             forced: false,
@@ -737,6 +746,24 @@ mod tests {
         let s = shapes(&nodes);
         assert_eq!(s.shaped[&1].results, 0b1011);
         assert!(!s.shaped.contains_key(&2), "a holey function keeps four");
+    }
+
+    /// A stand-in reads all its callee changes; one that is the lift's own
+    /// code (fn-check's replacement by the lift or a mod's cut) only what
+    /// the lift reads, so a cut's calls keep the shapes it was cut with.
+    #[test]
+    fn a_lifted_stand_in_reads_its_callees_as_the_lift_does() {
+        let f = sum(0b0001, 0b0001, [DEF, DEF, KEEP, DEF]);
+        let mut a = sum(0, 0, [DEF; 4]);
+        a.callees.insert(1);
+        let results = |lifted: bool| {
+            let mut n = node(&a, &[1], &[]);
+            n.standin = true;
+            n.lifted = lifted;
+            shapes(&BTreeMap::from([(1, node(&f, &[], &[])), (2, n)])).shaped[&1].results
+        };
+        assert_eq!(results(false), 0b1011);
+        assert_eq!(results(true), 0b0001);
     }
 
     #[test]

@@ -12363,6 +12363,15 @@ fn shapes_of(
             &c.sums,
             edges,
             |k| holes.standins.contains_key(&k),
+            // A checked function with no stand-in of the holes file's is
+            // replaced by its lift or a mod's cut (`synthetic`'s empty code).
+            |k| {
+                holes.fn_check.contains_key(&k)
+                    && holes
+                        .standins
+                        .get(&k)
+                        .is_some_and(|(code, _)| code.is_empty())
+            },
             |k| reach.contains(&k),
             proto,
         ));
