@@ -4612,3 +4612,4 @@
 {"at":"2026-11-28T05:34:37Z","actor":"loop","tag":"721da0aa","host":"quack","cmd":"settle","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: session ended mid-unit"}
 {"at":"2026-11-28T05:38:01Z","actor":"loop","tag":"eb1ac2ec","host":"quack","cmd":"settle","id":"native/cut-callee-shapes","text":"A cut's calls build in fn-check's lift too: session ended mid-unit"}
 {"at":"2026-11-28T05:38:48Z","actor":"loop","tag":"ea16393b","host":"quack","cmd":"settle","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: session ended mid-unit"}
+{"at":"2026-11-28T05:38:51Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
