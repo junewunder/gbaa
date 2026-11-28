@@ -502,9 +502,14 @@ fn text(s: &Sym, reg: usize) -> Option<String> {
         ),
         k => format!("{t}.wrapping_add({})", crate::print::word(k, false)),
     };
-    // A load's ([`Proven::load`]): narrowed past its width, a cast.
+    // A load's ([`Proven::load`]): narrowed past its width, a cast. Its
+    // text may be a cast (`g.ram.x as u32`), which a method call can't
+    // follow, so a sum puts it in parentheses.
     if q >= 16 {
-        return Some(plus(BOUND.to_string()));
+        return Some(match s.add {
+            0 => BOUND.to_string(),
+            _ => plus(format!("({BOUND})")),
+        });
     }
     if q == reg {
         return None;
@@ -1488,6 +1493,31 @@ mod tests {
             .map(|p| p.range),
             Ok(format!("0..{BOUND}"))
         );
+    }
+
+    /// A loaded bound plus a constant: the load's text, a cast for a byte
+    /// or halfword global, goes in parentheses before the method call.
+    #[test]
+    fn a_loaded_bound_plus_a_constant_is_parenthesized() {
+        let up = Sym {
+            add: 1,
+            ..Sym::reg(16 + 7)
+        };
+        let t = text(&up, 4).unwrap();
+        assert_eq!(t, format!("({BOUND}).wrapping_add(1)"));
+        assert_eq!(
+            format!("0..{t}").replace(BOUND, "g.ram.x as u32"),
+            "0..(g.ram.x as u32).wrapping_add(1)"
+        );
+        let down = Sym {
+            add: 1u32.wrapping_neg(),
+            ..Sym::reg(16 + 7)
+        };
+        assert_eq!(
+            text(&down, 4).unwrap(),
+            format!("({BOUND}).wrapping_sub(1)")
+        );
+        assert_eq!(text(&Sym::reg(16 + 7), 4).unwrap(), BOUND);
     }
 
     fn c(l: Sym, rel: Rel, r: Sym, signed: bool) -> Cmp {
