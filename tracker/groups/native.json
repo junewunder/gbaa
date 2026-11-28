@@ -6380,7 +6380,14 @@
     {
       "id": "native/fn-check-mirror-cpuset",
       "title": "Mirror's fn-check stops at frame 3: CpuSet has no FNS entry",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-28T05:23:58Z",
+          "by": "15209f84",
+          "text": "Mirror's pilot fn-check (llm-pilot.toml header's command, 4 task keys) stops at frame 3 at main 3adfb514: pc 08151bb3, 'a call or jump to 0x081592f5 (CpuSet), which is no function's entry': lifted, but not in FNS (reach). Same with or without {unit:native/standin-lift-names}."
+        }
+      ]
     }
   ]
 }
